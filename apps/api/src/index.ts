@@ -3,12 +3,15 @@ import dotenv from "dotenv";
 import { clerkMiddleware, requireAuth } from '@clerk/express'
 import authRoutes from "./routes/auth.js";
 import cors from "cors";
+import testRoutes from "./routes/test.js";
+
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use("/test", testRoutes);
 app.use(express.json());
 app.use(
     cors({
@@ -16,9 +19,8 @@ app.use(
         credentials: true,
     })
 );
-app.use("/auth", authRoutes);
-
 app.use(clerkMiddleware())
+app.use("/auth", authRoutes);
 
 app.get("/", (req, res) => {
     res.json({ message: "Hello from api" })

@@ -10,7 +10,9 @@ export default function App() {
   return (
     <>
       <SignedOut>
-        <SignIn />
+        <div className="auth-container">
+          <SignIn />
+        </div>
       </SignedOut>
 
       <SignedIn>
