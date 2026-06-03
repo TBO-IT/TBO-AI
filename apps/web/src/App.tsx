@@ -2,6 +2,7 @@ import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
+import { SignInButton, SignUpButton, Show, UserButton } from '@clerk/clerk-react'
 import './App.css'
 
 function App() {
@@ -9,6 +10,26 @@ function App() {
 
   return (
     <>
+      <header className="header-nav">
+        <div className="logo-section">
+          <img src={viteLogo} className="logo-mini" alt="Logo" />
+          <span className="logo-text">TBO Workspace</span>
+        </div>
+        <div className="auth-section">
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button className="btn-signin">Sign In</button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="btn-signup">Sign Up</button>
+            </SignUpButton>
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
+        </div>
+      </header>
+
       <section id="center">
         <div className="hero">
           <img src={heroImg} className="base" width="170" height="179" alt="" />

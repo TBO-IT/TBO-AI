@@ -1,21 +1,17 @@
 {
   "name": "TBO-project",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.5.1",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "turbo run dev",
+    "build": "turbo run build"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.5.1",
-      "onFail": "download"
-    }
-  },
   "type": "module",
   "devDependencies": {
     "turbo": "^2.9.16"

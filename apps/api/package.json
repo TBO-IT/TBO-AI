@@ -12,6 +12,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@clerk/express": "^2.1.22",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1"
   },
   "devDependencies": {

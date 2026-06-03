@@ -182,3 +182,71 @@
     border-right-color: var(--border);
   }
 }
+
+.header-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border);
+  @media (max-width: 1024px) {
+    padding: 12px 16px;
+  }
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mini {
+  height: 24px;
+  width: auto;
+}
+
+.logo-text {
+  font-weight: 600;
+  font-family: var(--heading);
+  color: var(--text-h);
+  font-size: 18px;
+}
+
+.auth-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-signin, .btn-signup {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-signin {
+  color: var(--text-h);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.btn-signin:hover {
+  background: var(--social-bg);
+  border-color: var(--text-h);
+}
+
+.btn-signup {
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid transparent;
+}
+
+.btn-signup:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
