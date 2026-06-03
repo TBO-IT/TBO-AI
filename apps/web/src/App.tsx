@@ -2,7 +2,7 @@ import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
-import { SignInButton, SignUpButton, Show, UserButton } from '@clerk/clerk-react'
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react'
 import './App.css'
 
 function App() {
@@ -16,17 +16,17 @@ function App() {
           <span className="logo-text">TBO Workspace</span>
         </div>
         <div className="auth-section">
-          <Show when="signed-out">
+          <SignedOut>
             <SignInButton mode="modal">
               <button className="btn-signin">Sign In</button>
             </SignInButton>
             <SignUpButton mode="modal">
               <button className="btn-signup">Sign Up</button>
             </SignUpButton>
-          </Show>
-          <Show when="signed-in">
+          </SignedOut>
+          <SignedIn>
             <UserButton />
-          </Show>
+          </SignedIn>
         </div>
       </header>
 
