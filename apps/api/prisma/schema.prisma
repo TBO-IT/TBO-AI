@@ -1,0 +1,65 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum RoleName {
+  viewer
+  analyst
+  admin
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+
+  clerkUserId  String    @unique @map("clerk_user_id") @db.VarChar(255)
+
+  email        String    @unique @db.VarChar(320)
+
+  fullName     String?   @map("full_name") @db.VarChar(255)
+
+  roleId       String    @map("role_id") @db.Uuid
+  role         UserRole  @relation(fields: [roleId], references: [id])
+
+  isActive     Boolean   @default(true) @map("is_active")
+
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz
+
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([clerkUserId])
+  @@index([email])
+  @@index([isActive])
+
+  @@map("users")
+}
+
+model UserRole {
+  id                       String     @id @default(uuid()) @db.Uuid
+
+  roleName                 RoleName   @unique @map("role_name")
+
+  canUpload                Boolean    @default(false) @map("can_upload")
+
+  canQuery                 Boolean    @default(true) @map("can_query")
+
+  canExport                Boolean    @default(false) @map("can_export")
+
+  canManageUsers           Boolean    @default(false) @map("can_manage_users")
+
+  canViewAdminDashboard    Boolean    @default(false) @map("can_view_admin_dashboard")
+
+  createdAt                DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  updatedAt                DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  users                    User[]
+
+  @@map("user_roles")
+}

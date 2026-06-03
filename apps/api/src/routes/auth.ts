@@ -1,0 +1,63 @@
+import { Router } from "express";
+
+import { requireAuth, getAuth } from "@clerk/express";
+
+import { prisma } from "../lib/prisma.js";
+
+const router = Router();
+
+router.post("/sync-user", requireAuth(), async (req, res) => {
+    try {
+        const auth = getAuth(req);
+
+        const clerkUserId = auth.userId;
+
+        if (!clerkUserId) {
+            return res.status(401).json({
+                error: "Unauthorized",
+            });
+        }
+
+        const existingUser = await prisma.user.findUnique({
+            where: {
+                clerkUserId,
+            },
+        });
+
+        if (existingUser) {
+            return res.json(existingUser);
+        }
+
+        // default role
+        const viewerRole = await prisma.userRole.findFirst({
+            where: {
+                roleName: "viewer",
+            },
+        });
+
+        if (!viewerRole) {
+            return res.status(500).json({
+                error: "Viewer role missing",
+            });
+        }
+
+        const user = await prisma.user.create({
+            data: {
+                clerkUserId,
+                email: req.body.email,
+                fullName: req.body.fullName,
+                roleId: viewerRole.id,
+            },
+        });
+
+        return res.json(user);
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            error: "Internal server error",
+        });
+    }
+});
+
+export default router;

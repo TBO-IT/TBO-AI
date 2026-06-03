@@ -13,9 +13,11 @@
   "type": "module",
   "dependencies": {
     "@clerk/express": "^2.1.22",
+    "@prisma/client": "^6.19.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "prisma": "^6.19.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
