@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import { clerkMiddleware, requireAuth } from '@clerk/express'
 import authRoutes from "./routes/auth.js";
-
+import cors from "cors";
 
 dotenv.config();
 
@@ -10,6 +10,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(
+    cors({
+        origin: "http://localhost:5173",
+        credentials: true,
+    })
+);
 app.use("/auth", authRoutes);
 
 app.use(clerkMiddleware())
