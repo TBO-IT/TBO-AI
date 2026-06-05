@@ -5,22 +5,25 @@ import authRoutes from "./routes/auth.js";
 import cors from "cors";
 import testRoutes from "./routes/test.js";
 import adminRoutes from "./routes/admin.js"
+import meRoutes from "./routes/me.js";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(clerkMiddleware())
-app.use("/admin", adminRoutes);
-app.use("/test", testRoutes);
-app.use(express.json());
 app.use(
     cors({
         origin: "http://localhost:5173",
         credentials: true,
     })
 );
+app.use(express.json());
+app.use(clerkMiddleware());
+
+app.use("/admin", adminRoutes);
+app.use("/test", testRoutes);
+app.use("/api", meRoutes);
 app.use("/auth", authRoutes);
 
 app.get("/", (req, res) => {
