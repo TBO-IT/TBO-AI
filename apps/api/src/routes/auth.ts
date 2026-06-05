@@ -25,7 +25,15 @@ router.post("/sync-user", requireAuth(), async (req, res) => {
         });
 
         if (existingUser) {
-            return res.json(existingUser);
+            const updatedUser = await prisma.user.update({
+                where: {
+                    id: existingUser.id,
+                },
+                data: {
+                    lastLoginAt: new Date(),
+                },
+            });
+            return res.json(updatedUser);
         }
 
         // default role
