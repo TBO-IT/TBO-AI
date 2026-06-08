@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAnalysis } from "../api/analyticsApi";
+import { useAuth } from "@clerk/clerk-react";
 
 import type {
   DatasetSummary,
@@ -53,16 +54,19 @@ export default function Dashboard() {
           <MetricsTable
             title="APW Breakdown"
             data={data.apwBreakdown}
+            columnLabel="Bucket"
           />
 
           <MetricsTable
             title="Chain Performance"
             data={data.chainPerformance}
+            columnLabel="Chain"
           />
 
           <MetricsTable
             title="Supplier Performance"
             data={data.supplierPerformance}
+            columnLabel="Supplier"
           />
         </div>
       </div>

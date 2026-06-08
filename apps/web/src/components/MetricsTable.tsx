@@ -3,60 +3,73 @@ import type { PerformanceMetric } from "../types/analytics";
 interface Props {
     title: string;
     data: PerformanceMetric[];
+    columnLabel: string
 }
 
 export default function MetricsTable({
     title,
     data,
+    columnLabel
 }: Props) {
     return (
-        <div className="bg-white rounded-xl shadow-sm border">
-            <div className="p-6 border-b">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200">
                 <h2 className="text-xl font-semibold">
                     {title}
                 </h2>
             </div>
 
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead className="bg-slate-50">
-                        <tr>
-                            <th className="text-left px-6 py-4">
-                                Name
-                            </th>
+            <table className="w-full">
+                <thead className="bg-slate-50">
+                    <tr>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-slate-600">
+                            {columnLabel}
+                        </th>
 
-                            <th className="text-left px-6 py-4">
-                                Volume
-                            </th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-slate-600">
+                            Volume
+                        </th>
 
-                            <th className="text-left px-6 py-4">
-                                Win Rate
-                            </th>
-                        </tr>
-                    </thead>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-slate-600">
+                            Win Rate
+                        </th>
+                    </tr>
+                </thead>
 
-                    <tbody>
-                        {data.map((row) => (
-                            <tr
-                                key={row.name}
-                                className="border-t hover:bg-slate-50"
-                            >
-                                <td className="px-6 py-4">
-                                    {row.name}
-                                </td>
+                <tbody>
+                    {data.map((row) => (
+                        <tr
+                            key={row.name}
+                            className="border-t border-slate-100 hover:bg-slate-50"
+                        >
+                            <td className="px-6 py-4 font-medium">
+                                {row.name}
+                            </td>
 
-                                <td className="px-6 py-4">
-                                    {row.volume}
-                                </td>
+                            <td className="px-6 py-4">
+                                {row.volume.toLocaleString()}
+                            </td>
 
-                                <td className="px-6 py-4 font-medium">
+                            <td className="px-6 py-4">
+                                <span
+                                    className="
+                  inline-flex
+                  rounded-full
+                  bg-green-100
+                  px-3
+                  py-1
+                  text-sm
+                  font-medium
+                  text-green-700
+                "
+                                >
                                     {row.winRate.toFixed(2)}%
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                                </span>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 }

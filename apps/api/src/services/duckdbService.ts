@@ -109,6 +109,10 @@ export async function analyzeCsv(
 
     FROM ${csvSource}
 
+    WHERE
+      tbo_chainname IS NOT NULL
+      AND TRIM(tbo_chainname) <> ''
+
     GROUP BY tbo_chainname
 
     HAVING COUNT(*) > 10
@@ -133,6 +137,10 @@ export async function analyzeCsv(
       ) * 100 as winRate
 
     FROM ${csvSource}
+
+    WHERE
+      suppliername IS NOT NULL
+      AND TRIM(suppliername) <> ''
 
     GROUP BY suppliername
 
