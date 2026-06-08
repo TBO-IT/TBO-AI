@@ -79,3 +79,20 @@ export async function getDataset(
         },
     });
 }
+
+export async function getDatasets() {
+    return prisma.dataset.findMany({
+        orderBy: {
+            uploadedAt: "desc",
+        },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    email: true,
+                    fullName: true,
+                },
+            },
+        },
+    });
+}
