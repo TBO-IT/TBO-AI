@@ -2,3 +2,13 @@
 
 /* Enable class-based dark mode for the toggle to work */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Brand colors from TBO logo */
+@theme {
+  --color-brand-orange: #F5A623;
+  --color-brand-orange-light: #FBD38D;
+  --color-brand-orange-dark: #C27A0E;
+  --color-brand-blue: #1B4D8E;
+  --color-brand-blue-light: #4A80C4;
+  --color-brand-blue-dark: #12336A;
+}

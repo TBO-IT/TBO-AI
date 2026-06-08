@@ -69,7 +69,7 @@ export default function UploadPage() {
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 flex flex-col items-center transition-colors">
           
           {/* Visual Drop Area */}
-          <div className="w-full max-w-xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-500/50 dark:hover:border-blue-500/30 rounded-2xl p-10 flex flex-col items-center text-center transition-colors bg-slate-50/50 dark:bg-slate-950/20 group relative">
+          <div className="w-full max-w-xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-brand-orange/50 dark:hover:border-brand-orange/30 rounded-2xl p-10 flex flex-col items-center text-center transition-colors bg-slate-50/50 dark:bg-slate-950/20 group relative">
             <input
               type="file"
               accept=".csv"
@@ -78,7 +78,7 @@ export default function UploadPage() {
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
             
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-slate-400 dark:text-slate-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 group-hover:scale-105 transition-all duration-300 mb-4">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-slate-400 dark:text-slate-500 group-hover:text-brand-orange dark:group-hover:text-brand-orange-light group-hover:scale-105 transition-all duration-300 mb-4">
               <Upload className="h-8 w-8" />
             </div>
             
@@ -91,7 +91,7 @@ export default function UploadPage() {
 
             {file && (
               <div className="mt-6 p-3 bg-blue-50 dark:bg-blue-950/25 border border-blue-100 dark:border-blue-900/40 rounded-xl flex items-center space-x-3 text-left w-full">
-                <div className="bg-blue-600/10 p-2 rounded-lg text-blue-600 dark:text-blue-400">
+                <div className="bg-brand-blue/10 p-2 rounded-lg text-brand-blue dark:text-brand-blue-light">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -111,7 +111,7 @@ export default function UploadPage() {
               disabled={!file || uploading}
               className={`w-full sm:w-auto px-6 py-3 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center justify-center space-x-2 cursor-pointer ${
                 file && !uploading
-                  ? "bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white"
+                  ? "bg-brand-blue hover:bg-brand-blue-dark text-white"
                   : "bg-slate-100 dark:bg-slate-950 text-slate-400 dark:text-slate-600 cursor-not-allowed border border-slate-200 dark:border-slate-850"
               }`}
             >

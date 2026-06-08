@@ -113,12 +113,12 @@ export default function ChatPage() {
                       }}
                       className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer ${
                         selectedDataset?.id === ds.id
-                          ? "font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30"
+                          ? "font-semibold text-brand-blue dark:text-brand-blue-light bg-brand-blue/5 dark:bg-brand-blue/10"
                           : "text-slate-700 dark:text-slate-300"
                       }`}
                     >
                       <span className="truncate mr-2">{ds.filename}</span>
-                      {selectedDataset?.id === ds.id && <div className="h-1.5 w-1.5 bg-blue-600 dark:bg-blue-400 rounded-full flex-shrink-0" />}
+                      {selectedDataset?.id === ds.id && <div className="h-1.5 w-1.5 bg-brand-orange rounded-full flex-shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -138,7 +138,7 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-6">
           {messages.length === 0 ? (
             <div className="max-w-2xl mx-auto mt-12 md:mt-20 text-center flex flex-col items-center">
-              <div className="bg-blue-600/10 dark:bg-blue-900/20 p-4 rounded-full text-blue-600 dark:text-blue-400 mb-6 animate-pulse">
+              <div className="bg-brand-blue/10 dark:bg-brand-blue/20 p-4 rounded-full text-brand-blue dark:text-brand-blue-light mb-6 animate-pulse">
                 <Cpu className="h-10 w-10" />
               </div>
               <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mb-3">
@@ -154,11 +154,11 @@ export default function ChatPage() {
                   <button
                     key={i}
                     onClick={() => setInput(prompt)}
-                    className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-slate-300 dark:hover:border-slate-750 hover:shadow-sm text-left text-sm text-slate-700 dark:text-slate-300 font-medium transition-all duration-200 group cursor-pointer"
+                    className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-brand-orange/40 hover:shadow-sm text-left text-sm text-slate-700 dark:text-slate-300 font-medium transition-all duration-200 group cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <span>{prompt}</span>
-                      <Sparkles className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-500 transition-colors ml-2 flex-shrink-0" />
+                      <Sparkles className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-orange transition-colors ml-2 flex-shrink-0" />
                     </div>
                   </button>
                 ))}
@@ -172,7 +172,7 @@ export default function ChatPage() {
                   className={`flex space-x-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   {msg.role === "assistant" && (
-                    <div className="h-8 w-8 rounded-lg bg-blue-600 dark:bg-blue-700 text-white flex items-center justify-center shadow-sm flex-shrink-0 mt-0.5">
+                    <div className="h-8 w-8 rounded-lg bg-brand-blue text-white flex items-center justify-center shadow-sm flex-shrink-0 mt-0.5">
                       <Cpu className="h-4 w-4" />
                     </div>
                   )}
@@ -209,14 +209,14 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl py-3.5 pl-4 pr-14 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 dark:focus:border-blue-500 transition-all shadow-inner"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl py-3.5 pl-4 pr-14 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all shadow-inner"
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim()}
                 className={`absolute right-2.5 p-2 rounded-lg text-white shadow-sm transition-all cursor-pointer ${
                   input.trim()
-                    ? "bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600"
+                    ? "bg-brand-blue hover:bg-brand-blue-dark"
                     : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
                 }`}
               >
@@ -251,9 +251,9 @@ export default function ChatPage() {
           <div className="text-xs text-slate-400 dark:text-slate-550 font-medium px-2 py-1">Recent Sessions</div>
 
           <button className="w-full text-left p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-800 transition-all text-xs font-medium text-slate-700 dark:text-slate-300 group flex items-start space-x-3 cursor-pointer">
-            <MessageSquare className="h-3.5 w-3.5 text-blue-550 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+            <MessageSquare className="h-3.5 w-3.5 text-brand-orange mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="truncate font-semibold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              <p className="truncate font-semibold text-slate-800 dark:text-slate-200 group-hover:text-brand-blue transition-colors">
                 Hotel competitiveness breakdown
               </p>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Hotel Competitiveness Q2</p>
@@ -263,7 +263,7 @@ export default function ChatPage() {
           <button className="w-full text-left p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-800 transition-all text-xs font-medium text-slate-700 dark:text-slate-300 group flex items-start space-x-3 cursor-pointer">
             <MessageSquare className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="truncate font-semibold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              <p className="truncate font-semibold text-slate-800 dark:text-slate-200 group-hover:text-brand-blue transition-colors">
                 Supplier win rates & pricing
               </p>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Hotel Competitiveness Q2</p>
@@ -273,7 +273,7 @@ export default function ChatPage() {
           <button className="w-full text-left p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent hover:border-slate-100 dark:hover:border-slate-800 transition-all text-xs font-medium text-slate-700 dark:text-slate-300 group flex items-start space-x-3 cursor-pointer">
             <MessageSquare className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="truncate font-semibold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              <p className="truncate font-semibold text-slate-800 dark:text-slate-200 group-hover:text-brand-blue transition-colors">
                 APW Bucket insights
               </p>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Supplier Metrics Dec 2025</p>
@@ -283,7 +283,7 @@ export default function ChatPage() {
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 shadow-sm text-center">
-            <Cpu className="h-5 w-5 text-blue-600 dark:text-blue-450 mx-auto mb-2" />
+            <Cpu className="h-5 w-5 text-brand-blue dark:text-brand-blue-light mx-auto mb-2" />
             <p className="text-xs font-bold text-slate-800 dark:text-slate-200">DuckDB Server Status</p>
             <p className="text-[10px] text-slate-500 dark:text-slate-450 mt-1">In-Memory Database Connected</p>
           </div>

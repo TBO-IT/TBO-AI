@@ -100,16 +100,16 @@ export default function ProfilePage() {
               <div className="mt-4 sm:mt-0 flex items-center space-x-2">
                 {loading ? (
                   <span className="inline-flex items-center space-x-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 rounded-full text-xs font-bold">
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Loader2 className="h-3 w-3 animate-spin text-brand-blue" />
                     <span>Loading...</span>
                   </span>
                 ) : profile ? (
-                  <span className="inline-flex items-center space-x-1 px-3 py-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50 rounded-full text-xs font-bold capitalize">
+                  <span className="inline-flex items-center space-x-1 px-3 py-1 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue dark:text-brand-blue-light border border-brand-blue/20 dark:border-brand-blue/30 rounded-full text-xs font-bold capitalize">
                     <Award className="h-3.5 w-3.5 mr-0.5" />
                     <span>{profile.role}</span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center space-x-1 px-3 py-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50 rounded-full text-xs font-bold">
+                  <span className="inline-flex items-center space-x-1 px-3 py-1 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue dark:text-brand-blue-light border border-brand-blue/20 dark:border-brand-blue/30 rounded-full text-xs font-bold">
                     <Award className="h-3.5 w-3.5 mr-0.5" />
                     <span>Enterprise Tier</span>
                   </span>
@@ -187,7 +187,7 @@ export default function ProfilePage() {
                 <div>
                   {loading ? (
                     <div className="flex items-center space-x-2 mt-1">
-                      <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                      <Loader2 className="h-5 w-5 animate-spin text-brand-blue" />
                       <span className="text-xs text-slate-400 dark:text-slate-500">Loading...</span>
                     </div>
                   ) : (

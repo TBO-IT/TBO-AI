@@ -19,8 +19,11 @@ export default function Sidebar() {
         <aside className="w-64 bg-slate-950 text-slate-100 flex flex-col h-full border-r border-slate-800">
             {/* Top Brand Block */}
             <div className="p-6 border-b border-slate-800 flex items-center space-x-3">
-                <div className="bg-blue-600 p-2 rounded-lg text-white">
-                    <Sparkles className="h-5 w-5" />
+                {/* Logo mark using brand colors */}
+                <div className="relative p-2 rounded-lg flex-shrink-0">
+                    <div className="absolute inset-0 rounded-lg bg-brand-blue" />
+                    <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-brand-orange translate-x-1 translate-y-1" />
+                    <Sparkles className="h-5 w-5 relative text-white" />
                 </div>
                 <div>
                     <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
@@ -39,21 +42,26 @@ export default function Sidebar() {
                             key={item.to}
                             to={item.to}
                             className={({ isActive }) =>
-                                `flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                                    ? "bg-slate-800 text-white shadow-sm ring-1 ring-slate-700/50"
-                                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
+                                `flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                    isActive
+                                        ? "bg-brand-blue text-white shadow-sm ring-1 ring-brand-blue-light/30"
+                                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
                                 }`
                             }
                         >
-                            <Icon className="h-4.5 w-4.5" />
-                            <span>{item.label}</span>
+                            {({ isActive }) => (
+                                <>
+                                    <Icon className={`h-4 w-4 ${isActive ? "text-brand-orange" : ""}`} />
+                                    <span>{item.label}</span>
+                                </>
+                            )}
                         </NavLink>
                     );
                 })}
             </nav>
 
             {/* Theme Toggle Button */}
-            <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between bg-slate-900/10">
+            <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">Theme</span>
                 <button
                     onClick={toggleTheme}
@@ -61,9 +69,9 @@ export default function Sidebar() {
                     title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
                 >
                     {theme === "dark" ? (
-                        <Sun className="h-4 w-4 text-amber-400" />
+                        <Sun className="h-4 w-4 text-brand-orange" />
                     ) : (
-                        <Moon className="h-4 w-4 text-blue-400" />
+                        <Moon className="h-4 w-4 text-brand-blue-light" />
                     )}
                 </button>
             </div>
@@ -76,10 +84,10 @@ export default function Sidebar() {
                             <img
                                 src={user.imageUrl}
                                 alt={user.fullName || "User Avatar"}
-                                className="h-9 w-9 rounded-full ring-2 ring-slate-800"
+                                className="h-9 w-9 rounded-full ring-2 ring-brand-blue"
                             />
                         ) : (
-                            <div className="h-9 w-9 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 font-bold text-sm">
+                            <div className="h-9 w-9 rounded-full bg-brand-blue flex items-center justify-center text-white font-bold text-sm">
                                 {user.firstName?.charAt(0) || "U"}
                             </div>
                         )}
