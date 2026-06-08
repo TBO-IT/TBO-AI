@@ -6,6 +6,7 @@ import cors from "cors";
 import testRoutes from "./routes/test.js";
 import adminRoutes from "./routes/admin.js"
 import meRoutes from "./routes/me.js";
+import uploadRoutes from "./routes/upload.js";
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use(
 app.use(express.json());
 app.use(clerkMiddleware());
 
+app.use("/upload", uploadRoutes);
 app.use("/admin", adminRoutes);
 app.use("/test", testRoutes);
 app.use("/api", meRoutes);
