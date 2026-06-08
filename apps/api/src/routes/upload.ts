@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { currentUser } from "../middleware/currentUser.js";
-import { createDataset } from "../services/uploadService.js";
+import { createDataset } from "../services/datasetService.js";
 import multer from "multer";
 
 const router = Router();
