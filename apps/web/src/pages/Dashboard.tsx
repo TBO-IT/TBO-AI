@@ -1,30 +1,71 @@
-import { useAuth } from "@clerk/clerk-react";
+import { useEffect, useState } from "react";
+import { getAnalysis } from "../api/analyticsApi";
+
+import type {
+  DatasetSummary,
+} from "../types/analytics";
+
+import KpiGrid from "../components/KpiGrid";
+import MetricsTable from "../components/MetricsTable";
 
 export default function Dashboard() {
-  const { getToken } = useAuth();
+  const [data, setData] =
+    useState<DatasetSummary | null>(null);
 
-  async function testAuth() {
-    const token = await getToken();
+  const [loading, setLoading] =
+    useState(true);
 
-    const response = await fetch(
-      "http://localhost:3000/api/me",
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+  useEffect(() => {
+    async function load() {
+      try {
+        const result =
+          await getAnalysis();
+
+        setData(result);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
       }
-    );
+    }
 
-    console.log(await response.json());
+    load();
+  }, []);
+
+  if (loading) {
+    return <h2>Loading...</h2>;
+  }
+
+  if (!data) {
+    return <h2>No data found.</h2>;
   }
 
   return (
-    <div>
-      <h1>Dashboard</h1>
+    <div className="min-h-screen bg-slate-100">
+      <div className="max-w-7xl mx-auto p-8">
+        <h1 className="text-4xl font-bold mb-8">
+          Hotel Competitiveness Dashboard
+        </h1>
 
-      <button onClick={testAuth}>
-        Test Auth
-      </button>
+        <KpiGrid data={data} />
+
+        <div className="space-y-8">
+          <MetricsTable
+            title="APW Breakdown"
+            data={data.apwBreakdown}
+          />
+
+          <MetricsTable
+            title="Chain Performance"
+            data={data.chainPerformance}
+          />
+
+          <MetricsTable
+            title="Supplier Performance"
+            data={data.supplierPerformance}
+          />
+        </div>
+      </div>
     </div>
   );
 }
