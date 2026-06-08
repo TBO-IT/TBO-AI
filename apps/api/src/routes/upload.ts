@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { currentUser } from "../middleware/currentUser.js";
 import { createDataset } from "../services/datasetService.js";
+import { analyzeCsv } from "../services/duckdbService.js";
+import { redis } from "../lib/redis.js";
+import { markCompleted } from "../services/datasetService.js";
 import multer from "multer";
 
 const router = Router();
@@ -30,16 +33,32 @@ router.post(
             }
 
             const dataset = await createDataset(
-                (req as any).user.id,
+                req.user.id,
                 req.file.originalname
             );
 
-            console.log(req.file);
+            const summary = await analyzeCsv(
+                req.file.path
+            );
+
+            const redisKey = `dataset:${dataset.id}`;
+
+            await redis.set(
+                redisKey,
+                summary,
+                {
+                    ex: 60 * 60 * 24,
+                }
+            );
+
+            await markCompleted(
+                dataset.id,
+                summary.rowCount,
+                redisKey
+            );
 
             return res.json({
                 datasetId: dataset.id,
-                filename: dataset.filename,
-                status: dataset.status,
             });
 
         } catch (error) {

@@ -2,11 +2,25 @@ import {
   SignedIn,
   SignedOut,
   SignIn,
+  useAuth,
 } from "@clerk/clerk-react";
 
-import Dashboard from "./pages/Dashboard";
+import { useEffect } from "react";
 
-function App() {
+import Dashboard from "./pages/Dashboard";
+import UploadPage from "./pages/uploadPage.tsx";
+
+import { setupAuthInterceptor }
+  from "./api/authInterceptor";
+
+function AppContent() {
+
+  const { getToken } = useAuth();
+
+  useEffect(() => {
+    setupAuthInterceptor(getToken);
+  }, [getToken]);
+
   return (
     <>
       <SignedOut>
@@ -16,10 +30,12 @@ function App() {
       </SignedOut>
 
       <SignedIn>
-        <Dashboard />
+        <UploadPage />
       </SignedIn>
     </>
   );
 }
 
-export default App;
+export default function App() {
+  return <AppContent />;
+}
