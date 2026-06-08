@@ -7,6 +7,7 @@ import testRoutes from "./routes/test.js";
 import adminRoutes from "./routes/admin.js"
 import meRoutes from "./routes/me.js";
 import uploadRoutes from "./routes/upload.js";
+import testAnalysisRoutes from "./routes/testAnalysis.js";
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ app.use(
 app.use(express.json());
 app.use(clerkMiddleware());
 
+app.use("/test-analysis", testAnalysisRoutes);
 app.use("/upload", uploadRoutes);
 app.use("/admin", adminRoutes);
 app.use("/test", testRoutes);

@@ -1,0 +1,101 @@
+checkin,checkout,fuzzy_score,latitude,longitude,scraped_date,Competitive Status,destination,tbo_hotelcode,tbo_hotelname,tbo_chainname,thirdparty,thirdparty_price,tbo_price,price_diff_perc,suppliername,tbo_latitude,tbo_longitude,apw_bucket_new,checkin_day,checkout_day
+2026-05-08,2026-05-09,100,12.9293118,100.884148,5/5/2026,Losing,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,1696,1713.07,-1.006485849,EANv2Package,12.929312,100.884148,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.9293118,100.884148,5/12/2026,Losing,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,1965,1997.72,-1.665139949,EANv2Package,12.929312,100.884148,< 10 days,Friday,Saturday
+2026-05-22,2026-05-24,100,12.9293118,100.884148,5/5/2026,Winning,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,6443,6423.98,0.295204097,EANv2Package,12.929312,100.884148,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.9293118,100.884148,5/12/2026,Losing,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,3802,3849.82,-1.257759074,EANv2,12.929312,100.884148,15-30 days,Friday,Sunday
+2026-06-05,2026-06-06,100,12.9293118,100.884148,5/5/2026,Winning,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,1940,1927.19,0.660309278,EANv2Package,12.929312,100.884148,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.9293118,100.884148,5/12/2026,Winning,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,1965,1959.51,0.279389313,EANv2Package,12.929312,100.884148,31-45 days,Friday,Saturday
+2026-06-12,2026-06-14,100,12.9293118,100.884148,5/12/2026,Winning,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,7338,3919.02,46.59280458,EANv2Package,12.929312,100.884148,31-45 days,Friday,Sunday
+2026-06-19,2026-06-20,100,12.9293118,100.884148,5/5/2026,Winning,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,1937,1927.19,0.506453278,EANv2Package,12.929312,100.884148,31-45 days,Friday,Saturday
+2026-06-26,2026-06-28,100,12.9293118,100.884148,5/12/2026,Losing,Pattaya,1682946,Zip Lounge & Apartments,Independent,Otilla,3365,3407.62,-1.266567608,EANv2,12.929312,100.884148,31-45 days,Friday,Sunday
+2026-05-08,2026-05-09,100,12.9,100.87,5/5/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Tripjack,2006,1971.42,1.746848944,Affiliate1,12.90134,100.869279,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,100,12.90134,100.869278,5/5/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,2035,1971.42,3.124324324,Affiliate1,12.90134,100.869279,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,100,12.90134,100.86962,5/4/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,2219,1977.45,10.88553402,Affiliate1,12.90134,100.869279,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.90134,100.869278,5/12/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,2293,2232.25,2.649367641,Affiliate1,12.90134,100.869279,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.90138,100.86953,5/13/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,2381,2233.53,6.193616128,Affiliate1,12.90134,100.869279,< 10 days,Friday,Saturday
+2026-05-22,2026-05-24,100,12.90134,100.869278,5/5/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,4071,3941.88,3.171702284,Affiliate1,12.90134,100.869279,15-30 days,Friday,Sunday
+2026-05-22,2026-05-24,100,12.90134,100.86962,5/4/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,4421,3954.91,10.54263741,Affiliate1,12.90134,100.869279,15-30 days,Friday,Sunday
+2026-05-22,2026-05-24,100,12.90134,100.86962,5/4/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,4422,3954.91,10.56286748,Affiliate1,12.90134,100.869279,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.90134,100.869278,5/12/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,4623,4463.55,3.449059053,Affiliate1,12.90134,100.869279,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.90138,100.86953,5/13/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,4741,4463.21,5.859312381,Affiliate1,12.90134,100.869279,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.90138,100.86953,5/13/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,4767,4463.21,6.372771135,Affiliate1,12.90134,100.869279,15-30 days,Friday,Sunday
+2026-06-05,2026-06-06,100,12.90134,100.869278,5/5/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,2048,1971.42,3.739257813,Affiliate1,12.90134,100.869279,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.90134,100.869278,5/12/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,2293,2232.25,2.649367641,Affiliate1,12.90134,100.869279,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.90138,100.86953,5/13/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,2402,2233.53,7.013738551,Affiliate1,12.90134,100.869279,15-30 days,Friday,Saturday
+2026-06-12,2026-06-14,100,12.90134,100.869278,5/12/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,9246,4463.55,51.72452953,Affiliate1,12.90134,100.869279,31-45 days,Friday,Sunday
+2026-06-19,2026-06-20,100,12.90134,100.869278,5/5/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,2370,2366.42,0.151054852,EANv2Package,12.90134,100.869279,31-45 days,Friday,Saturday
+2026-06-19,2026-06-20,100,12.90134,100.86962,5/4/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,2416,2380.57,1.46647351,Affiliate1,12.90134,100.869279,46-60 days,Friday,Saturday
+2026-06-19,2026-06-21,100,12.90134,100.86962,5/4/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,4817,4718.72,2.040274029,EANv2Package,12.90134,100.869279,46-60 days,Friday,Sunday
+2026-06-26,2026-06-27,100,12.90138,100.86953,5/13/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,2402,2233.53,7.013738551,Affiliate1,12.90134,100.869279,31-45 days,Friday,Saturday
+2026-06-26,2026-06-28,100,12.90134,100.869278,5/12/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,Otilla,4623,4463.55,3.449059053,Affiliate1,12.90134,100.869279,31-45 days,Friday,Sunday
+2026-06-26,2026-06-28,100,12.90138,100.86953,5/13/2026,Winning,Pattaya,1418078,Zing Resort & Spa,Independent,MakeMyTrip,4857,4463.21,8.107679638,Affiliate1,12.90134,100.869279,31-45 days,Friday,Sunday
+2026-05-08,2026-05-09,100,12.86653,100.892776,5/5/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,4138,4056.78,1.962783954,Affiliate1,12.86653,100.89278,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,100,12.87,100.89,5/5/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Tripjack,4104,4056.78,1.160218302,Affiliate1,12.86653,100.89278,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.86653,100.892776,5/12/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,3827,3633.17,5.064802718,Affiliate1,12.86653,100.89278,< 10 days,Friday,Saturday
+2026-05-29,2026-05-31,100,12.86653,100.892776,5/12/2026,Losing,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,46962,48616.44,-3.522933436,DidaTravel,12.86653,100.89278,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.86653,100.892776,5/12/2026,Losing,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,48238,48616.44,-0.784526722,DidaTravel,12.86653,100.89278,15-30 days,Friday,Sunday
+2026-06-05,2026-06-06,100,12.86653,100.892776,5/5/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,3975,3230.49,18.72981132,Affiliate1,12.86653,100.89278,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.86653,100.892776,5/12/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,3643,3447.15,5.376063684,Affiliate1,12.86653,100.89278,31-45 days,Friday,Saturday
+2026-06-12,2026-06-14,100,12.86653,100.892776,5/12/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,20733,6893.33,66.75189312,Affiliate1,12.86653,100.89278,31-45 days,Friday,Sunday
+2026-06-19,2026-06-20,100,12.86653,100.892776,5/5/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,3738,3230.49,13.57704655,Affiliate1,12.86653,100.89278,31-45 days,Friday,Saturday
+2026-06-26,2026-06-28,100,12.86653,100.892776,5/12/2026,Winning,Pattaya,1649988,Zand Morada Pattaya,Independent,Otilla,10367,9514.89,8.21944632,Affiliate1,12.86653,100.89278,31-45 days,Friday,Sunday
+2026-05-08,2026-05-09,100,12.97,100.9,5/5/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Tripjack,8090,8429.01,-4.183012837,EANv2Package,12.970896,100.895232,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,100,12.9708958,100.895233,5/5/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,8028,8439.4,-5.124564026,DidaTravel,12.970896,100.895232,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,100,12.9709,100.89523,5/4/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,8238,8471.03,-2.828720563,Affiliate1,12.970896,100.895232,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.9708958,100.895233,5/12/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,6548,6697.63,-2.285125229,Affiliate1,12.970896,100.895232,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.9709,100.89523,5/13/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,6382,6712.03,-5.171262927,Affiliate1,12.970896,100.895232,< 10 days,Friday,Saturday
+2026-05-22,2026-05-24,100,12.9708958,100.895233,5/5/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,15637,16789.68,-7.371490695,DidaTravel,12.970896,100.895232,15-30 days,Friday,Sunday
+2026-05-22,2026-05-24,100,12.9709,100.89523,5/4/2026,Winning,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,18307,16768.37,8.404599334,DidaTravel,12.970896,100.895232,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.9708958,100.895233,5/12/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,13181,13395.35,-1.626204385,Affiliate1,12.970896,100.895232,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.9709,100.89523,5/13/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,12963,13468.51,-3.89963743,Affiliate1,12.970896,100.895232,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.9709,100.89523,5/13/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,12963,13423.3,-3.550875569,Affiliate1,12.970896,100.895232,15-30 days,Friday,Sunday
+2026-06-05,2026-06-06,100,12.9708958,100.895233,5/5/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,7868,8092.99,-2.859557702,EANv2,12.970896,100.895232,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.9708958,100.895233,5/12/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,6548,6697.63,-2.285125229,Affiliate1,12.970896,100.895232,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.9709,100.89523,5/13/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,6382,6712.03,-5.171262927,Affiliate1,12.970896,100.895232,15-30 days,Friday,Saturday
+2026-06-12,2026-06-14,100,12.9708958,100.895233,5/12/2026,Winning,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,26581,13395.35,49.60554531,Affiliate1,12.970896,100.895232,31-45 days,Friday,Sunday
+2026-06-26,2026-06-27,100,12.9709,100.89523,5/13/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,6382,6734.25,-5.519429646,Affiliate1,12.970896,100.895232,31-45 days,Friday,Saturday
+2026-06-26,2026-06-28,100,12.9708958,100.895233,5/12/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,Otilla,13234,13395.35,-1.2192081,Affiliate1,12.970896,100.895232,31-45 days,Friday,Sunday
+2026-06-26,2026-06-28,100,12.9709,100.89523,5/13/2026,Losing,Pattaya,1360692,Z Through by The Zign,Independent,MakeMyTrip,12963,13468.51,-3.89963743,Affiliate1,12.970896,100.895232,31-45 days,Friday,Sunday
+2026-05-08,2026-05-09,100,12.88,100.88,5/5/2026,Winning,Pattaya,1491989,Z by Zing,Independent,Tripjack,2398,2319.94,3.287477072,Affiliate1,12.884204,100.883355,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,100,12.88397,100.88355,5/4/2026,Losing,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,1888,2327.2,-23.26271186,Affiliate1,12.884204,100.883355,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,100,12.8842039,100.883354,5/5/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,2301,2319.94,-0.823120382,Affiliate1,12.884204,100.883355,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.88397,100.88355,5/13/2026,Losing,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,1902,1909.51,-0.394847529,EANv2Package,12.884204,100.883355,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.8842039,100.883354,5/12/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,1885,1904.32,-1.024933687,Affiliate1,12.884204,100.883355,< 10 days,Friday,Saturday
+2026-05-22,2026-05-24,100,12.88397,100.88355,5/4/2026,Winning,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,3775,3771.84,0.083708609,Affiliate1,12.884204,100.883355,15-30 days,Friday,Sunday
+2026-05-22,2026-05-24,100,12.88397,100.88355,5/4/2026,Winning,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,3775,3767.17,0.207417219,Affiliate1,12.884204,100.883355,15-30 days,Friday,Sunday
+2026-05-22,2026-05-24,100,12.8842039,100.883354,5/5/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,3708,3742.73,-0.936623517,Affiliate1,12.884204,100.883355,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.88397,100.88355,5/13/2026,Losing,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,3805,3806.23,-0.032325887,Affiliate1,12.884204,100.883355,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.8842039,100.883354,5/12/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,3770,3808.64,-1.024933687,Affiliate1,12.884204,100.883355,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.8842039,100.883354,5/12/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,3770,3802.79,-0.869761273,Affiliate1,12.884204,100.883355,15-30 days,Friday,Sunday
+2026-06-05,2026-06-06,100,12.8842039,100.883354,5/5/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,1854,1870.79,-0.905609493,Affiliate1,12.884204,100.883355,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.88397,100.88355,5/13/2026,Losing,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,1882,1899.75,-0.94314559,Affiliate1,12.884204,100.883355,15-30 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.8842039,100.883354,5/12/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,1885,1901.35,-0.867374005,Affiliate1,12.884204,100.883355,31-45 days,Friday,Saturday
+2026-06-12,2026-06-14,100,12.8842039,100.883354,5/12/2026,Winning,Pattaya,1491989,Z by Zing,Independent,Otilla,7539,3802.79,49.5584295,Affiliate1,12.884204,100.883355,31-45 days,Friday,Sunday
+2026-06-19,2026-06-20,100,12.88397,100.88355,5/4/2026,Winning,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,1888,1885.87,0.112817797,Affiliate1,12.884204,100.883355,46-60 days,Friday,Saturday
+2026-06-19,2026-06-20,100,12.8842039,100.883354,5/5/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,1854,1873.76,-1.065803668,Affiliate1,12.884204,100.883355,31-45 days,Friday,Saturday
+2026-06-19,2026-06-21,100,12.88397,100.88355,5/4/2026,Winning,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,3775,3767.17,0.207417219,Affiliate1,12.884204,100.883355,46-60 days,Friday,Sunday
+2026-06-26,2026-06-28,100,12.88397,100.88355,5/13/2026,Winning,Pattaya,1491989,Z by Zing,Independent,MakeMyTrip,3830,3809.12,0.545169713,Affiliate1,12.884204,100.883355,31-45 days,Friday,Sunday
+2026-06-26,2026-06-28,100,12.8842039,100.883354,5/12/2026,Losing,Pattaya,1491989,Z by Zing,Independent,Otilla,3770,3808.64,-1.024933687,Affiliate1,12.884204,100.883355,31-45 days,Friday,Sunday
+2026-05-15,2026-05-16,100,12.92574,100.88062,5/13/2026,Losing,Pattaya,1445535,Yes O'Tel Pattaya By Benya,Independent,MakeMyTrip,2227,2650.99,-19.03861697,Affiliate1,12.925688,100.880569,< 10 days,Friday,Saturday
+2026-05-22,2026-05-24,100,12.92574,100.88062,5/4/2026,Losing,Pattaya,1445535,Yes O'Tel Pattaya By Benya,Independent,MakeMyTrip,4483,5095.54,-13.66361811,Affiliate1,12.925688,100.880569,15-30 days,Friday,Sunday
+2026-06-19,2026-06-20,100,12.9256878,100.880569,5/5/2026,Winning,Pattaya,1445535,Yes O'Tel Pattaya By Benya,Independent,Otilla,2557,2547.72,0.362925303,Affiliate1,12.925688,100.880569,31-45 days,Friday,Saturday
+2026-06-26,2026-06-28,100,12.92574,100.88062,5/13/2026,Losing,Pattaya,1445535,Yes O'Tel Pattaya By Benya,Independent,MakeMyTrip,4456,5304.77,-19.04780072,Affiliate1,12.925688,100.880569,31-45 days,Friday,Sunday
+2026-05-08,2026-05-09,100,12.96789,100.908318,5/5/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,2383,2333.34,2.083927822,Affiliate1,12.96829,100.90831,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,100,12.96789,100.908318,5/12/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,2465,2370.33,3.840567951,Affiliate1,12.96829,100.90831,< 10 days,Friday,Saturday
+2026-05-22,2026-05-24,100,12.96789,100.908318,5/5/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,4846,4663.81,3.759595543,Affiliate1,12.96829,100.90831,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,100,12.96789,100.908318,5/12/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,4796,4738.75,1.193703086,Affiliate1,12.96829,100.90831,15-30 days,Friday,Sunday
+2026-06-05,2026-06-06,100,12.96789,100.908318,5/5/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,2383,2333.34,2.083927822,Affiliate1,12.96829,100.90831,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,100,12.96789,100.908318,5/12/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,2465,2370.33,3.840567951,Affiliate1,12.96829,100.90831,31-45 days,Friday,Saturday
+2026-06-12,2026-06-14,100,12.96789,100.908318,5/12/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,9591,4738.75,50.59170055,Affiliate1,12.96829,100.90831,31-45 days,Friday,Sunday
+2026-06-19,2026-06-20,100,12.96789,100.908318,5/5/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,2383,2333.34,2.083927822,Affiliate1,12.96829,100.90831,31-45 days,Friday,Saturday
+2026-06-26,2026-06-28,100,12.96789,100.908318,5/12/2026,Winning,Pattaya,1445451,Yellow Moon,Independent,Otilla,4796,4738.75,1.193703086,Affiliate1,12.96829,100.90831,31-45 days,Friday,Sunday
+2026-05-08,2026-05-09,86,12.89,100.88,5/5/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,Tripjack,2690,1559.08,42.04723707,EANv2Package,12.885127,100.880898,< 10 days,Friday,Saturday
+2026-05-08,2026-05-09,94,12.8855619,100.881325,5/5/2026,Losing,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,1559,1559.08,-0.005131495,EANv2Package,12.885127,100.880898,< 10 days,Friday,Saturday
+2026-05-15,2026-05-16,94,12.8855619,100.881325,5/12/2026,Losing,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,1762,1784.37,-1.269580023,EANv2Package,12.885127,100.880898,< 10 days,Friday,Saturday
+2026-05-22,2026-05-24,94,12.8855619,100.881325,5/5/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,3191,3092.76,3.078658728,EANv2Package,12.885127,100.880898,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,94,12.88556,100.88133,5/13/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,MakeMyTrip,3557,3498.06,1.657014338,EANv2Package,12.885127,100.880898,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,94,12.8855619,100.881325,5/12/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,3507,3498.63,0.238665526,EANv2Package,12.885127,100.880898,15-30 days,Friday,Sunday
+2026-05-29,2026-05-31,94,12.8855619,100.881325,5/12/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,3511,3498.63,0.352321276,EANv2Package,12.885127,100.880898,15-30 days,Friday,Sunday
+2026-06-05,2026-06-06,94,12.8855619,100.881325,5/5/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,1637,1545.47,5.591325596,EANv2Package,12.885127,100.880898,31-45 days,Friday,Saturday
+2026-06-12,2026-06-13,94,12.8855619,100.881325,5/12/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,1754,1749.32,0.2668187,EANv2Package,12.885127,100.880898,31-45 days,Friday,Saturday
+2026-06-12,2026-06-14,94,12.8855619,100.881325,5/12/2026,Winning,Pattaya,6276177,Y.O.K Guest house jomtien,,Otilla,7048,3507.88,50.22871737,EANv2Package,12.885127,100.880898,31-45 days,Friday,Sunday
