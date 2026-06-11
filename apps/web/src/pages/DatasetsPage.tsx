@@ -5,6 +5,8 @@ import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
 
 export default function DatasetsPage() {
+
+
   const [searchQuery, setSearchQuery] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -225,7 +227,7 @@ export default function DatasetsPage() {
                         <div className="flex items-center justify-end space-x-2">
                           <Link
                             to="/chat"
-                           className="inline-flex items-center space-x-1 px-3 py-1.5 bg-brand-blue/5 dark:bg-brand-blue/10 hover:bg-brand-blue hover:text-white text-brand-blue dark:text-brand-blue-light rounded-lg text-xs font-semibold border border-brand-blue/20 dark:border-brand-blue/30 transition-colors cursor-pointer"
+                            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-brand-blue/5 dark:bg-brand-blue/10 hover:bg-brand-blue hover:text-white text-brand-blue dark:text-brand-blue-light rounded-lg text-xs font-semibold border border-brand-blue/20 dark:border-brand-blue/30 transition-colors cursor-pointer"
                           >
                             <BarChart2 className="h-3.5 w-3.5 mr-0.5" />
                             <span>Analyze</span>

@@ -1,25 +1,11 @@
 import { redis } from "../lib/redis.js";
 
 async function main() {
-
-    console.log("Writing...");
-
-    await redis.set(
-        "test:key",
-        {
-            message: "redis works",
-        },
-        {
-            ex: 10,
-        }
+    const value = await redis.get(
+        "PASTE_REDIS_KEY_HERE"
     );
-
-    console.log("Reading...");
-
-    const value =
-        await redis.get("test:key");
 
     console.log(value);
 }
 
-main().catch(console.error);
+main();

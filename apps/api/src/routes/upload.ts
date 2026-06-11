@@ -45,10 +45,7 @@ router.post(
 
             await redis.set(
                 redisKey,
-                summary,
-                {
-                    ex: 60 * 60 * 24,
-                }
+                summary
             );
 
             await markCompleted(
