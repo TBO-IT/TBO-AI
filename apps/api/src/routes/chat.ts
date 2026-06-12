@@ -1,7 +1,19 @@
 import { getDataset } from "../services/datasetService.js"
 import { redis } from "../lib/redis.js";
-
+import fs from "fs/promises";
 import { Router } from "express";
+
+import {
+    downloadDataset
+}
+    from "../services/storageService.js";
+
+import {
+    getTopWinningHotels,
+    HotelWinMetric,
+    getTopSuppliersByVolume
+}
+    from "../services/queryService.js";
 
 const router = Router();
 
@@ -156,6 +168,100 @@ router.post("/", async (req, res) => {
         return res.json({
             answer: `${worst.name} is the worst chain with a ${worst.winRate.toFixed(1)} % win rate across ${worst.volume} observations.`
         })
+    }
+
+    if (
+        lower.includes("top")
+        &&
+        lower.includes("hotel")
+    ) {
+
+        const tempPath =
+            await downloadDataset(
+                dataset.storagePath!
+            );
+
+        try {
+
+            const hotels =
+                await getTopWinningHotels(
+                    tempPath
+                );
+
+            const answer =
+                hotels
+                    .map(
+                        (
+                            hotel: HotelWinMetric,
+                            index: number
+                        ) =>
+                            `${index + 1}. ${hotel.hotel} (${hotel.wins} wins)`
+                    )
+                    .join("\n");
+
+            return res.json({
+                answer:
+                    `Top 5 winning hotels:\n\n${answer}`
+            });
+
+        } finally {
+            for (let i = 0; i < 50; i++) {
+                try {
+                    await fs.unlink(tempPath);
+                    break;
+                } catch (err: any) {
+                    if (err.code === "EBUSY" && i < 49) {
+                        await new Promise((resolve) => setTimeout(resolve, 200));
+                    } else {
+                        throw err;
+                    }
+                }
+            }
+        }
+
+    }
+    if (
+        lower.includes("supplier")
+        &&
+        lower.includes("volume")
+    ) {
+
+        const tempPath =
+            await downloadDataset(
+                dataset.storagePath!
+            );
+
+        try {
+
+            const suppliers =
+                await getTopSuppliersByVolume(
+                    tempPath
+                );
+
+            const answer =
+                suppliers
+                    .map(
+                        (
+                            supplier,
+                            index
+                        ) =>
+                            `${index + 1}. ${supplier.name} (${supplier.volume})`
+                    )
+                    .join("\n");
+
+            return res.json({
+                answer:
+                    `Top suppliers by volume:\n\n${answer}`
+            });
+
+        } finally {
+
+            await fs.unlink(
+                tempPath
+            );
+
+        }
+
     }
 
     return res.json({

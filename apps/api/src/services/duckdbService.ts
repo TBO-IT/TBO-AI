@@ -1,48 +1,48 @@
 import duckdb from "duckdb";
 
 export interface PerformanceMetric {
-    name: string;
-    volume: number;
-    winRate: number;
+  name: string;
+  volume: number;
+  winRate: number;
 }
 
 export interface DatasetSummary {
-    rowCount: number;
-    winRate: number;
-    medianPriceDiff: number;
+  rowCount: number;
+  winRate: number;
+  medianPriceDiff: number;
 
-    apwBreakdown: PerformanceMetric[];
-    chainPerformance: PerformanceMetric[];
-    supplierPerformance: PerformanceMetric[];
+  apwBreakdown: PerformanceMetric[];
+  chainPerformance: PerformanceMetric[];
+  supplierPerformance: PerformanceMetric[];
 }
 
 function query<T>(
-    conn: duckdb.Connection,
-    sql: string
+  conn: duckdb.Connection,
+  sql: string
 ): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-        conn.all(sql, (err, rows) => {
-            if (err) {
-                reject(err);
-                return;
-            }
+  return new Promise((resolve, reject) => {
+    conn.all(sql, (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
 
-            resolve(rows as T[]);
-        });
+      resolve(rows as T[]);
     });
+  });
 }
 
 export async function analyzeCsv(
-    filePath: string
+  filePath: string
 ): Promise<DatasetSummary> {
 
-    const normalizedPath =
-        filePath.replaceAll("\\", "/");
+  const normalizedPath =
+    filePath.replaceAll("\\", "/");
 
-    const db = new duckdb.Database(":memory:");
-    const conn = db.connect();
+  const db = new duckdb.Database(":memory:");
+  const conn = db.connect();
 
-    const csvSource = `
+  const csvSource = `
     read_csv(
       '${normalizedPath}',
       delim=',',
@@ -53,7 +53,7 @@ export async function analyzeCsv(
     )
   `;
 
-    const overviewSql = `
+  const overviewSql = `
     SELECT
       COUNT(*) as rowCount,
 
@@ -72,7 +72,7 @@ export async function analyzeCsv(
     FROM ${csvSource}
   `;
 
-    const apwSql = `
+  const apwSql = `
     SELECT
       apw_bucket_new as name,
 
@@ -93,7 +93,7 @@ export async function analyzeCsv(
     ORDER BY volume DESC
   `;
 
-    const chainSql = `
+  const chainSql = `
     SELECT
       tbo_chainname as name,
 
@@ -122,7 +122,7 @@ export async function analyzeCsv(
     LIMIT 15
   `;
 
-    const supplierSql = `
+  const supplierSql = `
     SELECT
       suppliername as name,
 
@@ -147,55 +147,61 @@ export async function analyzeCsv(
     ORDER BY volume DESC
   `;
 
-    const [
-        overview,
-        apwBreakdown,
-        chainPerformance,
-        supplierPerformance,
-    ] = await Promise.all([
-        query<any>(conn, overviewSql),
-        query<PerformanceMetric>(conn, apwSql),
-        query<PerformanceMetric>(conn, chainSql),
-        query<PerformanceMetric>(conn, supplierSql),
-    ]);
+  const [
+    overview,
+    apwBreakdown,
+    chainPerformance,
+    supplierPerformance,
+  ] = await Promise.all([
+    query<any>(conn, overviewSql),
+    query<PerformanceMetric>(conn, apwSql),
+    query<PerformanceMetric>(conn, chainSql),
+    query<PerformanceMetric>(conn, supplierSql),
+  ]);
 
-    conn.close();
+  conn.close();
 
-    return {
-        rowCount: Number(
-            overview[0].rowCount
-        ),
+  return {
+    rowCount: Number(
+      overview[0].rowCount
+    ),
 
-        winRate: Number(
-            overview[0].winRate
-        ),
+    winRate: Number(
+      overview[0].winRate
+    ),
 
-        medianPriceDiff: Number(
-            overview[0].medianPriceDiff
-        ),
+    medianPriceDiff: Number(
+      overview[0].medianPriceDiff
+    ),
 
-        apwBreakdown: apwBreakdown.map(
-            (row) => ({
-                name: row.name,
-                volume: Number(row.volume),
-                winRate: Number(row.winRate),
-            })
-        ),
+    apwBreakdown: apwBreakdown.map(
+      (row) => ({
+        name: row.name,
+        volume: Number(row.volume),
+        winRate: Number(row.winRate),
+      })
+    ),
 
-        chainPerformance: chainPerformance.map(
-            (row) => ({
-                name: row.name,
-                volume: Number(row.volume),
-                winRate: Number(row.winRate),
-            })
-        ),
+    chainPerformance: chainPerformance.map(
+      (row) => ({
+        name: row.name,
+        volume: Number(row.volume),
+        winRate: Number(row.winRate),
+      })
+    ),
 
-        supplierPerformance: supplierPerformance.map(
-            (row) => ({
-                name: row.name,
-                volume: Number(row.volume),
-                winRate: Number(row.winRate),
-            })
-        ),
-    };
+    supplierPerformance: supplierPerformance.map(
+      (row) => ({
+        name: row.name,
+        volume: Number(row.volume),
+        winRate: Number(row.winRate),
+      })
+    ),
+  };
 }
+
+export interface HotelWinMetric {
+  hotel: string;
+  wins: number;
+}
+
