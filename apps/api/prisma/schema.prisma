@@ -71,6 +71,8 @@ model Dataset {
 
   filename     String
 
+  storagePath  String?  @map("storage_path")
+
   status       String   @default("UPLOADED")
 
   rowCount     Int?

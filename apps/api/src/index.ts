@@ -9,6 +9,7 @@ import meRoutes from "./routes/me.js";
 import uploadRoutes from "./routes/upload.js";
 import testAnalysisRoutes from "./routes/testAnalysis.js";
 import datasetRoutes from "./routes/dataset.js";
+import chatRoutes from "./routes/chat.js";
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use(express.json());
 app.use(clerkMiddleware());
 
 
+app.use("/chat", chatRoutes);
 app.use("/test-analysis", testAnalysisRoutes);
 app.use("/upload", uploadRoutes);
 app.use("/dataset", datasetRoutes);

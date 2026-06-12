@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Send, Sparkles, MessageSquare, Plus, ChevronDown, Database, Cpu, Loader2 } from "lucide-react";
 import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
+import { api } from "../api/client";
 
 interface Message {
   id: string;
@@ -35,29 +36,82 @@ export default function ChatPage() {
     load();
   }, []);
 
-  const handleSend = () => {
+  const handleSend = async () => {
+
     if (!input.trim()) return;
+
+    if (!selectedDataset) return;
+
+    const currentInput = input;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
-      timestamp: new Date()
+      content: currentInput,
+      timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
+
     setInput("");
 
-    // Simulate an AI response delay
-    setTimeout(() => {
+    try {
+
+      const response =
+        await api.post(
+          "/chat",
+          {
+            datasetId:
+              selectedDataset.id,
+            message:
+              currentInput,
+          }
+        );
+
       const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `I received your query about "${selectedDataset ? selectedDataset.filename : "no selected dataset"}": "${input}". This is a placeholder response as the AI engine is currently being connected. I will soon be able to run DuckDB queries on your dataset and generate tables/charts.`,
-        timestamp: new Date()
+        id:
+          (Date.now() + 1).toString(),
+
+        role:
+          "assistant",
+
+        content:
+          response.data.answer,
+
+        timestamp:
+          new Date(),
       };
-      setMessages(prev => [...prev, assistantMessage]);
-    }, 1000);
+
+      setMessages(prev => [
+        ...prev,
+        assistantMessage,
+      ]);
+
+    } catch (error) {
+
+      console.error(error);
+
+      const assistantMessage: Message = {
+        id:
+          (Date.now() + 1).toString(),
+
+        role:
+          "assistant",
+
+        content:
+          "Failed to contact backend.",
+
+        timestamp:
+          new Date(),
+      };
+
+      setMessages(prev => [
+        ...prev,
+        assistantMessage,
+      ]);
+
+    }
+
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -111,11 +165,10 @@ export default function ChatPage() {
                         setSelectedDataset(ds);
                         setIsDropdownOpen(false);
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer ${
-                        selectedDataset?.id === ds.id
-                          ? "font-semibold text-brand-blue dark:text-brand-blue-light bg-brand-blue/5 dark:bg-brand-blue/10"
-                          : "text-slate-700 dark:text-slate-300"
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer ${selectedDataset?.id === ds.id
+                        ? "font-semibold text-brand-blue dark:text-brand-blue-light bg-brand-blue/5 dark:bg-brand-blue/10"
+                        : "text-slate-700 dark:text-slate-300"
+                        }`}
                     >
                       <span className="truncate mr-2">{ds.filename}</span>
                       {selectedDataset?.id === ds.id && <div className="h-1.5 w-1.5 bg-brand-orange rounded-full flex-shrink-0" />}
@@ -177,11 +230,10 @@ export default function ChatPage() {
                     </div>
                   )}
                   <div
-                    className={`rounded-2xl px-5 py-3.5 text-sm shadow-sm max-w-[85%] leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-slate-900 dark:bg-slate-800 text-white rounded-tr-none"
-                        : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none"
-                    }`}
+                    className={`rounded-2xl px-5 py-3.5 text-sm shadow-sm max-w-[85%] leading-relaxed ${msg.role === "user"
+                      ? "bg-slate-900 dark:bg-slate-800 text-white rounded-tr-none"
+                      : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none"
+                      }`}
                   >
                     <p className="whitespace-pre-line">{msg.content}</p>
                     <span className="text-[10px] block mt-1.5 text-right text-slate-400 dark:text-slate-500">
@@ -214,11 +266,10 @@ export default function ChatPage() {
               <button
                 onClick={handleSend}
                 disabled={!input.trim()}
-                className={`absolute right-2.5 p-2 rounded-lg text-white shadow-sm transition-all cursor-pointer ${
-                  input.trim()
-                    ? "bg-brand-blue hover:bg-brand-blue-dark"
-                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
-                }`}
+                className={`absolute right-2.5 p-2 rounded-lg text-white shadow-sm transition-all cursor-pointer ${input.trim()
+                  ? "bg-brand-blue hover:bg-brand-blue-dark"
+                  : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
+                  }`}
               >
                 <Send className="h-4 w-4" />
               </button>
