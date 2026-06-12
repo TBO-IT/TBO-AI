@@ -5,6 +5,8 @@ import { analyzeCsv } from "../services/duckdbService.js";
 import { redis } from "../lib/redis.js";
 import { markCompleted } from "../services/datasetService.js";
 import multer from "multer";
+import { supabase } from "../lib/supabase.js";
+import fs from "fs/promises";
 
 const router = Router();
 
@@ -32,10 +34,39 @@ router.post(
                 });
             }
 
+            const storagePath =
+                `${crypto.randomUUID()}-${req.file.originalname}`;
+
+            console.log(storagePath);
+
             const dataset = await createDataset(
                 req.user.id,
-                req.file.originalname
+                req.file.originalname,
+                storagePath
             );
+
+
+
+            const fileBuffer =
+                await fs.readFile(
+                    req.file.path
+                );
+
+            const { error: uploadError } =
+                await supabase.storage
+                    .from("datasets")
+                    .upload(
+                        storagePath,
+                        fileBuffer,
+                        {
+                            contentType:
+                                "text/csv",
+                        }
+                    );
+
+            if (uploadError) {
+                throw uploadError;
+            }
 
             const summary = await analyzeCsv(
                 req.file.path
@@ -52,6 +83,10 @@ router.post(
                 dataset.id,
                 summary.rowCount,
                 redisKey
+            );
+
+            await fs.unlink(
+                req.file.path
             );
 
             return res.json({

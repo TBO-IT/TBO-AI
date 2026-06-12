@@ -3,12 +3,14 @@ import { DatasetStatus } from "../constants/datasetStatus.js";
 
 export async function createDataset(
     userId: string,
-    filename: string
+    filename: string,
+    storagePath?: string
 ) {
     return prisma.dataset.create({
         data: {
             userId,
             filename,
+            storagePath,
             status: DatasetStatus.UPLOADED,
         },
     });
