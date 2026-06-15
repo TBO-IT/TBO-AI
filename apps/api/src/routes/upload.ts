@@ -10,6 +10,25 @@ import fs from "fs/promises";
 
 const router = Router();
 
+// Retry unlink because DuckDB may hold a Windows file lock briefly after closing
+async function safeUnlink(filePath: string) {
+    for (let i = 0; i < 15; i++) {
+        try {
+            await fs.unlink(filePath);
+            return;
+        } catch (err: any) {
+            if (err.code === 'EBUSY' && i < 14) {
+                await new Promise(r => setTimeout(r, 200));
+            } else {
+                // Log but don't throw — the upload already succeeded
+                console.warn(`[upload] Could not delete temp file ${filePath}:`, err.message);
+                return;
+            }
+        }
+    }
+}
+
+
 const upload = multer({
     dest: "uploads/",
 
@@ -85,9 +104,7 @@ router.post(
                 redisKey
             );
 
-            await fs.unlink(
-                req.file.path
-            );
+            await safeUnlink(req.file.path);
 
             return res.json({
                 datasetId: dataset.id,

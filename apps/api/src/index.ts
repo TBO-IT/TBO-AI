@@ -10,7 +10,7 @@ import uploadRoutes from "./routes/upload.js";
 import testAnalysisRoutes from "./routes/testAnalysis.js";
 import datasetRoutes from "./routes/dataset.js";
 import chatRoutes from "./routes/chat.js";
-import testRouter from "./routes/claude-test.js";
+import testRouter from "./routes/test.js";
 
 dotenv.config();
 
@@ -25,6 +25,12 @@ app.use(
 );
 app.use(express.json());
 app.use(clerkMiddleware());
+
+// DuckDB returns BigInt for COUNT(*) and integer aggregations.
+// This replacer makes res.json() transparently convert BigInt → Number.
+app.set('json replacer', (_key: string, value: unknown) =>
+    typeof value === 'bigint' ? Number(value) : value
+);
 
 
 app.use("/chat", chatRoutes);

@@ -7,7 +7,7 @@ import { buildSemanticLayer } from "../ai/semanticLayer.js";
 import { buildPrompt } from "../ai/promptBuilder.js";
 import { generateSql, generateNarrative } from "../services/llmservice.js";
 import { validateSqlSyntax } from "../ai/sqlValidator.js";
-import { executeQuery } from "../services/queryExecutionService.js";
+import { executeSql, executeQuery } from "../services/queryExecutionService.js";
 
 async function safeUnlink(tempPath: string) {
     for (let i = 0; i < 50; i++) {
@@ -72,7 +72,7 @@ router.post("/", async (req, res) => {
             });
         }
 
-        // 7. Execute query against DuckDB
+        // 7. Execute query against DuckDB (replaces data_table placeholder internally)
         const queryResults = await executeQuery(generated.sql, tempPath);
 
         // 8. Generate principal insight narrative

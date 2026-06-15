@@ -1,18 +1,123 @@
-import { runQuery } from "./queryService.js";
-import { DatasetColumn } from "../ai/llmtypes.js";
+import {
+    executeSql
+}
+    from "./queryExecutionService.js";
 
-export async function getDatasetSchema(csvPath: string): Promise<DatasetColumn[]> {
-    const normalizedPath = csvPath.replace(/\\/g, "/");
-    const sql = `DESCRIBE SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true)`;
-    
-    try {
-        const rows = await runQuery<{ column_name: string; column_type: string }>(sql);
-        return rows.map(r => ({
-            column_name: r.column_name,
-            column_type: r.column_type
-        }));
-    } catch (error) {
-        console.error("Error getting schema via DuckDB:", error);
-        throw new Error(`Failed to discover schema for dataset: ${error instanceof Error ? error.message : String(error)}`);
-    }
+export async function getDatasetSchema(
+    csvPath: string
+) {
+
+    const sql = `
+        DESCRIBE
+        SELECT *
+        FROM read_csv_auto(
+            '${csvPath.replace(/\\/g, "/")}',
+            ignore_errors=true
+        )
+    `;
+
+    return executeSql(sql);
+
+}
+
+export async function getSampleRows(
+    csvPath: string,
+    limit = 5
+) {
+
+    const sql = `
+        SELECT *
+        FROM read_csv_auto(
+            '${csvPath.replace(/\\/g, "/")}',
+            ignore_errors=true
+        )
+        LIMIT ${limit}
+    `;
+
+    return executeSql(sql);
+
+}
+
+export async function getColumnStatistics(
+    csvPath: string
+) {
+
+    const sql = `
+        SELECT
+            COUNT(*) as rowCount
+        FROM read_csv_auto(
+            '${csvPath.replace(/\\/g, "/")}',
+            ignore_errors=true
+        )
+    `;
+
+    const result =
+        await executeSql(sql);
+
+    return result[0];
+
+}
+
+import {
+    classifySchema
+}
+    from "../ai/schemaClassifier.js";
+
+import {
+    BUSINESS_KNOWLEDGE
+}
+    from "../ai/businessKnowledge.js";
+
+import {
+    METRIC_REGISTRY
+}
+    from "../ai/metricRegistry.js";
+
+export async function buildDatasetContext(
+    csvPath: string
+) {
+
+    const schema =
+        await getDatasetSchema(
+            csvPath
+        );
+
+    const sampleRows =
+        await getSampleRows(
+            csvPath
+        );
+
+    const statistics =
+        await getColumnStatistics(
+            csvPath
+        );
+
+    const datasetType =
+        classifySchema(
+
+            schema.map(
+                (column: any) =>
+                    column.column_name
+            )
+
+        );
+
+    return {
+
+        datasetType,
+
+        schema,
+
+        sampleRows,
+
+        statistics,
+
+        businessKnowledge:
+            BUSINESS_KNOWLEDGE,
+
+        metrics:
+            METRIC_REGISTRY
+
+    };
+
 }

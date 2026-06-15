@@ -1,17 +1,59 @@
 import { Router } from "express";
 
-import { redis } from "../lib/redis.js";
+import {
+    buildDatasetContext
+}
+    from "../services/schemaService.js";
+
+import {
+    buildPrompt
+}
+    from "../ai/promptBuilder.js";
 
 const router = Router();
 
-router.get("/redis-test", async (_, res) => {
-    await redis.set("message", "hello from redis");
+router.post(
+    "/prompt",
 
-    const value = await redis.get("message");
+    async (
+        req,
+        res
+    ) => {
 
-    return res.json({
-        redisValue: value,
-    });
-});
+        try {
+
+            const {
+                csvPath,
+                question
+            } = req.body;
+
+            const context =
+                await buildDatasetContext(
+                    csvPath
+                );
+
+            const prompt =
+                buildPrompt(
+                    question,
+                    context
+                );
+
+            return res.json({
+                prompt
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            return res.status(500).json({
+                error:
+                    "Failed to build prompt"
+            });
+
+        }
+
+    }
+);
 
 export default router;
