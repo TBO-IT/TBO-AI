@@ -85,3 +85,15 @@ model Dataset {
 
   @@map("datasets")
 }
+
+model LLMUsage {
+  id            String   @id @default(uuid()) @db.Uuid
+  model         String   @db.VarChar(255)
+  requestType   String   @map("request_type") @db.VarChar(255)
+  inputTokens   Int      @map("input_tokens")
+  outputTokens  Int      @map("output_tokens")
+  estimatedCost Float    @map("estimated_cost")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("llm_usage")
+}

@@ -47,7 +47,7 @@ export async function generateSql(prompt: string): Promise<GeneratedQuery> {
                 sql: parsed.sql
             };
         }
-        
+
         throw new Error("Missing sql or explanation in response JSON");
     } catch (error) {
         console.error("Error generating SQL with Claude:", error);
@@ -104,4 +104,5 @@ Guidelines:
         console.error("Error generating narrative with Claude:", error);
         throw new Error(`Narrative generation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-}
+}
+
