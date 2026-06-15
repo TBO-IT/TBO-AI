@@ -2,9 +2,11 @@ import { QuestionAnalysis } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { generateTemplatedSql } from "./sqlTemplateEngine.js";
 
+export type RouteType = "TEMPLATE" | "LLM";
+
 export type RoutingDecision = 
-    | { route: "TEMPLATE"; sql: string; explanation: string }
-    | { route: "LLM" };
+    | { type: "TEMPLATE"; route: "TEMPLATE"; sql: string; explanation: string }
+    | { type: "LLM"; route: "LLM" };
 
 /**
  * Intelligent Query Router
@@ -15,31 +17,34 @@ export function routeQuery(
     semanticLayer: EnrichedSemanticLayer
 ): RoutingDecision {
     
-    const { intent } = analysis;
+    const { intent, metrics, dimensions, filters, timeReferences } = analysis;
 
-    // Complex intents that require reasoning, correlations, or root cause analysis
-    // MUST always go to the LLM.
-    const complexIntents = ["ROOT_CAUSE", "CORRELATION", "ANOMALY"];
+    console.log(`[ANALYSIS] Intent: ${intent} | Metrics: [${metrics.join(",")}] | Dims: [${dimensions.join(",")}] | Filters: [${filters.join(",")}] | Time: [${timeReferences.join(",")}]`);
+
+    // Define explicit routing rules
+    const templateIntents = ["SUMMARY", "RANKING", "BREAKDOWN", "COMPARISON"];
     
-    if (complexIntents.includes(intent)) {
-        console.log(`[QueryRouter] Routing to LLM (Complex Intent: ${intent})`);
-        return { route: "LLM" };
+    if (templateIntents.includes(intent)) {
+        console.log(`[ROUTE_DECISION] Intent classified as TEMPLATE (${intent})`);
+        
+        // Try to generate a deterministic template
+        const templatedSql = generateTemplatedSql(analysis, semanticLayer);
+
+        if (templatedSql) {
+            console.log(`[ROUTE_DECISION] Successfully generated deterministic SQL via Template Engine.`);
+            return { 
+                type: "TEMPLATE",
+                route: "TEMPLATE", 
+                sql: templatedSql,
+                explanation: "Auto-generated using deterministic templates for simple reporting." 
+            };
+        } else {
+            console.warn(`[ROUTE_DECISION] Template engine returned null for TEMPLATE intent (${intent}). Forcing fallback to LLM, but this should be flagged.`);
+            return { type: "LLM", route: "LLM" };
+        }
     }
 
-    // Try to generate a deterministic template
-    const templatedSql = generateTemplatedSql(analysis, semanticLayer);
-
-    if (templatedSql) {
-        console.log(`[QueryRouter] Routing to TEMPLATE`);
-        return { 
-            route: "TEMPLATE", 
-            sql: templatedSql,
-            explanation: "Auto-generated using deterministic templates for simple reporting." 
-        };
-    }
-
-    // Fallback: If template engine couldn't handle it (e.g. multiple metrics, dates, filters),
-    // route to LLM.
-    console.log(`[QueryRouter] Routing to LLM (Template engine unsupported)`);
-    return { route: "LLM" };
+    // Default to LLM for ROOT_CAUSE, CORRELATION, ANOMALY, etc.
+    console.log(`[ROUTE_DECISION] Intent classified as LLM (${intent}). Routing to Claude.`);
+    return { type: "LLM", route: "LLM" };
 }

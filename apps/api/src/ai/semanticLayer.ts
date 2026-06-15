@@ -81,12 +81,16 @@ interface DimensionMatcher {
 
 const DIMENSION_MATCHERS: DimensionMatcher[] = [
     { canonicalKey: "destination", matches: ["destination"] },
-    { canonicalKey: "supplier",    matches: ["suppliername", "supplier"] },
-    { canonicalKey: "hotel",       matches: ["tbo_hotelname", "hotel name", "hotel_name"] },
-    { canonicalKey: "chain",       matches: ["tbo_chainname", "chain", "chainname"] },
-    { canonicalKey: "city",        matches: ["city"] },
-    { canonicalKey: "country",     matches: ["country"] },
-    { canonicalKey: "hotel_id",    matches: ["hotel id", "hotel_id"] }
+    { canonicalKey: "supplier", matches: ["suppliername", "supplier"] },
+    { canonicalKey: "hotel", matches: ["tbo_hotelname", "hotel name", "hotel_name"] },
+    { canonicalKey: "chain", matches: ["tbo_chainname", "chain", "chainname"] },
+    { canonicalKey: "city", matches: ["city"] },
+    { canonicalKey: "country", matches: ["country"] },
+    { canonicalKey: "hotel_id", matches: ["hotel id", "hotel_id"] },
+    {
+        canonicalKey: "apw",
+        matches: ["apw_bucket", "apw_bucket_new", "apw", "advanced purchase window", "purchase window", "lead time bucket"]
+    }
 ];
 
 function mapDimensions(schema: DatasetColumn[]): {
@@ -96,10 +100,15 @@ function mapDimensions(schema: DatasetColumn[]): {
     const dimensions: string[] = [];
     const columnMappings: Record<string, string> = {};
 
+    // Normalise a string for fuzzy column matching:
+    // lower-case, trim, collapse any whitespace/underscores to a single underscore
+    const norm = (s: string) => s.toLowerCase().trim().replace(/[\s_]+/g, "_");
+
     schema.forEach(col => {
-        const nameLower = col.column_name.toLowerCase();
+        const normCol = norm(col.column_name);
         for (const matcher of DIMENSION_MATCHERS) {
-            if (matcher.matches.includes(nameLower)) {
+            // Normalise all matcher strings the same way
+            if (matcher.matches.map(norm).includes(normCol)) {
                 if (!dimensions.includes(matcher.canonicalKey)) {
                     dimensions.push(matcher.canonicalKey);
                 }
@@ -116,12 +125,12 @@ function mapDimensions(schema: DatasetColumn[]): {
 
 const DATASET_METRIC_KEYS: Record<DatasetType, string[]> = {
     [DatasetType.COMPETITIVENESS]: ["win_rate", "avg_price_diff", "median_price_diff"],
-    [DatasetType.CONVERSION]:      [
+    [DatasetType.CONVERSION]: [
         "searches", "bookings", "vouchered_bookings", "cancelled_bookings",
         "total_sales", "vouchered_sales", "cancel_sales", "l2b", "l2v"
     ],
-    [DatasetType.REVENUE]:  ["total_sales", "vouchered_sales", "cancel_sales"],
-    [DatasetType.UNKNOWN]:  []
+    [DatasetType.REVENUE]: ["total_sales", "vouchered_sales", "cancel_sales"],
+    [DatasetType.UNKNOWN]: []
 };
 
 function resolveMetrics(datasetType: DatasetType): MetricDefinition[] {

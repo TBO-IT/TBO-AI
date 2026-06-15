@@ -1,51 +1,169 @@
-import { QuestionAnalysis } from "./questionTypes.js";
+import { QuestionAnalysis, QuestionFilter } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
+import { buildWhereClause, buildFilterCondition } from "./filterBuilder.js";
 
-function getColumnName(key: string, mappings: Record<string, string>, schemaCols: {column_name: string}[]): string {
-    // Find the exact column name from the schema that maps to this key
-    const col = schemaCols.find(c => c.column_name === key || mappings[c.column_name] === key);
-    return col ? col.column_name : key;
+/**
+ * Resolves a canonical dimension key (e.g. "apw") to the physical column name
+ * in the dataset (e.g. "apw_bucket_new") using the semantic layer's reversed columnMappings.
+ */
+function getPhysicalColumnName(canonicalKey: string, semanticLayer: EnrichedSemanticLayer): string {
+    // columnMappings is { physicalCol -> canonicalKey }; we need the reverse
+    const entry = Object.entries(semanticLayer.columnMappings).find(([, canonical]) => canonical === canonicalKey);
+    if (entry) return entry[0];
+    // Fallback: direct match on column name
+    const direct = semanticLayer.allColumns.find(c => c.column_name.toLowerCase() === canonicalKey.toLowerCase());
+    return direct ? direct.column_name : canonicalKey;
+}
+
+/**
+ * Determines sort direction from the original question text.
+ * "worst", "lowest", "bottom", "least" → ASC  (worst performers first)
+ * Default                               → DESC (best/highest first)
+ */
+function detectSortDirection(question: string): "ASC" | "DESC" {
+    const lower = question.toLowerCase();
+    if (/\b(worst|lowest|bottom|least|minimum|min)\b/.test(lower)) return "ASC";
+    return "DESC";
+}
+
+/**
+ * Resolves "_entity" (unclassified named-entity) filters into conditions across
+ * all VARCHAR columns in the schema. Used as a safe fallback for proper nouns
+ * like city/supplier names that weren't matched to a specific dimension.
+ */
+function buildEntityFilterConditions(
+    entityFilters: QuestionFilter[],
+    semanticLayer: EnrichedSemanticLayer
+): string {
+    if (entityFilters.length === 0) return "";
+
+    const stringCols = semanticLayer.allColumns.filter(c =>
+        c.column_type.toUpperCase().includes("VARCHAR") ||
+        c.column_type.toUpperCase().includes("STRING") ||
+        c.column_type.toUpperCase().includes("TEXT")
+    );
+    if (stringCols.length === 0) return "";
+
+    const conditions = entityFilters.map(f => {
+        const safe = f.value.replace(/'/g, "''");
+        const colChecks = stringCols.map(c => `"${c.column_name}" ILIKE '%${safe}%'`).join(" OR ");
+        return `(${colChecks})`;
+    });
+
+    return conditions.join(" AND ");
 }
 
 /**
  * Attempts to generate SQL deterministically for simple questions.
- * Returns the SQL string if successful, or null if it's too complex and needs Claude.
+ * Returns the SQL string if successful, or null if too complex (needs Claude).
+ *
+ * Filter Architecture:
+ * - Typed filters (dimension="apw", "destination", etc.) → filterBuilder.ts resolves physical column
+ * - Unclassified entity filters (dimension="_entity") → matched via ILIKE against all VARCHAR cols
+ * - All filters are applied in the WHERE clause — none are silently dropped
  */
 export function generateTemplatedSql(
     analysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer
 ): string | null {
-    const { intent, metrics, dimensions, timeReferences } = analysis;
+    const { intent, dimensions, filters, timeReferences } = analysis;
+    let { metrics } = analysis;
 
-    // We only template very simple questions right now
+    // ── 1. Metric Inference ───────────────────────────────────────────────────
+    // For questions like "worst apw" that name a dimension but no metric,
+    // infer the dataset's primary metric (e.g. win_rate for COMPETITIVENESS).
+    if (metrics.length === 0) {
+        const primaryMetricKey = semanticLayer.metricKeys[0];
+        if (primaryMetricKey) {
+            metrics = [primaryMetricKey];
+            console.log(`[TemplateEngine] Inferred primary metric: ${primaryMetricKey}`);
+        } else {
+            return null;
+        }
+    }
+
     if (metrics.length !== 1) return null;
-    if (timeReferences.length > 0) return null; // Date math is tricky, leave to Claude for now
-    if (analysis.filters.length > 0) return null; // Filters require precise WHERE clauses, leave to Claude
 
-    const metric = semanticLayer.metrics.find(m => 
-        m.name.toLowerCase().replace(/\s+/g, "_") === metrics[0] ||
-        m.name.toLowerCase().includes(metrics[0].replace(/_/g, " "))
+    const metricKey = metrics[0];
+    const metric = semanticLayer.metrics.find(m =>
+        m.name.toLowerCase().replace(/\s+/g, "_") === metricKey ||
+        m.name.toLowerCase().includes(metricKey.replace(/_/g, " "))
     );
 
-    if (!metric) return null;
+    if (!metric) {
+        console.warn(`[TemplateEngine] Metric '${metricKey}' not found in semantic layer.`);
+        return null;
+    }
 
     const metricFormula = metric.formula;
-    
-    // SUMMARY intent: "Total searches", "Show bookings"
-    if (intent === "SUMMARY" && dimensions.length === 0) {
-        return `SELECT ${metricFormula} AS "${metric.name}" FROM data_table`;
+    const sortDir = detectSortDirection(analysis.originalQuestion);
+    const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
+
+    // ── 2. WHERE clause from structured filters ───────────────────────────────
+    const typedFilters = filters.filter(f => f.dimension !== "_entity");
+    const entityFilters = filters.filter(f => f.dimension === "_entity");
+
+    const typedWhere = buildWhereClause(typedFilters, schemaColumns);
+    const entityConditions = buildEntityFilterConditions(entityFilters, semanticLayer);
+
+    let whereClause = "";
+    if (typedWhere && entityConditions) {
+        whereClause = `${typedWhere} AND ${entityConditions}`;
+    } else if (typedWhere) {
+        whereClause = typedWhere;
+    } else if (entityConditions) {
+        whereClause = `WHERE ${entityConditions}`;
     }
 
-    // RANKING intent: "Top cities by bookings", "Top suppliers by sales"
-    if (intent === "RANKING" && dimensions.length === 1) {
-        const dimCol = getColumnName(dimensions[0], semanticLayer.columnMappings, semanticLayer.allColumns);
-        return `SELECT "${dimCol}", ${metricFormula} AS "${metric.name}" FROM data_table GROUP BY "${dimCol}" ORDER BY "${metric.name}" DESC NULLS LAST LIMIT 10`;
+    // Log filter propagation
+    if (filters.length > 0) {
+        console.log(`[TemplateEngine] SQL_FILTERS: ${whereClause || "(none resolved)"}`);
     }
 
-    // BREAKDOWN intent: "Bookings by country", "Country breakdown"
-    if (intent === "BREAKDOWN" && dimensions.length === 1) {
-        const dimCol = getColumnName(dimensions[0], semanticLayer.columnMappings, semanticLayer.allColumns);
-        return `SELECT "${dimCol}", ${metricFormula} AS "${metric.name}" FROM data_table GROUP BY "${dimCol}" ORDER BY "${metric.name}" DESC NULLS LAST`;
+    // ── 3. SELECT / GROUP BY (dimensions + optional time bucketing) ───────────
+    let selectDims = "";
+    let groupBy = "";
+
+    if (dimensions.length > 0) {
+        const dimCols = dimensions.map(d => getPhysicalColumnName(d, semanticLayer));
+        console.log(`[TemplateEngine] Dim columns: ${JSON.stringify(Object.fromEntries(dimensions.map((d, i) => [d, dimCols[i]])))}`);
+        selectDims = dimCols.map(c => `"${c}"`).join(", ") + ", ";
+        groupBy = `GROUP BY ${dimCols.map(c => `"${c}"`).join(", ")}`;
+    }
+
+    if (timeReferences.length > 0) {
+        const timeCol = semanticLayer.primaryTimeDimension || semanticLayer.availableTimeColumns?.[0];
+        if (!timeCol) return null;
+        selectDims += `date_trunc('month', CAST("${timeCol}" AS DATE)) AS month, `;
+        groupBy += groupBy ? `, month` : `GROUP BY month`;
+    }
+
+    // ── 4. Intent-specific SQL assembly ───────────────────────────────────────
+
+    // SUMMARY — single aggregate, no grouping
+    if (intent === "SUMMARY" && dimensions.length === 0 && timeReferences.length === 0) {
+        return `SELECT ${metricFormula} AS "${metric.name}" FROM data_table ${whereClause}`.trim();
+    }
+
+    // SUMMARY with dimensions — treat as BREAKDOWN (e.g. "suppliers where Winning")
+    const effectiveIntent = (intent === "SUMMARY" && dimensions.length > 0) ? "BREAKDOWN" : intent;
+
+    // RANKING — top / bottom N per dimension
+    if (effectiveIntent === "RANKING" && dimensions.length > 0) {
+        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${sortDir} NULLS LAST LIMIT 10`
+            .replace(/\s+/g, " ").trim();
+    }
+
+    // BREAKDOWN — all groups, no limit
+    if (effectiveIntent === "BREAKDOWN" && dimensions.length > 0) {
+        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${sortDir} NULLS LAST`
+            .replace(/\s+/g, " ").trim();
+    }
+
+    // COMPARISON — compare entities side-by-side
+    if (effectiveIntent === "COMPARISON" && dimensions.length > 0) {
+        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${sortDir} NULLS LAST LIMIT 20`
+            .replace(/\s+/g, " ").trim();
     }
 
     return null;

@@ -18,6 +18,25 @@ export type QuestionMetric = string;
 export type QuestionDimension = string;
 export type QuestionTimeReference = string;
 
+// ─── Filter Types ─────────────────────────────────────────────────────────────
+
+export type FilterOperator = "=" | "ILIKE" | ">" | "<" | ">=" | "<=" | "IN";
+
+/**
+ * A structured filter extracted from a question.
+ * Maps a canonical dimension key to a specific value.
+ */
+export interface QuestionFilter {
+    /** Canonical dimension key (e.g. "apw", "destination", "supplier") */
+    dimension: string;
+
+    /** SQL comparison operator */
+    operator: FilterOperator;
+
+    /** The filter value (e.g. "31-45 days", "Pattaya", "Winning") */
+    value: string;
+}
+
 // ─── Parsed Question ──────────────────────────────────────────────────────────
 
 /**
@@ -31,8 +50,8 @@ export interface QuestionAnalysis {
     /** Canonical dimension keys extracted (e.g. ["destination", "supplier"]) */
     dimensions: QuestionDimension[];
 
-    /** Literal filter values extracted (e.g. ["Pattaya", "Bangkok"]) */
-    filters: string[];
+    /** Structured filters with dimension, operator, and value */
+    filters: QuestionFilter[];
 
     /** Raw time reference strings if detected (e.g. ["April", "Q2", "last month"]) */
     timeReferences: QuestionTimeReference[];

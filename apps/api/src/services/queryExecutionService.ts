@@ -1,6 +1,20 @@
 import duckdb from "duckdb";
 
 /**
+ * Converts any BigInt values in a row to Number so that JSON.stringify works.
+ * DuckDB returns BIGINT columns as native JS BigInt which is not JSON-serializable.
+ */
+function sanitizeRows<T>(rows: any[]): T[] {
+    return rows.map(row => {
+        const clean: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(row)) {
+            clean[key] = typeof val === "bigint" ? Number(val) : val;
+        }
+        return clean as T;
+    });
+}
+
+/**
  * Raw SQL executor — runs any SQL string directly against an in-memory DuckDB instance.
  */
 export async function executeSql<T = any>(
@@ -27,7 +41,7 @@ export async function executeSql<T = any>(
                     }
 
                     resolve(
-                        rows as T[]
+                        sanitizeRows<T>(rows)
                     );
 
                 }

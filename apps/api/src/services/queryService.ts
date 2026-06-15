@@ -99,7 +99,7 @@ async function getDestinationColumn(csvPath: string): Promise<string | null> {
         const columns = await runQuery<{ column_name: string }>(
             `DESCRIBE SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true)`
         );
-        const destCol = columns.find(col => 
+        const destCol = columns.find(col =>
             col.column_name.toLowerCase().includes("destination")
         );
         return destCol ? destCol.column_name : null;
@@ -303,6 +303,10 @@ export async function getHighestVolumeChains(
 export async function getOverallWinRate(
     csvPath: string
 ): Promise<number> {
+    console.log(
+        "GET OVERALL WIN RATE CALLED"
+    );
+
     const normalizedPath = csvPath.replace(/\\/g, "/");
     const sql = `
         SELECT
