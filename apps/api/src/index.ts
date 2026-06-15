@@ -10,6 +10,7 @@ import uploadRoutes from "./routes/upload.js";
 import testAnalysisRoutes from "./routes/testAnalysis.js";
 import datasetRoutes from "./routes/dataset.js";
 import chatRoutes from "./routes/chat.js";
+import testRouter from "./routes/claude-test.js";
 
 dotenv.config();
 
@@ -31,7 +32,7 @@ app.use("/test-analysis", testAnalysisRoutes);
 app.use("/upload", uploadRoutes);
 app.use("/dataset", datasetRoutes);
 app.use("/admin", adminRoutes);
-app.use("/test", testRoutes);
+app.use("/test", testRouter);
 app.use("/api", meRoutes);
 app.use("/auth", authRoutes);
 

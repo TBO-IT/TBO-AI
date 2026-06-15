@@ -1,5 +1,6 @@
-export async function generateSql(
-    question: string
-) {
+//SQL generation result explanation
+import Anthropic from "@anthropic-ai/sdk";
 
-}
+const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY
+});
