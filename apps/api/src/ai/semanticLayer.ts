@@ -4,114 +4,173 @@ import { classifySchema } from "./schemaClassifier.js";
 import { BUSINESS_KNOWLEDGE } from "./businessKnowledge.js";
 import { METRIC_REGISTRY } from "./metricRegistry.js";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export interface EnrichedSemanticLayer extends SemanticLayer {
     datasetType: DatasetType;
+
+    /** Canonical dimension keys found (e.g. ["destination", "supplier"]) */
     dimensions: string[];
-    columnMappings: Record<string, string>; // Maps physical columns -> business dimension/concept name
+
+    /** Canonical metric keys available for this dataset type */
+    metricKeys: string[];
+
+    /** Maps physical column name → canonical dimension/concept name */
+    columnMappings: Record<string, string>;
+
+    /** All physical columns from the schema */
     allColumns: DatasetColumn[];
 }
 
-export function buildSemanticLayer(schema: DatasetColumn[]): EnrichedSemanticLayer {
-    const columnNames = schema.map(c => c.column_name);
-    const datasetType = classifySchema(columnNames);
+// ─── Time column detection ────────────────────────────────────────────────────
 
-    // 1. Determine Primary Time Dimension
-    let primaryTimeDimension: string = "";
-    const lowerColumnNames = columnNames.map(c => c.toLowerCase());
-    
-    // Ordered preference for time dimensions
-    const timePreferences = ["scraped_date", "scrapeddate", "date", "checkin", "checkout", "timestamp", "time"];
-    for (const pref of timePreferences) {
-        const idx = lowerColumnNames.indexOf(pref);
-        if (idx !== -1) {
-            primaryTimeDimension = columnNames[idx];
-            break;
+const DATE_COLUMN_PATTERNS = [
+    "date", "time", "timestamp", "datetime",
+    "scraped_date", "scrapeddate",
+    "booking_date", "bookingdate",
+    "checkin", "check_in", "checkout", "check_out",
+    "created_at", "updated_at", "inserted_at",
+    "period", "month", "week", "year"
+];
+
+const DATE_TYPES = ["date", "timestamp", "timestamptz", "datetime"];
+
+function detectTimeColumns(schema: DatasetColumn[]): { primary: string; all: string[] } {
+    const allTime: string[] = [];
+
+    schema.forEach(col => {
+        const nameLower = col.column_name.toLowerCase();
+        const typeLower = col.column_type.toLowerCase();
+
+        const isDateByType = DATE_TYPES.some(t => typeLower.includes(t));
+        const isDateByName = DATE_COLUMN_PATTERNS.some(p => nameLower.includes(p));
+
+        if (isDateByType || isDateByName) {
+            allTime.push(col.column_name);
         }
+    });
+
+    // Determine primary using preference order
+    const preferences = [
+        "scraped_date", "scrapeddate", "date",
+        "checkin", "checkout", "booking_date", "created_at"
+    ];
+
+    let primary = "";
+    const allLower = allTime.map(c => c.toLowerCase());
+
+    for (const pref of preferences) {
+        const idx = allLower.indexOf(pref);
+        if (idx !== -1) { primary = allTime[idx]; break; }
     }
 
-    // 2. Map Columns to Business Dimensions
+    // If no preference matched, use first detected
+    if (!primary && allTime.length > 0) {
+        primary = allTime[0];
+    }
+
+    return { primary, all: allTime };
+}
+
+// ─── Dimension mapping ────────────────────────────────────────────────────────
+
+interface DimensionMatcher {
+    canonicalKey: string;
+    matches: string[];
+}
+
+const DIMENSION_MATCHERS: DimensionMatcher[] = [
+    { canonicalKey: "destination", matches: ["destination"] },
+    { canonicalKey: "supplier",    matches: ["suppliername", "supplier"] },
+    { canonicalKey: "hotel",       matches: ["tbo_hotelname", "hotel name", "hotel_name"] },
+    { canonicalKey: "chain",       matches: ["tbo_chainname", "chain", "chainname"] },
+    { canonicalKey: "city",        matches: ["city"] },
+    { canonicalKey: "country",     matches: ["country"] },
+    { canonicalKey: "hotel_id",    matches: ["hotel id", "hotel_id"] }
+];
+
+function mapDimensions(schema: DatasetColumn[]): {
+    dimensions: string[];
+    columnMappings: Record<string, string>;
+} {
     const dimensions: string[] = [];
     const columnMappings: Record<string, string> = {};
 
     schema.forEach(col => {
         const nameLower = col.column_name.toLowerCase();
-        if (nameLower === "destination") {
-            dimensions.push("destination");
-            columnMappings[col.column_name] = "destination";
-        } else if (nameLower === "suppliername" || nameLower === "supplier") {
-            dimensions.push("supplier");
-            columnMappings[col.column_name] = "supplier";
-        } else if (nameLower === "tbo_hotelname" || nameLower === "hotel name" || nameLower === "hotel_name") {
-            dimensions.push("hotel");
-            columnMappings[col.column_name] = "hotel";
-        } else if (nameLower === "tbo_chainname" || nameLower === "chain" || nameLower === "chainname") {
-            dimensions.push("chain");
-            columnMappings[col.column_name] = "chain";
-        } else if (nameLower === "city") {
-            dimensions.push("city");
-            columnMappings[col.column_name] = "city";
-        } else if (nameLower === "country") {
-            dimensions.push("country");
-            columnMappings[col.column_name] = "country";
-        } else if (nameLower === "hotel id" || nameLower === "hotel_id") {
-            dimensions.push("hotel_id");
-            columnMappings[col.column_name] = "hotel_id";
+        for (const matcher of DIMENSION_MATCHERS) {
+            if (matcher.matches.includes(nameLower)) {
+                if (!dimensions.includes(matcher.canonicalKey)) {
+                    dimensions.push(matcher.canonicalKey);
+                }
+                columnMappings[col.column_name] = matcher.canonicalKey;
+                break;
+            }
         }
     });
 
-    // 3. Assemble Business Definitions based on found dimensions
-    const businessDefinitions: BusinessDefinition[] = [];
-    dimensions.forEach(dim => {
-        const knowledgeConcept = (BUSINESS_KNOWLEDGE.concepts as any)[dim];
-        if (knowledgeConcept) {
-            businessDefinitions.push({
-                name: dim,
-                definition: knowledgeConcept.description
-            });
-        } else {
-            // General definition fallback
-            businessDefinitions.push({
-                name: dim,
-                definition: `${dim.charAt(0).toUpperCase() + dim.slice(1)} dimension of the dataset.`
-            });
-        }
+    return { dimensions, columnMappings };
+}
+
+// ─── Metric resolution ────────────────────────────────────────────────────────
+
+const DATASET_METRIC_KEYS: Record<DatasetType, string[]> = {
+    [DatasetType.COMPETITIVENESS]: ["win_rate", "avg_price_diff", "median_price_diff"],
+    [DatasetType.CONVERSION]:      [
+        "searches", "bookings", "vouchered_bookings", "cancelled_bookings",
+        "total_sales", "vouchered_sales", "cancel_sales", "l2b", "l2v"
+    ],
+    [DatasetType.REVENUE]:  ["total_sales", "vouchered_sales", "cancel_sales"],
+    [DatasetType.UNKNOWN]:  []
+};
+
+function resolveMetrics(datasetType: DatasetType): MetricDefinition[] {
+    const keys = DATASET_METRIC_KEYS[datasetType] ?? [];
+    return keys
+        .map(key => METRIC_REGISTRY[key])
+        .filter(Boolean)
+        .map(m => ({ name: m.name, description: m.description, formula: m.formula }));
+}
+
+// ─── Business definitions ──────────────────────────────────────────────────────
+
+function resolveBusinessDefinitions(dimensions: string[]): BusinessDefinition[] {
+    return dimensions.map(dim => {
+        const concept = (BUSINESS_KNOWLEDGE.concepts as Record<string, { description: string }>)[dim];
+        return {
+            name: dim,
+            definition: concept?.description ??
+                `${dim.charAt(0).toUpperCase() + dim.slice(1)} dimension of the dataset.`
+        };
     });
+}
 
-    // 4. Map Applicable Metrics
-    const metrics: MetricDefinition[] = [];
-    let applicableMetricKeys: string[] = [];
+// ─── Public API ───────────────────────────────────────────────────────────────
 
-    if (datasetType === DatasetType.COMPETITIVENESS) {
-        applicableMetricKeys = ["win_rate", "avg_price_diff", "median_price_diff"];
-    } else if (datasetType === DatasetType.CONVERSION) {
-        applicableMetricKeys = [
-            "searches",
-            "bookings",
-            "vouchered_bookings",
-            "cancelled_bookings",
-            "total_sales",
-            "vouchered_sales",
-            "cancel_sales",
-            "l2b",
-            "l2v"
-        ];
-    }
+/**
+ * Builds a fully enriched semantic layer from raw DuckDB schema columns.
+ *
+ * The output contains everything needed for:
+ * - Question validation (metricKeys, dimensions, availableTimeColumns)
+ * - Prompt building (metrics formulas, businessDefinitions, columnMappings)
+ * - Future multi-dataset joins (datasetType, columnMappings)
+ */
+export function buildSemanticLayer(schema: DatasetColumn[]): EnrichedSemanticLayer {
+    const columnNames = schema.map(c => c.column_name);
+    const datasetType = classifySchema(columnNames);
 
-    applicableMetricKeys.forEach(key => {
-        const metric = METRIC_REGISTRY[key];
-        if (metric) {
-            metrics.push({
-                name: metric.name,
-                description: metric.description,
-                formula: metric.formula
-            });
-        }
-    });
+    const { primary: primaryTimeDimension, all: availableTimeColumns } = detectTimeColumns(schema);
+    const { dimensions, columnMappings } = mapDimensions(schema);
+    const metrics = resolveMetrics(datasetType);
+    const metricKeys = DATASET_METRIC_KEYS[datasetType] ?? [];
+    const businessDefinitions = resolveBusinessDefinitions(dimensions);
 
     return {
         datasetType,
         dimensions,
+        metricKeys,
         primaryTimeDimension,
+        availableTimeColumns,
         columnMappings,
         businessDefinitions,
         metrics,

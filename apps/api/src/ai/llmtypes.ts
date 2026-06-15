@@ -17,9 +17,10 @@ export interface MetricDefinition {
 export interface SemanticLayer {
     primaryTimeDimension: string;
 
-    businessDefinitions:
-    BusinessDefinition[];
+    /** All date/timestamp columns detected in the schema */
+    availableTimeColumns: string[];
 
-    metrics:
-    MetricDefinition[];
-}
+    businessDefinitions: BusinessDefinition[];
+
+    metrics: MetricDefinition[];
+}
