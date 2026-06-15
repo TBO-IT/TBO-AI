@@ -1,0 +1,513 @@
+# Executive Analytics Copilot Architecture
+
+## Vision
+
+We are not building a chatbot that talks to CSVs.
+
+We are building an Executive Analytics Copilot capable of answering complex business questions across multiple report types, datasets, business domains, and time periods.
+
+The system must be reliable enough for senior leadership to use for strategic decision-making.
+
+The primary objective is not AI sophistication.
+
+The primary objective is business correctness, explainability, and trust.
+
+---
+
+# Core Principle
+
+Claude should never be the source of business knowledge.
+
+Claude should only be the reasoning engine.
+
+All business knowledge must exist inside structured system-owned layers.
+
+Final architecture:
+
+User Question
+↓
+Business Knowledge
+↓
+Metric Registry
+↓
+Dataset Intelligence
+↓
+Semantic Layer
+↓
+Prompt Builder
+↓
+Claude
+↓
+SQL Generation
+↓
+SQL Validation
+↓
+DuckDB
+↓
+Results
+↓
+Executive Narrative
+
+---
+
+# AI Layer Structure
+
+src/ai/
+
+businessKnowledge.ts
+metricRegistry.ts
+datasetTypes.ts
+schemaClassifier.ts
+semanticLayer.ts
+promptBuilder.ts
+sqlValidator.ts
+llmTypes.ts
+insightGenerator.ts (future)
+
+---
+
+# 1. businessKnowledge.ts
+
+Purpose:
+Store permanent travel-domain knowledge.
+
+This file contains concepts that remain stable regardless of dataset structure.
+
+Examples:
+
+Destination
+Hotel
+Chain
+Supplier
+Bookings
+Searches
+Revenue
+Lead Time
+Travel Market
+Seasonality
+Market Share
+
+Example structure:
+
+export const BUSINESS_KNOWLEDGE = {
+
+domain: "Travel Analytics",
+
+concepts: {
+
+```
+destination: {
+  description:
+    "Travel destination being analyzed."
+},
+
+supplier: {
+  description:
+    "Supplier providing hotel inventory."
+},
+
+hotel: {
+  description:
+    "Hotel property."
+},
+
+chain: {
+  description:
+    "Hotel chain."
+}
+```
+
+},
+
+timeIntelligence: {
+
+```
+wow:
+  "Week over Week comparison",
+
+mom:
+  "Month over Month comparison",
+
+qoq:
+  "Quarter over Quarter comparison",
+
+yoy:
+  "Year over Year comparison"
+```
+
+}
+
+};
+
+Purpose:
+
+Teach the system how the business operates.
+
+---
+
+# 2. metricRegistry.ts
+
+Purpose:
+Store every business KPI in a single source of truth.
+
+This becomes the company's KPI dictionary.
+
+Metrics are business concepts, not columns.
+
+Examples:
+
+Win Rate
+L2B
+L2V
+Revenue
+Bookings
+Searches
+Cancellation Rate
+Average Price Difference
+Median Price Difference
+
+Example:
+
+export const METRIC_REGISTRY = {
+
+win_rate: {
+
+```
+name:
+  "Win Rate",
+
+description:
+  "Percentage of observations where TBO wins.",
+
+interpretation:
+  "Higher is better.",
+
+formula:
+  "AVG(CASE WHEN Competitive Status='Winning' THEN 1 ELSE 0 END) * 100"
+```
+
+}
+
+};
+
+Purpose:
+
+Allow Claude to reason about metrics instead of raw columns.
+
+---
+
+# 3. datasetTypes.ts
+
+Purpose:
+Categorize uploaded reports into business domains.
+
+Current dataset types:
+
+COMPETITIVENESS
+
+Contains:
+
+Competitive Status
+Price Difference
+Supplier
+Destination
+Hotel
+Chain
+
+CONVERSION
+
+Contains:
+
+Searches
+Bookings
+L2B
+L2V
+Sales
+
+REVENUE
+
+Future category.
+
+UNKNOWN
+
+Fallback category.
+
+Example:
+
+export enum DatasetType {
+
+COMPETITIVENESS,
+
+CONVERSION,
+
+REVENUE,
+
+UNKNOWN
+
+}
+
+Purpose:
+
+Load the correct business context automatically.
+
+---
+
+# 4. schemaClassifier.ts
+
+Purpose:
+Identify dataset type automatically.
+
+Input:
+
+CSV schema
+
+Output:
+
+DatasetType
+
+Examples:
+
+If columns contain:
+
+Competitive Status
+price_diff_perc
+
+→ COMPETITIVENESS
+
+If columns contain:
+
+Searches
+Bookings
+L2B%
+
+→ CONVERSION
+
+Purpose:
+
+Allow automatic context selection.
+
+Executives should never need to specify report type.
+
+---
+
+# 5. semanticLayer.ts
+
+Purpose:
+Merge all business context into a single AI-ready object.
+
+Inputs:
+
+Business Knowledge
+Metric Registry
+Dataset Type
+Actual Dataset Schema
+
+Output:
+
+Semantic Context
+
+Example:
+
+{
+datasetType:
+"COMPETITIVENESS",
+
+dimensions:
+["destination","supplier","hotel","chain"],
+
+metrics:
+["win_rate","volume"],
+
+primaryTimeDimension:
+"scraped_date"
+}
+
+Purpose:
+
+Create the intelligence layer Claude reasons over.
+
+---
+
+# 6. schemaService.ts
+
+Purpose:
+Understand uploaded datasets.
+
+DuckDB discovers schema dynamically.
+
+Example:
+
+DESCRIBE
+SELECT *
+FROM read_csv_auto(...)
+
+Output:
+
+destination VARCHAR
+suppliername VARCHAR
+scraped_date DATE
+
+Purpose:
+
+Support changing CSV formats without code changes.
+
+---
+
+# 7. promptBuilder.ts
+
+Purpose:
+Construct Claude prompts.
+
+Inputs:
+
+User Question
+Schema
+Metrics
+Business Knowledge
+Dataset Type
+Semantic Layer
+
+Output:
+
+Claude Prompt
+
+Example:
+
+You are an expert travel analytics SQL generator.
+
+Dataset Type:
+COMPETITIVENESS
+
+Dimensions:
+destination
+supplier
+hotel
+
+Metrics:
+win_rate
+
+Question:
+Why did Pattaya lose win rate in April?
+
+Purpose:
+
+Standardize all AI interactions.
+
+---
+
+# 8. sqlValidator.ts
+
+Purpose:
+Protect the system from invalid or dangerous SQL.
+
+Allowed:
+
+SELECT
+
+Rejected:
+
+DROP
+DELETE
+UPDATE
+INSERT
+ALTER
+TRUNCATE
+
+Validation rules:
+
+Only SELECT statements.
+Known columns only.
+Known metrics only.
+DuckDB-compatible syntax only.
+
+Purpose:
+
+Maintain executive trust.
+
+---
+
+# 9. queryExecutionService.ts
+
+Purpose:
+Execute generated SQL.
+
+Input:
+
+Validated SQL
+
+Output:
+
+Rows
+
+No business logic.
+
+No AI logic.
+
+Only execution.
+
+Purpose:
+
+Separation of concerns.
+
+---
+
+# 10. insightGenerator.ts (Future)
+
+Purpose:
+Convert query results into executive insights.
+
+Example:
+
+Raw Result:
+
+Bangkok
+March Win Rate: 55%
+April Win Rate: 41%
+
+Executive Insight:
+
+Bangkok experienced a 14 percentage point decline in win rate between March and April.
+
+This destination contributed 62% of the company's overall decline during the period.
+
+Supplier X accounted for most of the deterioration.
+
+Purpose:
+
+Deliver business value instead of tables.
+
+---
+
+# Long-Term Goal
+
+Executives should be able to ask:
+
+"Why did win rate decline in Q2?"
+
+"Which suppliers are driving poor performance?"
+
+"Which destinations improved most this quarter?"
+
+"How does L2B compare across cities?"
+
+"What changed between March and April?"
+
+"Which factors are most correlated with revenue growth?"
+
+without requiring predefined queries.
+
+The system should dynamically understand:
+
+Business Context
++
+Dataset Structure
++
+Metric Definitions
++
+Time Intelligence
+
+and generate reliable analytics automatically.
+
+Claude becomes the reasoning layer.
+
+The knowledge layers become the company's institutional intelligence.

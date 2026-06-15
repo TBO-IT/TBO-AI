@@ -1,0 +1,6 @@
+export enum DatasetType {
+    COMPETITIVENESS = "COMPETITIVENESS",
+    CONVERSION = "CONVERSION",
+    REVENUE = "REVENUE",
+    UNKNOWN = "UNKNOWN"
+}
