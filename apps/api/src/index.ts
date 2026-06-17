@@ -10,6 +10,7 @@ import uploadRoutes from "./routes/upload.js";
 import testAnalysisRoutes from "./routes/testAnalysis.js";
 import datasetRoutes from "./routes/dataset.js";
 import chatRoutes from "./routes/chat.js";
+import metricsRoutes from "./routes/metrics.js";
 import testRouter from "./routes/test.js";
 
 dotenv.config();
@@ -40,6 +41,7 @@ app.use("/dataset", datasetRoutes);
 app.use("/admin", adminRoutes);
 app.use("/test", testRouter);
 app.use("/api", meRoutes);
+app.use("/api/metrics", metricsRoutes);
 app.use("/auth", authRoutes);
 
 app.get("/", (req, res) => {

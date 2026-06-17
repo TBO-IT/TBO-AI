@@ -69,9 +69,23 @@ function resolveMetric(
  */
 function resolveContributionDimension(
     analysis: QuestionAnalysis,
-    semanticLayer: EnrichedSemanticLayer
+    semanticLayer: EnrichedSemanticLayer,
+    forceDimension?: string
 ): { canonicalKey: string; physicalCol: string; label: string } | null {
     const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
+
+    if (forceDimension) {
+        const physicalCol = resolvePhysicalColumn(forceDimension, schemaColumns);
+        if (physicalCol) {
+            return {
+                canonicalKey: forceDimension,
+                physicalCol,
+                label: forceDimension.charAt(0).toUpperCase() + forceDimension.slice(1)
+            };
+        }
+        console.warn(`[ContributionEngine] Cannot resolve physical column for forced dimension: ${forceDimension}`);
+        return null;
+    }
 
     // Try explicit dims from analysis first
     for (const dimKey of analysis.dimensions) {
@@ -203,20 +217,20 @@ function buildSinglePeriodSql(
         `)`,
         `SELECT`,
         `    b.dimension_value AS "${dim.label}",`,
+        `    b.row_count AS "Volume",`,
+        `    ROUND(b.row_count * 100.0 / o.total_rows, 4) AS "Volume Share %",`,
         `    ROUND(b.metric_value, 4) AS "${metric.name}",`,
-        `    ROUND(o.overall_metric, 4) AS "Overall ${metric.name}",`,
-        `    ROUND(b.metric_value - o.overall_metric, 4) AS "vs Average",`,
-        `    ROUND(b.row_count * 100.0 / o.total_rows, 2) AS "Volume Share %",`,
+        `    ROUND(b.metric_value - o.overall_metric, 4) AS "Metric Delta",`,
         `    ROUND(`,
-        `        (b.metric_value - o.overall_metric)`,
-        `        * (b.row_count * 1.0 / o.total_rows)`,
-        `        * 100,`,
+        `        (b.row_count * 1.0 / o.total_rows) * (b.metric_value - o.overall_metric),`,
         `        4`,
-        `    ) AS "Contribution %"`,
+        `    ) AS "Weighted Contribution",`,
+        `    0 AS "Contribution %",`,
+        `    0 AS "Overall Metric Change"`,
         `FROM by_dim b`,
         `CROSS JOIN overall o`,
         `WHERE b.dimension_value IS NOT NULL`,
-        `ORDER BY ABS("Contribution %") DESC`,
+        `ORDER BY ABS("Weighted Contribution") DESC`,
         `LIMIT 25`
     ].join("\n");
 }
@@ -261,31 +275,43 @@ function buildTwoPeriodSql(
         `prior_period AS (`,
         `    SELECT`,
         `        "${dim.physicalCol}" AS dimension_value,`,
+        `        COUNT(*) AS row_count,`,
         `        ${metric.formula} AS metric_value`,
         `    FROM data_table${pw}`,
         `    GROUP BY "${dim.physicalCol}"`,
         `),`,
         `volume_totals AS (`,
-        `    SELECT SUM(row_count) AS total_current_rows`,
-        `    FROM current_period`,
+        `    SELECT `,
+        `        (SELECT SUM(row_count) FROM current_period) AS total_current_rows,`,
+        `        (SELECT SUM(row_count) FROM prior_period) AS total_prior_rows,`,
+        `        (SELECT ${metric.formula} FROM data_table${cw}) AS overall_current_metric,`,
+        `        (SELECT ${metric.formula} FROM data_table${pw}) AS overall_prior_metric`,
         `)`,
         `SELECT`,
-        `    c.dimension_value AS "${dim.label}",`,
-        `    ROUND(c.metric_value, 4) AS "${metric.name} (${periodLabel(current)})",`,
-        `    ROUND(COALESCE(p.metric_value, 0), 4) AS "${metric.name} (${periodLabel(prior)})",`,
-        `    ROUND(c.metric_value - COALESCE(p.metric_value, 0), 4) AS "Metric Change",`,
-        `    ROUND(c.row_count * 100.0 / v.total_current_rows, 2) AS "Current Volume Share %",`,
+        `    COALESCE(c.dimension_value, p.dimension_value) AS "${dim.label}",`,
+        `    COALESCE(c.row_count, 0) AS "Volume",`,
+        `    ROUND(COALESCE(c.row_count, 0) * 100.0 / NULLIF(v.total_current_rows, 0), 4) AS "Volume Share %",`,
+        `    ROUND(COALESCE(c.metric_value, 0), 4) AS "${metric.name}",`,
+        `    ROUND(COALESCE(c.metric_value, 0) - COALESCE(p.metric_value, 0), 4) AS "Metric Delta",`,
         `    ROUND(`,
-        `        (c.metric_value - COALESCE(p.metric_value, 0))`,
-        `        * (c.row_count * 1.0 / v.total_current_rows)`,
-        `        * 100,`,
+        `        ((COALESCE(c.row_count, 0) * 1.0 / NULLIF(v.total_current_rows, 0)) * COALESCE(c.metric_value, 0))`,
+        `        - ((COALESCE(p.row_count, 0) * 1.0 / NULLIF(v.total_prior_rows, 0)) * COALESCE(p.metric_value, 0)),`,
         `        4`,
-        `    ) AS "Contribution to Change %"`,
+        `    ) AS "Weighted Contribution",`,
+        `    ROUND(`,
+        `        (`,
+        `            (((COALESCE(c.row_count, 0) * 1.0 / NULLIF(v.total_current_rows, 0)) * COALESCE(c.metric_value, 0))`,
+        `            - ((COALESCE(p.row_count, 0) * 1.0 / NULLIF(v.total_prior_rows, 0)) * COALESCE(p.metric_value, 0)))`,
+        `            / NULLIF(ABS(v.overall_current_metric - v.overall_prior_metric), 0)`,
+        `        ) * 100,`,
+        `        4`,
+        `    ) AS "Contribution %",`,
+        `    ROUND(v.overall_current_metric - v.overall_prior_metric, 4) AS "Overall Metric Change"`,
         `FROM current_period c`,
-        `LEFT JOIN prior_period p USING (dimension_value)`,
+        `FULL OUTER JOIN prior_period p USING (dimension_value)`,
         `CROSS JOIN volume_totals v`,
-        `WHERE c.dimension_value IS NOT NULL`,
-        `ORDER BY ABS("Contribution to Change %") DESC`,
+        `WHERE COALESCE(c.dimension_value, p.dimension_value) IS NOT NULL`,
+        `ORDER BY ABS("Weighted Contribution") DESC`,
         `LIMIT 25`
     ].join("\n");
 }
@@ -318,7 +344,8 @@ function buildTwoPeriodSql(
  */
 export function generateContributionSql(
     analysis: QuestionAnalysis,
-    semanticLayer: EnrichedSemanticLayer
+    semanticLayer: EnrichedSemanticLayer,
+    forceDimension?: string
 ): ContributionResult | null {
 
     // ── 1. Resolve metric ──────────────────────────────────────────────────────
@@ -329,7 +356,7 @@ export function generateContributionSql(
     }
 
     // ── 2. Resolve grouping dimension ──────────────────────────────────────────
-    const dim = resolveContributionDimension(analysis, semanticLayer);
+    const dim = resolveContributionDimension(analysis, semanticLayer, forceDimension);
     if (!dim) {
         console.warn("[ContributionEngine] Cannot resolve grouping dimension — returning null.");
         return null;

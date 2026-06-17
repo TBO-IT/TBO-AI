@@ -8,7 +8,7 @@ import { validateQuestion } from "../ai/questionValidator.js";
 import { routeQuery } from "../ai/queryRouter.js";
 import { getCachedSql, setCachedSql } from "./queryCacheService.js";
 import { getCachedNarrative, setCachedNarrative } from "./narrativeCacheService.js";
-import { callClaudeWithStructuredOutput } from "./anthropicService.js";
+import { generateStructured, AnthropicClientError } from "./anthropicClient.js";
 import { ClaudeOutputSchemas, GeneratedQueryResponse, ExecutiveNarrativeResponse } from "../ai/outputSchemas.js";
 import { validateSqlSyntax } from "../ai/sqlValidator.js";
 import { executeQuery } from "./queryExecutionService.js";
@@ -16,14 +16,23 @@ import { summarizeResults } from "./resultSummarizationService.js";
 import { extractInsights } from "./insightEngine.js";
 import { QuestionValidationError } from "../ai/questionTypes.js";
 import { buildDatasetMetadata } from "./metadataService.js";
-import { resolveEntities } from "../ai/entityResolver.js";
+import { resolveEntities, dedupeFilters } from "../ai/entityResolver.js";
 import { generateTrendSql } from "./trendEngine.js";
 import { generateComparisonSql } from "./comparisonEngine.js";
 import { generateContributionSql } from "./contributionEngine.js";
 import { buildRootCausePack } from "./RootCausePackBuilder.js";
+import { buildClaudeInputPack, assertClaudeInputSafe } from "./claudeInputContract.js";
+import { routeClaude, shouldUseClaude } from "./claudeRouter.js";
+import { generateNarrative } from "./narrativeGenerator.js";
+import { generateRecommendations } from "./recommendationGenerator.js";
+import { startTimer, logAnalyzer, logRouter, logEngine, logSql, logCache, logRootCause, logValidation, logClaude } from "./analyticsLogger.js";
+import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContradiction } from "./analyticsMetrics.js";
 
 export class ChatOrchestrator {
     static async execute(datasetId: string, question: string): Promise<any> {
+        const pipelineTimer = startTimer();
+        let routeType = "";
+        let claudeFailed = false;
 
         // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
         const dataset = await getDataset(datasetId);
@@ -58,11 +67,12 @@ export class ChatOrchestrator {
             const parsedQuestion = analyzeQuestion(question);
             const validation = validateQuestion(parsedQuestion, semanticLayer);
 
-            // Merge entity filters resolved from dataset metadata
-            parsedQuestion.filters = [
+            // Merge entity filters and deduplicate to prevent comparison engine
+            // from seeing dozens of duplicate suppliername/destination entries.
+            parsedQuestion.filters = dedupeFilters([
                 ...parsedQuestion.filters,
                 ...entityFilters
-            ];
+            ]);
 
             console.log("MERGED FILTERS:", parsedQuestion.filters);
 
@@ -132,31 +142,85 @@ export class ChatOrchestrator {
                 }
 
                 // ── ROOT_CAUSE ─────────────────────────────────────────────────
-                // Root cause uses the Contribution Engine for SQL, then wraps
-                // the results in the Root Cause Pack Builder for structured output.
-                // No Claude call — factual structured pack only.
+                // Root cause uses the Contribution Engine for SQL across multiple
+                // dimensions, then wraps the results in the Root Cause Pack Builder.
                 else if (routing.route === "ROOT_CAUSE") {
-                    const result = generateContributionSql(parsedQuestion, semanticLayer);
-                    if (result) {
-                        sql = result.sql;
-                        explanation = result.explanation;
+                    const availableDims = ["hotel", "chain", "supplier", "apw"].filter(dim => 
+                        semanticLayer.dimensions.some(d => d.toLowerCase() === dim.toLowerCase())
+                    );
+                    
+                    const rootCauseSqls: string[] = [];
+                    const rootCauseExplanations: string[] = [];
+
+                    for (const dim of availableDims) {
+                        const result = generateContributionSql(parsedQuestion, semanticLayer, dim);
+                        if (result) {
+                            rootCauseSqls.push(result.sql);
+                            rootCauseExplanations.push(`- ${dim}: ` + result.explanation);
+                        }
+                    }
+
+                    if (rootCauseSqls.length > 0) {
+                        // Store multiple SQLs separated by a delimiter
+                        sql = rootCauseSqls.join("\n---\n");
+                        explanation = "Multi-dimensional Root Cause Analysis:\n" + rootCauseExplanations.join("\n");
                     } else {
-                        console.warn("[ORCHESTRATOR] Root cause: contribution engine returned null — falling back to LLM.");
+                        console.warn("[ORCHESTRATOR] Root cause: contribution engine returned null for all dims — falling back to LLM.");
                         routeType = "LLM";
                     }
                 }
 
                 // ── LLM (fallback) ─────────────────────────────────────────────
                 if (routeType === "LLM") {
-                    const { prompt } = buildPrompt(question, semanticLayer);
-                    const generated = await callClaudeWithStructuredOutput<GeneratedQueryResponse>(
-                        prompt,
-                        ClaudeOutputSchemas.generatedQuery,
-                        "SQL_GENERATION",
-                        "You are a Senior DuckDB SQL Expert for a travel analytics platform."
-                    );
-                    sql = generated.sql;
-                    explanation = generated.explanation;
+                    const claudeDecision = routeClaude("LLM", "AD_HOC_REASONING", false);
+                    if (claudeDecision.shouldCallClaude) {
+                        try {
+                            logClaude("Starting LLM SQL generation");
+                            const claudeTimer = startTimer();
+                            const { prompt } = buildPrompt(question, semanticLayer);
+                            const { result } = await generateStructured<GeneratedQueryResponse>({
+                                prompt,
+                                toolSchema: ClaudeOutputSchemas.generatedQuery,
+                                tier: "SONNET",
+                                operation: "SQL_GENERATION",
+                                systemPrompt: "You are a Senior DuckDB SQL Expert for a travel analytics platform."
+                            });
+                            sql = result.sql;
+                            explanation = result.explanation;
+                            logClaude("LLM SQL generation complete", claudeTimer.stop());
+                        } catch (err: any) {
+                            claudeFailed = true;
+                            console.error("[ORCHESTRATOR] Claude SQL generation failed — returning deterministic fallback:", err.message);
+                            logClaude(`Claude SQL FAILED: ${err.message}`);
+                            // Failover: attempt to use template engine as last resort
+                            const fallbackRouting = routeQuery(parsedQuestion, semanticLayer);
+                            if (fallbackRouting.route === "TEMPLATE" && fallbackRouting.sql) {
+                                sql = fallbackRouting.sql;
+                                explanation = "Fallback: Used template engine after Claude failure.";
+                                routeType = "TEMPLATE";
+                            } else {
+                                recordError();
+                                return {
+                                    answer: "I was unable to process this query right now. The AI service is temporarily unavailable. Please try a simpler question or try again later.",
+                                    sql: "",
+                                    explanation: "Claude API unavailable; no deterministic route available.",
+                                    results: [],
+                                    rootCausePack: null,
+                                    routeType: "FAILED",
+                                    claudeFailed: true,
+                                    datasetType: semanticLayer.datasetType,
+                                    parsedQuestion: {
+                                        intent: parsedQuestion.intent,
+                                        metrics: parsedQuestion.metrics,
+                                        dimensions: parsedQuestion.dimensions,
+                                        timeReferences: parsedQuestion.timeReferences
+                                    }
+                                };
+                            }
+                        }
+                    } else {
+                        console.warn(claudeDecision.reason);
+                    }
                 }
 
                 // Save to SQL cache (skip ROOT_CAUSE — packs are not cacheable as SQL)
@@ -168,18 +232,49 @@ export class ChatOrchestrator {
             console.log("FINAL SQL:\n", sql);
 
             // ── 4. SQL Validation & Execution ──────────────────────────────────
-            const sqlValidation = await validateSqlSyntax(sql, tempPath);
-            if (!sqlValidation.valid) {
-                throw new Error(`Generated SQL failed validation: ${sqlValidation.error}`);
+            let queryResultsList: Record<string, unknown>[][] = [];
+            let queryResults: Record<string, unknown>[] = [];
+            
+            if (routeType === "ROOT_CAUSE") {
+                const sqlStatements = sql.split("\n---\n");
+                for (const statement of sqlStatements) {
+                    const sqlValidation = await validateSqlSyntax(statement, tempPath);
+                    if (!sqlValidation.valid) {
+                        console.warn(`[ORCHESTRATOR] SQL failed validation in ROOT_CAUSE: ${sqlValidation.error}`);
+                        continue;
+                    }
+                    const res = await executeQuery(statement, tempPath);
+                    queryResultsList.push(res);
+                }
+                queryResults = queryResultsList.find(res => res.length > 0) || [];
+            } else {
+                const sqlValidation = await validateSqlSyntax(sql, tempPath);
+                if (!sqlValidation.valid) {
+                    throw new Error(`Generated SQL failed validation: ${sqlValidation.error}`);
+                }
+                queryResults = await executeQuery(sql, tempPath);
             }
-
-            const queryResults = await executeQuery(sql, tempPath);
 
             // ── 5. Root Cause Pack (ROOT_CAUSE route only) ─────────────────────
             let rootCausePack = null;
             if (routeType === "ROOT_CAUSE") {
-                rootCausePack = buildRootCausePack(question, semanticLayer, queryResults);
+                rootCausePack = buildRootCausePack(question, semanticLayer, queryResultsList);
                 console.log("[ORCHESTRATOR] Root cause pack built:", JSON.stringify(rootCausePack, null, 2));
+
+                console.log(`
+[ROOTCAUSE_TRACE]
+QUESTION: ${question}
+PARSED_ANALYSIS: ${JSON.stringify(parsedQuestion.filters)}
+ROUTE: ROOT_CAUSE
+TIME_FILTERS: ${JSON.stringify(parsedQuestion.filters.filter(f => ["month", "quarter", "year"].includes(f.dimension)))}
+GENERATED_SQL: 
+${sql.slice(0, 500)}...
+ROW_COUNT: ${queryResultsList.reduce((acc, r) => acc + r.length, 0)}
+ROW_SAMPLE: ${JSON.stringify(queryResultsList[0]?.[0] || {})}
+CONTRIBUTOR_COUNT: ${(rootCausePack?.topPositiveContributors?.length || 0) + (rootCausePack?.topNegativeContributors?.length || 0)}
+PACK_VALIDATION: ${rootCausePack?.validationErrors?.length === 0 ? 'PASSED' : 'FAILED'}
+FINAL_RESULT: ${rootCausePack ? 'PACK_BUILT' : 'NULL'}
+`);
             }
 
             // ── 6. Narrative Generation ────────────────────────────────────────
@@ -192,18 +287,48 @@ export class ChatOrchestrator {
 
             if (cachedNarrative) {
                 narrative = cachedNarrative;
+                recordCacheHit();
+                logCache("Narrative cache HIT", true);
+            } else if (rootCausePack?.contradictionDetected) {
+                recordContradiction();
+                // Use the narrative generator for contradiction handling
+                const claudeInputPack = buildClaudeInputPack(question, rootCausePack);
+                const execNarrative = await generateNarrative(claudeInputPack, false);
+                narrative = execNarrative.executiveSummary;
+                if (execNarrative.contradictionNote) {
+                    narrative += "\n\n" + execNarrative.contradictionNote;
+                }
             } else {
+                recordCacheMiss();
+                logCache("Narrative cache MISS", false);
+
                 const DETERMINISTIC_ROUTES = new Set(["TEMPLATE", "TREND", "COMPARISON", "CONTRIBUTION", "ROOT_CAUSE", "CACHE"]);
                 const isDeterministic = DETERMINISTIC_ROUTES.has(routeType);
 
                 if (isDeterministic) {
-                    narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                    // For ROOT_CAUSE with a pack, use the narrative generator
+                    if (routeType === "ROOT_CAUSE" && rootCausePack) {
+                        const claudeInputPack = buildClaudeInputPack(question, rootCausePack);
+                        const execNarrative = await generateNarrative(claudeInputPack, false);
+                        narrative = execNarrative.executiveSummary;
+                        if (execNarrative.keyDrivers.length > 0) {
+                            narrative += "\n\n**Key Drivers:**\n" + execNarrative.keyDrivers.map(d => `- ${d}`).join("\n");
+                        }
+                        if (execNarrative.risks.length > 0) {
+                            narrative += "\n\n**Risks:**\n" + execNarrative.risks.map(r => `- ${r}`).join("\n");
+                        }
+                    } else {
+                        narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                    }
                 } else {
-                    // LLM narrative generation
-                    const summaryJson = summarizeResults(queryResults);
-                    const insights = extractInsights(queryResults);
+                    // LLM narrative generation with Claude Router + failover
+                    const claudeDecision = routeClaude(routeType, "NARRATIVE_GENERATION", false);
+                    if (claudeDecision.shouldCallClaude) {
+                        try {
+                            const summaryJson = summarizeResults(queryResults);
+                            const insights = extractInsights(queryResults);
 
-                    const narrativePrompt = `
+                            const narrativePrompt = `
 You are an Executive Analytics Copilot. Your audience is a C-level travel industry executive.
 The user asked: "${question}"
 
@@ -213,29 +338,55 @@ ${summaryJson}
 Here are automatic insights extracted from the data:
 ${insights.map(i => `- ${i}`).join("\n")}
 
-Write a concise, executive-grade narrative explaining the findings. Do not hallucinate data that is not present. Focus on the 'why' if the intent was root cause, or the 'what' if it was a summary/ranking.
+Write a concise, executive-grade narrative explaining the findings. Do not hallucinate data that is not present.
 `;
-                    const narrativeResponse = await callClaudeWithStructuredOutput<ExecutiveNarrativeResponse>(
-                        narrativePrompt,
-                        ClaudeOutputSchemas.executiveNarrative,
-                        "NARRATIVE_GENERATION",
-                        "You are a Principal Executive Analyst writing a memo."
-                    );
+                            const { result } = await generateStructured<ExecutiveNarrativeResponse>({
+                                prompt: narrativePrompt,
+                                toolSchema: ClaudeOutputSchemas.executiveNarrative,
+                                tier: claudeDecision.tier as "HAIKU" | "SONNET",
+                                operation: "NARRATIVE_GENERATION",
+                                systemPrompt: "You are a Principal Executive Analyst writing a memo."
+                            });
 
-                    narrative = narrativeResponse.narrative;
+                            narrative = result.narrative;
+                        } catch (err: any) {
+                            claudeFailed = true;
+                            console.error("[ORCHESTRATOR] Claude narrative failed — using deterministic fallback:", err.message);
+                            narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                        }
+                    } else {
+                        console.warn(claudeDecision.reason);
+                        narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                    }
                 }
 
                 await setCachedNarrative(datasetId, question.toLowerCase().trim(), sql, narrative);
             }
 
-            // ── 7. Return payload ──────────────────────────────────────────────
+            // ── 7. Recommendations (ROOT_CAUSE only) ──────────────────────────
+            let recommendations = null;
+            if (routeType === "ROOT_CAUSE" && rootCausePack) {
+                const claudeInputPack = buildClaudeInputPack(question, rootCausePack);
+                const recResult = await generateRecommendations(claudeInputPack, false);
+                recommendations = recResult.recommendations;
+                logRootCause(`Generated ${recommendations.length} recommendations (tier=${recResult.claudeTier})`);
+            }
+
+            // ── 8. Record metrics ─────────────────────────────────────────────
+            const totalLatency = pipelineTimer.stop();
+            recordQuery(routeType, totalLatency);
+
+            // ── 9. Return payload ──────────────────────────────────────────────
             return {
                 answer: narrative,
                 sql,
                 explanation,
                 results: queryResults,
                 rootCausePack,
+                recommendations,
                 routeType,
+                claudeFailed,
+                latencyMs: totalLatency,
                 datasetType: semanticLayer.datasetType,
                 parsedQuestion: {
                     intent: parsedQuestion.intent,

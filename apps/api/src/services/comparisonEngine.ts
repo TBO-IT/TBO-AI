@@ -2,6 +2,7 @@ import { QuestionAnalysis, QuestionFilter } from "../ai/questionTypes.js";
 import { EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { resolvePhysicalColumn } from "../ai/dimensionRegistry.js";
 import { buildWhereClause } from "../ai/filterBuilder.js";
+import { dedupeFilters } from "../ai/entityResolver.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,208 +11,37 @@ export interface ComparisonResult {
     explanation: string;
 }
 
-/**
- * Represents one side of a comparison (entity OR time period).
- */
-interface ComparisonSide {
-    /** Human-readable label shown in the result set */
-    label: string;
-
-    /** The WHERE condition that isolates this side */
-    condition: string;
+export interface ComparisonEntities {
+    /** Canonical dimension key (e.g. "supplier", "destination") */
+    dimension: string;
+    /** Physical column name in the schema */
+    physicalCol: string;
+    /** Left side value */
+    left: string;
+    /** Right side value */
+    right: string;
 }
 
-// ─── Date expression (VARCHAR → DuckDB timestamp) ─────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DATE_FORMAT = `'%m/%d/%Y'`;
+const TIME_DIMS = new Set(["quarter", "month", "year", "time"]);
+
+/** Canonical dimensions eligible for entity comparison, in priority order. */
+const ENTITY_DIMS = [
+    "destination",
+    "supplier",
+    "hotel",
+    "chain",
+    "country",
+    "city",
+    "apw"
+] as const;
+
+// ─── Date expression ──────────────────────────────────────────────────────────
 
 function strptime(col: string): string {
     return `STRPTIME("${col}", ${DATE_FORMAT})`;
-}
-
-// ─── Period comparison helpers ────────────────────────────────────────────────
-
-/**
- * Quarter number → month ranges for the WHERE condition.
- * DuckDB: EXTRACT(QUARTER FROM ...) is supported natively.
- */
-function buildQuarterCondition(dateCol: string, quarter: number): string {
-    return `EXTRACT(QUARTER FROM ${strptime(dateCol)}) = ${quarter}`;
-}
-
-function buildMonthCondition(dateCol: string, month: number): string {
-    return `EXTRACT(MONTH FROM ${strptime(dateCol)}) = ${month}`;
-}
-
-function buildYearCondition(dateCol: string, year: number): string {
-    return `EXTRACT(YEAR FROM ${strptime(dateCol)}) = ${year}`;
-}
-
-// ─── Entity condition helpers ─────────────────────────────────────────────────
-
-/**
- * Builds an ILIKE or exact-match condition for a named entity filter
- * resolved against all VARCHAR columns in the schema.
- */
-function buildEntityCondition(
-    value: string,
-    semanticLayer: EnrichedSemanticLayer
-): string {
-    const safe = value.replace(/'/g, "''");
-    const stringCols = semanticLayer.allColumns.filter(c =>
-        c.column_type.toUpperCase().includes("VARCHAR") ||
-        c.column_type.toUpperCase().includes("STRING") ||
-        c.column_type.toUpperCase().includes("TEXT")
-    );
-    const checks = stringCols
-        .map(c => `"${c.column_name}" ILIKE '%${safe}%'`)
-        .join(" OR ");
-    return `(${checks})`;
-}
-
-/**
- * Builds an ILIKE or exact condition for a typed dimension filter
- * (destination, supplier, chain, hotel, etc.)
- */
-function buildTypedEntityCondition(
-    dimension: string,
-    value: string,
-    semanticLayer: EnrichedSemanticLayer
-): string {
-    const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
-    const physicalCol = resolvePhysicalColumn(dimension, schemaColumns);
-    if (!physicalCol) {
-        // Fallback to entity-style ILIKE across all VARCHAR columns
-        return buildEntityCondition(value, semanticLayer);
-    }
-    const safe = value.replace(/'/g, "''");
-    return `"${physicalCol}" ILIKE '%${safe}%'`;
-}
-
-// ─── Side Extraction ──────────────────────────────────────────────────────────
-
-/**
- * Extracts exactly two comparison sides from the question analysis.
- *
- * Strategy (in priority order):
- *  1. Time period comparisons — two numeric filters on month/quarter/year
- *  2. Typed dimension comparisons — two filters on the same dimension
- *     (destination, supplier, hotel, chain, etc.)
- *  3. Entity comparisons — two _entity filters (unclassified proper nouns)
- *
- * Returns null if fewer than two comparable sides can be identified.
- */
-function extractComparisonSides(
-    analysis: QuestionAnalysis,
-    semanticLayer: EnrichedSemanticLayer
-): [ComparisonSide, ComparisonSide] | null {
-
-    const timeCol = semanticLayer.primaryTimeDimension
-        || semanticLayer.availableTimeColumns?.[0]
-        || "";
-
-    // ── Strategy 1: Time period comparisons ───────────────────────────────────
-    const timeDims = ["quarter", "month", "year"] as const;
-
-    for (const timeDim of timeDims) {
-        const timeFilters = analysis.filters.filter(f => f.dimension === timeDim);
-
-        if (timeFilters.length >= 2 && timeCol) {
-            const [a, b] = timeFilters;
-            const aVal = Number(a.value);
-            const bVal = Number(b.value);
-
-            let condA: string, condB: string, labelPrefix: string;
-
-            if (timeDim === "quarter") {
-                condA = buildQuarterCondition(timeCol, aVal);
-                condB = buildQuarterCondition(timeCol, bVal);
-                labelPrefix = "Q";
-            } else if (timeDim === "month") {
-                condA = buildMonthCondition(timeCol, aVal);
-                condB = buildMonthCondition(timeCol, bVal);
-                labelPrefix = "Month ";
-            } else {
-                condA = buildYearCondition(timeCol, aVal);
-                condB = buildYearCondition(timeCol, bVal);
-                labelPrefix = "";
-            }
-
-            console.log(`[ComparisonEngine] Period comparison: ${timeDim} ${aVal} vs ${bVal}`);
-
-            return [
-                { label: `${labelPrefix}${aVal}`, condition: condA },
-                { label: `${labelPrefix}${bVal}`, condition: condB }
-            ];
-        }
-    }
-
-    // ── Strategy 2: Typed dimension comparisons ───────────────────────────────
-    const COMPARABLE_DIMS = ["destination", "supplier", "hotel", "chain", "country", "city", "apw"];
-
-    for (const dim of COMPARABLE_DIMS) {
-        const dimFilters = analysis.filters.filter(f => f.dimension === dim);
-
-        if (dimFilters.length >= 2) {
-            const [a, b] = dimFilters;
-            const aStr = String(a.value);
-            const bStr = String(b.value);
-
-            console.log(`[ComparisonEngine] Typed comparison on '${dim}': "${aStr}" vs "${bStr}"`);
-
-            return [
-                {
-                    label: aStr,
-                    condition: buildTypedEntityCondition(dim, aStr, semanticLayer)
-                },
-                {
-                    label: bStr,
-                    condition: buildTypedEntityCondition(dim, bStr, semanticLayer)
-                }
-            ];
-        }
-    }
-
-    // ── Strategy 3: Entity comparisons (unclassified proper nouns) ────────────
-    const entityFilters = analysis.filters.filter(f => f.dimension === "_entity");
-
-    if (entityFilters.length >= 2) {
-        const [a, b] = entityFilters;
-        const aStr = String(a.value);
-        const bStr = String(b.value);
-
-        console.log(`[ComparisonEngine] Entity comparison: "${aStr}" vs "${bStr}"`);
-
-        return [
-            {
-                label: aStr,
-                condition: buildEntityCondition(aStr, semanticLayer)
-            },
-            {
-                label: bStr,
-                condition: buildEntityCondition(bStr, semanticLayer)
-            }
-        ];
-    }
-
-    return null;
-}
-
-// ─── Shared filter extraction ─────────────────────────────────────────────────
-
-/**
- * Extracts filters that apply to BOTH sides (background context filters),
- * excluding the filters that were used to define the comparison sides themselves.
- *
- * For example: "compare London vs Bangkok for Q1"
- * → side filters: destination=London, destination=Bangkok
- * → shared filter: quarter=1 (applied to both CTE subqueries)
- */
-function extractSharedFilters(
-    analysis: QuestionAnalysis,
-    usedDimensions: Set<string>
-): QuestionFilter[] {
-    return analysis.filters.filter(f => !usedDimensions.has(f.dimension));
 }
 
 // ─── Metric resolution ────────────────────────────────────────────────────────
@@ -245,29 +75,193 @@ function resolveMetric(
     return { formula: metric.formula, name: metric.name };
 }
 
-// ─── SQL Assembly ─────────────────────────────────────────────────────────────
+// ─── Comparison Entity Extraction ─────────────────────────────────────────────
 
 /**
- * Builds the comparison SQL using two CTEs — one per side — then UNIONs them.
+ * Extracts exactly two comparable entities from the analysis.
  *
- * Pattern:
+ * Strategy (priority order):
+ *  1. Two filters on the same canonical dimension (supplier, destination, etc.)
+ *  2. Two time-period filters (quarter, month, year)
+ *  3. Two _entity (unclassified) filters
  *
- *   WITH side_a AS (
- *       SELECT 'LabelA' AS entity, <metric> AS "<MetricName>"
- *       FROM data_table
- *       WHERE <side_a_condition> [AND <shared_filters>]
- *   ),
- *   side_b AS (
- *       SELECT 'LabelB' AS entity, <metric> AS "<MetricName>"
- *       FROM data_table
- *       WHERE <side_b_condition> [AND <shared_filters>]
- *   )
- *   SELECT * FROM side_a
- *   UNION ALL
- *   SELECT * FROM side_b
- *   ORDER BY entity
+ * Returns null if two sides cannot be identified, with a detailed reason logged.
  */
-function assembleSql(
+export function extractComparisonEntities(
+    analysis: QuestionAnalysis,
+    semanticLayer: EnrichedSemanticLayer
+): ComparisonEntities | null {
+    const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
+
+    // Deduplicate filters first — prevents duplicate entity detection from
+    // creating false positives (e.g. Affiliate appears twice → only two unique)
+    const filters = dedupeFilters(analysis.filters);
+
+    console.log(
+        `[ComparisonEngine] COMPARISON_DEBUG\n` +
+        `  FILTERS (raw):    ${JSON.stringify(analysis.filters.map(f => `${f.dimension}=${f.value}`))}\n` +
+        `  FILTERS (deduped): ${JSON.stringify(filters.map(f => `${f.dimension}=${f.value}`))}`
+    );
+
+    // ── Strategy 1: Same canonical dimension ──────────────────────────────────
+    for (const dim of ENTITY_DIMS) {
+        const dimFilters = filters.filter(f => f.dimension === dim);
+
+        if (dimFilters.length >= 2) {
+            const left  = String(dimFilters[0].value);
+            const right = String(dimFilters[1].value);
+
+            const physicalCol = resolvePhysicalColumn(dim, schemaColumns);
+            if (!physicalCol) {
+                console.warn(`[ComparisonEngine] Cannot resolve physical column for dim="${dim}"`);
+                continue;
+            }
+
+            console.log(
+                `[ComparisonEngine]\n` +
+                `  COMPARISON_DIMENSION: ${dim}\n` +
+                `  PHYSICAL_COLUMN:      ${physicalCol}\n` +
+                `  LEFT:  ${left}\n` +
+                `  RIGHT: ${right}`
+            );
+
+            return { dimension: dim, physicalCol, left, right };
+        }
+    }
+
+    // ── Strategy 2: Time period comparison ────────────────────────────────────
+    // (handled separately in generateComparisonSql — not returned as entities)
+
+    // ── Strategy 3: _entity filters ───────────────────────────────────────────
+    const entityFilters = filters.filter(f => f.dimension === "_entity");
+    if (entityFilters.length >= 2) {
+        const left  = String(entityFilters[0].value);
+        const right = String(entityFilters[1].value);
+
+        console.log(
+            `[ComparisonEngine]\n` +
+            `  COMPARISON_DIMENSION: _entity (ILIKE across all VARCHAR columns)\n` +
+            `  LEFT:  ${left}\n` +
+            `  RIGHT: ${right}`
+        );
+
+        // For entity fallback, physicalCol is a sentinel — actual condition uses ILIKE
+        return { dimension: "_entity", physicalCol: "_entity", left, right };
+    }
+
+    // ── Failure — log diagnostics ──────────────────────────────────────────────
+    const filterSummary = filters.map(f => `${f.dimension}=${f.value}`).join(", ") || "(none)";
+    const dimCounts = ENTITY_DIMS.map(d => {
+        const n = filters.filter(f => f.dimension === d).length;
+        return `${d}:${n}`;
+    }).join(", ");
+
+    console.warn(
+        `[ComparisonEngine] COMPARISON_DEBUG — FAILED\n` +
+        `  FILTERS:    ${filterSummary}\n` +
+        `  DIM_COUNTS: ${dimCounts}\n` +
+        `  FAIL_REASON: No dimension had >= 2 unique values for comparison.\n` +
+        `  NOTE: Check that entityResolver is using canonical dimension names.`
+    );
+
+    return null;
+}
+
+// ─── Period comparison helpers ────────────────────────────────────────────────
+
+interface ComparisonSide {
+    label: string;
+    condition: string;
+}
+
+function buildPeriodSides(
+    analysis: QuestionAnalysis,
+    semanticLayer: EnrichedSemanticLayer,
+    filters: QuestionFilter[]
+): [ComparisonSide, ComparisonSide] | null {
+    const timeCol = semanticLayer.primaryTimeDimension
+        || semanticLayer.availableTimeColumns?.[0]
+        || "";
+
+    if (!timeCol) return null;
+
+    for (const timeDim of ["quarter", "month", "year"] as const) {
+        const timeFilters = filters.filter(f => f.dimension === timeDim);
+        if (timeFilters.length < 2) continue;
+
+        const aVal = Number(timeFilters[0].value);
+        const bVal = Number(timeFilters[1].value);
+
+        let condA: string, condB: string, prefix: string;
+
+        if (timeDim === "quarter") {
+            condA = `EXTRACT(QUARTER FROM ${strptime(timeCol)}) = ${aVal}`;
+            condB = `EXTRACT(QUARTER FROM ${strptime(timeCol)}) = ${bVal}`;
+            prefix = "Q";
+        } else if (timeDim === "month") {
+            condA = `EXTRACT(MONTH FROM ${strptime(timeCol)}) = ${aVal}`;
+            condB = `EXTRACT(MONTH FROM ${strptime(timeCol)}) = ${bVal}`;
+            prefix = "Month ";
+        } else {
+            condA = `EXTRACT(YEAR FROM ${strptime(timeCol)}) = ${aVal}`;
+            condB = `EXTRACT(YEAR FROM ${strptime(timeCol)}) = ${bVal}`;
+            prefix = "";
+        }
+
+        console.log(`[ComparisonEngine] Period comparison: ${timeDim} ${aVal} vs ${bVal}`);
+        return [
+            { label: `${prefix}${aVal}`, condition: condA },
+            { label: `${prefix}${bVal}`, condition: condB }
+        ];
+    }
+
+    return null;
+}
+
+// ─── SQL builders ─────────────────────────────────────────────────────────────
+
+/**
+ * Primary path: single IN-clause grouping SQL.
+ * Used when two entities share the same canonical dimension.
+ *
+ * Example:
+ *   SELECT "suppliername", AVG(...) AS "Win Rate"
+ *   FROM data_table
+ *   WHERE "suppliername" IN ('Affiliate', 'Synxis')
+ *   [AND <shared_filters>]
+ *   GROUP BY "suppliername"
+ *   ORDER BY "suppliername"
+ */
+function buildInClauseSql(
+    entities: ComparisonEntities,
+    metric: { formula: string; name: string },
+    sharedWhere: string
+): string {
+    const safeLeft  = entities.left.replace(/'/g, "''");
+    const safeRight = entities.right.replace(/'/g, "''");
+    const col = `"${entities.physicalCol}"`;
+
+    const inCondition = `${col} IN ('${safeLeft}', '${safeRight}')`;
+    const whereClause = sharedWhere
+        ? `WHERE ${inCondition} AND (${sharedWhere.replace(/^WHERE\s+/i, "")})`
+        : `WHERE ${inCondition}`;
+
+    return [
+        `SELECT`,
+        `    ${col} AS entity,`,
+        `    ${metric.formula} AS "${metric.name}"`,
+        `FROM data_table`,
+        whereClause,
+        `GROUP BY ${col}`,
+        `ORDER BY ${col}`
+    ].join("\n");
+}
+
+/**
+ * Fallback path: two-CTE UNION ALL SQL.
+ * Used for period comparisons and _entity (ILIKE) comparisons.
+ */
+function buildCTESql(
     sideA: ComparisonSide,
     sideB: ComparisonSide,
     metric: { formula: string; name: string },
@@ -302,24 +296,41 @@ function assembleSql(
     ].join("\n");
 }
 
+/**
+ * Builds an ILIKE condition across all VARCHAR columns (for _entity comparisons).
+ */
+function buildEntityIlikeCondition(
+    value: string,
+    semanticLayer: EnrichedSemanticLayer
+): string {
+    const safe = value.replace(/'/g, "''");
+    const stringCols = semanticLayer.allColumns.filter(c =>
+        c.column_type.toUpperCase().includes("VARCHAR") ||
+        c.column_type.toUpperCase().includes("STRING") ||
+        c.column_type.toUpperCase().includes("TEXT")
+    );
+    const checks = stringCols.map(c => `"${c.column_name}" ILIKE '%${safe}%'`).join(" OR ");
+    return `(${checks})`;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Comparison Engine
  *
- * Generates deterministic side-by-side comparison SQL for COMPARISON intent.
- * No LLM involved — fully rule-based from QuestionAnalysis + SemanticLayer.
+ * Generates deterministic side-by-side comparison SQL.
+ * No LLM involved — fully rule-based.
  *
  * Supported patterns:
- *  - "compare London vs Bangkok"         → entity comparison across all VARCHAR cols
- *  - "compare supplier A vs supplier B"  → typed dimension comparison
- *  - "compare Q1 vs Q2"                  → quarter period comparison
- *  - "compare chain A vs chain B"        → typed dimension comparison
- *  - "compare 2024 vs 2025"              → year comparison
- *  - "compare Jan vs Apr win rate"       → month comparison on specific metric
+ *  - "compare suppliers Affiliate with Synxis"   → IN-clause on suppliername ✓
+ *  - "compare London vs Bangkok"                 → IN-clause on destination ✓
+ *  - "compare chain A vs chain B"                → IN-clause on tbo_chainname ✓
+ *  - "compare Q1 vs Q2"                          → two-CTE period comparison ✓
+ *  - "compare 2024 vs 2025"                      → two-CTE year comparison ✓
  *
- * Output: two-row result (one per side) via UNION ALL of two CTEs.
- * Returns null if two comparable sides cannot be identified.
+ * SQL Strategy:
+ *  - Same canonical dimension → IN-clause GROUP BY (cleaner, single pass)
+ *  - Period or _entity comparison → two-CTE UNION ALL
  */
 export function generateComparisonSql(
     analysis: QuestionAnalysis,
@@ -333,77 +344,97 @@ export function generateComparisonSql(
         return null;
     }
 
-    // ── 2. Extract comparison sides ────────────────────────────────────────────
-    const sides = extractComparisonSides(analysis, semanticLayer);
-    if (!sides) {
-        console.warn("[ComparisonEngine] Cannot identify two comparable sides — returning null.");
-        return null;
-    }
-
-    const [sideA, sideB] = sides;
-
-    // ── 3. Determine which dimensions were consumed as sides ───────────────────
-    // Time period comparisons consume one time dimension; entity comparisons consume _entity.
-    // Anything else becomes a shared (background) filter.
-    const TIME_DIMS = new Set(["quarter", "month", "year", "time"]);
-    const ENTITY_DIM = "_entity";
-    const COMPARABLE_DIMS = new Set(["destination", "supplier", "hotel", "chain", "country", "city", "apw"]);
-
-    // Figure out which dimension was used as comparison axis
-    const usedDimensions = new Set<string>();
-
-    for (const timeDim of ["quarter", "month", "year"]) {
-        const timeFilters = analysis.filters.filter(f => f.dimension === timeDim);
-        if (timeFilters.length >= 2) {
-            usedDimensions.add(timeDim);
-            break;
-        }
-    }
-
-    if (usedDimensions.size === 0) {
-        for (const dim of COMPARABLE_DIMS) {
-            const dimFilters = analysis.filters.filter(f => f.dimension === dim);
-            if (dimFilters.length >= 2) {
-                usedDimensions.add(dim);
-                break;
-            }
-        }
-    }
-
-    if (usedDimensions.size === 0) {
-        const entityFilters = analysis.filters.filter(f => f.dimension === ENTITY_DIM);
-        if (entityFilters.length >= 2) usedDimensions.add(ENTITY_DIM);
-    }
-
-    // ── 4. Build shared WHERE clause ───────────────────────────────────────────
-    // Filters NOT consumed as comparison sides apply to both CTE subqueries.
-    const sharedFilters = extractSharedFilters(analysis, usedDimensions);
+    // ── 2. Deduplicate filters ─────────────────────────────────────────────────
+    const deduped = dedupeFilters(analysis.filters);
     const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
 
-    // Exclude any remaining time/entity filters from shared WHERE — they're handled above
-    const typedShared = sharedFilters.filter(
-        f => !TIME_DIMS.has(f.dimension) && f.dimension !== ENTITY_DIM
+    // ── 3a. Try same-dimension entity comparison (IN-clause path) ──────────────
+    const entities = extractComparisonEntities(
+        { ...analysis, filters: deduped },
+        semanticLayer
     );
-    const sharedWhere = buildWhereClause(typedShared, schemaColumns);
 
-    if (sharedWhere) {
-        console.log(`[ComparisonEngine] Shared WHERE: ${sharedWhere}`);
+    if (entities && entities.dimension !== "_entity") {
+        // Shared filters: everything except the comparison dimension
+        const sharedFilters = deduped.filter(
+            f => f.dimension !== entities.dimension && !TIME_DIMS.has(f.dimension)
+        );
+        const sharedWhere = buildWhereClause(sharedFilters, schemaColumns);
+
+        if (sharedWhere) {
+            console.log(`[ComparisonEngine] Shared WHERE: ${sharedWhere}`);
+        }
+
+        const sql = buildInClauseSql(entities, metric, sharedWhere);
+        const explanation =
+            `Comparing ${metric.name} for "${entities.left}" vs "${entities.right}" ` +
+            `by ${entities.dimension}.`;
+
+        console.log(
+            `[ComparisonEngine] IN-clause SQL generated | ` +
+            `dim=${entities.dimension} | "${entities.left}" vs "${entities.right}" | ` +
+            `metric=${metric.name}`
+        );
+
+        return { sql, explanation };
     }
 
-    // ── 5. Assemble SQL ────────────────────────────────────────────────────────
-    const sql = assembleSql(sideA, sideB, metric, sharedWhere);
+    // ── 3b. Try period comparison (CTE path) ───────────────────────────────────
+    const periodSides = buildPeriodSides(analysis, semanticLayer, deduped);
+    if (periodSides) {
+        const [sideA, sideB] = periodSides;
 
-    // ── 6. Build explanation ───────────────────────────────────────────────────
-    const sharedNote = typedShared.length > 0
-        ? ` (with ${typedShared.length} shared filter${typedShared.length > 1 ? "s" : ""})`
-        : "";
+        // Detect which time dim was used
+        const usedTimeDim = (["quarter", "month", "year"] as const).find(
+            td => deduped.filter(f => f.dimension === td).length >= 2
+        );
+        const sharedFilters = deduped.filter(
+            f => f.dimension !== usedTimeDim && !TIME_DIMS.has(f.dimension) && f.dimension !== "_entity"
+        );
+        const sharedWhere = buildWhereClause(sharedFilters, schemaColumns);
 
-    const explanation =
-        `Comparing ${metric.name} for "${sideA.label}" vs "${sideB.label}"${sharedNote}.`;
+        const sql = buildCTESql(sideA, sideB, metric, sharedWhere);
+        const explanation = `Comparing ${metric.name}: ${sideA.label} vs ${sideB.label}.`;
 
-    console.log(
-        `[ComparisonEngine] "${sideA.label}" vs "${sideB.label}" | Metric: ${metric.name}`
+        return { sql, explanation };
+    }
+
+    // ── 3c. _entity fallback (CTE + ILIKE path) ────────────────────────────────
+    if (entities && entities.dimension === "_entity") {
+        const sideA: ComparisonSide = {
+            label: entities.left,
+            condition: buildEntityIlikeCondition(entities.left, semanticLayer)
+        };
+        const sideB: ComparisonSide = {
+            label: entities.right,
+            condition: buildEntityIlikeCondition(entities.right, semanticLayer)
+        };
+
+        const sharedFilters = deduped.filter(
+            f => f.dimension !== "_entity" && !TIME_DIMS.has(f.dimension)
+        );
+        const sharedWhere = buildWhereClause(sharedFilters, schemaColumns);
+
+        const sql = buildCTESql(sideA, sideB, metric, sharedWhere);
+        const explanation =
+            `Comparing ${metric.name} for "${entities.left}" vs "${entities.right}".`;
+
+        console.log(
+            `[ComparisonEngine] ILIKE CTE SQL generated | ` +
+            `"${entities.left}" vs "${entities.right}"`
+        );
+
+        return { sql, explanation };
+    }
+
+    // ── 4. Failure ─────────────────────────────────────────────────────────────
+    console.warn(
+        `[ComparisonEngine] COMPARISON_DEBUG — FINAL FAILURE\n` +
+        `  METRIC:  ${metric.name}\n` +
+        `  FILTERS: ${deduped.map(f => `${f.dimension}=${f.value}`).join(", ") || "(none)"}\n` +
+        `  FAIL_REASON: No two comparable sides could be identified after deduplication.\n` +
+        `  CHECK: entityResolver must emit canonical dimension names (supplier, not suppliername).`
     );
 
-    return { sql, explanation };
+    return null;
 }
