@@ -1,4 +1,5 @@
-import { anthropic } from "../lib/claude.js";
+import { getAnthropicClient } from "../lib/claude.js";
+import { MODELS } from "../config/models.js";
 import { recordUsage } from "./tokenUsageService.js";
 
 const MAX_RETRIES = 3;
@@ -26,11 +27,11 @@ export async function callClaudeWithStructuredOutput<T>(
     systemPrompt: string = "You are an Executive Analytics Copilot.",
     temperature: number = 0.0
 ): Promise<T> {
-    const model = "claude-3-5-sonnet-20241022";
+    const model = MODELS.SONNET || "claude-sonnet-4-5";
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            const response = await anthropic.messages.create({
+            const response = await getAnthropicClient().messages.create({
                 model,
                 max_tokens: 2000,
                 temperature,

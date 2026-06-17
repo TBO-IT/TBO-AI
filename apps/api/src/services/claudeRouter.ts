@@ -1,218 +1,156 @@
 // ─── Claude Router ────────────────────────────────────────────────────────────
 //
-// Tier-based routing that determines whether and how Claude should be involved.
+// Determines WHETHER and HOW Claude should be involved.
+//
+// CRITICAL RULE:
+//   A ROOT_CAUSE query does NOT automatically call Claude.
+//   Claude is optional — activated only when user explicitly asks for
+//   narrative, executive summary, explanation, or recommendations.
 //
 // Tiers:
-//   NONE   — Fully deterministic. Claude is never called.
-//   HAIKU  — Lightweight narrative tasks (summaries, explanations).
-//   SONNET — Heavy analytical tasks (recommendations, strategy, open-ended).
-//
-// The analytics pipeline ALWAYS runs first. Claude only adds narrative polish.
+//   NONE   → Deterministic only. Claude never called.
+//   HAIKU  → Lightweight: Executive Summary, Narrative, Explain Results.
+//   SONNET → Heavy: Recommendations, Strategic Analysis, Risk Analysis.
 // ───────────────────────────────────────────────────────────────────────────────
 
 export type ClaudeTier = "NONE" | "HAIKU" | "SONNET";
 
 export type ClaudeOperation =
     | "EXECUTIVE_SUMMARY"
-    | "EXPLAIN_RESULTS"
     | "NARRATIVE_GENERATION"
+    | "EXPLAIN_RESULTS"
     | "TREND_EXPLANATION"
     | "RECOMMENDATIONS"
     | "STRATEGIC_ANALYSIS"
     | "OPPORTUNITY_DISCOVERY"
-    | "RISK_ANALYSIS"
-    | "AD_HOC_REASONING";
+    | "RISK_ANALYSIS";
 
 export interface ClaudeRouterDecision {
-    /** Whether Claude should be called */
     shouldCallClaude: boolean;
-
-    /** Which Claude tier to use */
     tier: ClaudeTier;
-
-    /** The specific operation type */
     operation: ClaudeOperation | null;
-
-    /** Model identifier for the selected tier */
-    model: string;
-
-    /** Human-readable reason for the routing decision */
     reason: string;
-
-    /** Estimated max output tokens for this operation */
     maxTokens: number;
 }
 
-// ─── Model Configuration ──────────────────────────────────────────────────────
+// ─── Tier Assignments ─────────────────────────────────────────────────────────
 
-const MODELS: Record<Exclude<ClaudeTier, "NONE">, string> = {
-    HAIKU:  "claude-3-5-haiku-20241022",
-    SONNET: "claude-3-5-sonnet-20241022"
-};
-
-// ─── Tier Routing Rules ───────────────────────────────────────────────────────
-
-/** Routes that are fully deterministic — NEVER call Claude */
-const NONE_ROUTES = new Set([
-    "TEMPLATE",
-    "TREND",
-    "COMPARISON",
-    "CONTRIBUTION",
-    "CACHE"
+/** Routes that are fully deterministic — Claude NEVER called */
+const DETERMINISTIC_ROUTES = new Set([
+    "TEMPLATE", "TREND", "COMPARISON", "CONTRIBUTION", "CACHE"
 ]);
 
-/** Operations that use the lightweight Haiku model */
-const HAIKU_OPERATIONS = new Set<ClaudeOperation>([
+const HAIKU_OPS = new Set<ClaudeOperation>([
     "EXECUTIVE_SUMMARY",
-    "EXPLAIN_RESULTS",
     "NARRATIVE_GENERATION",
+    "EXPLAIN_RESULTS",
     "TREND_EXPLANATION"
 ]);
 
-/** Operations that require the full Sonnet model */
-const SONNET_OPERATIONS = new Set<ClaudeOperation>([
+const SONNET_OPS = new Set<ClaudeOperation>([
     "RECOMMENDATIONS",
     "STRATEGIC_ANALYSIS",
     "OPPORTUNITY_DISCOVERY",
-    "RISK_ANALYSIS",
-    "AD_HOC_REASONING"
+    "RISK_ANALYSIS"
 ]);
 
-// ─── Token Budgets ────────────────────────────────────────────────────────────
-
 const TOKEN_BUDGETS: Record<ClaudeOperation, number> = {
-    EXECUTIVE_SUMMARY:    800,
-    EXPLAIN_RESULTS:      600,
-    NARRATIVE_GENERATION: 1200,
-    TREND_EXPLANATION:    600,
-    RECOMMENDATIONS:      1500,
-    STRATEGIC_ANALYSIS:   1500,
-    OPPORTUNITY_DISCOVERY: 1200,
-    RISK_ANALYSIS:        1200,
-    AD_HOC_REASONING:     2000
+    EXECUTIVE_SUMMARY:      800,
+    NARRATIVE_GENERATION:   1200,
+    EXPLAIN_RESULTS:        600,
+    TREND_EXPLANATION:      600,
+    RECOMMENDATIONS:        1500,
+    STRATEGIC_ANALYSIS:     1500,
+    OPPORTUNITY_DISCOVERY:  1200,
+    RISK_ANALYSIS:          1200
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Determines whether Claude should be called and at which tier.
- * 
- * @param analyticsRoute - The deterministic route that was used (TEMPLATE, TREND, ROOT_CAUSE, etc.)
- * @param operation - The specific Claude operation being requested
- * @param hasRootCausePack - Whether a validated RootCausePack exists
+ * Quick check: should Claude be considered for this analytics route?
+ * Returns false for all deterministic routes AND for ROOT_CAUSE
+ * (ROOT_CAUSE alone = just return the pack).
+ */
+export function shouldUseClaude(analyticsRoute: string): boolean {
+    // ROOT_CAUSE by itself does NOT trigger Claude.
+    // It only triggers Claude when a specific operation is requested.
+    if (analyticsRoute === "ROOT_CAUSE") return false;
+    return !DETERMINISTIC_ROUTES.has(analyticsRoute);
+}
+
+/**
+ * Full routing decision.
+ *
+ * @param analyticsRoute - The deterministic route (TEMPLATE, ROOT_CAUSE, etc.)
+ * @param operation - The specific Claude operation requested (null = no Claude)
+ * @param hasValidPack - Whether a validated analytics pack exists
  */
 export function routeClaude(
     analyticsRoute: string,
     operation: ClaudeOperation | null,
-    hasRootCausePack: boolean = false
+    hasValidPack: boolean = false
 ): ClaudeRouterDecision {
-    // 1. Deterministic routes never call Claude for core analytics
-    if (NONE_ROUTES.has(analyticsRoute) && !operation) {
-        const decision: ClaudeRouterDecision = {
-            shouldCallClaude: false,
-            tier: "NONE",
-            operation: null,
-            model: "",
-            reason: `Route "${analyticsRoute}" is fully deterministic. Claude is not needed.`,
-            maxTokens: 0
-        };
-        logDecision(decision);
-        return decision;
+
+    // 1. No operation requested → no Claude
+    if (!operation) {
+        return decide("NONE", null, 0, `No Claude operation requested. Route "${analyticsRoute}" is fully deterministic.`);
     }
 
-    // 2. ROOT_CAUSE with a pack can use Claude for narrative enrichment
-    if (analyticsRoute === "ROOT_CAUSE" && hasRootCausePack && operation) {
-        const tier = selectTier(operation);
-        const decision: ClaudeRouterDecision = {
-            shouldCallClaude: true,
-            tier,
-            operation,
-            model: tier === "NONE" ? "" : MODELS[tier],
-            reason: `ROOT_CAUSE pack available. Using ${tier} for ${operation}.`,
-            maxTokens: TOKEN_BUDGETS[operation] ?? 1000
-        };
-        logDecision(decision);
-        return decision;
+    // 2. Deterministic routes → no Claude, regardless of operation
+    if (DETERMINISTIC_ROUTES.has(analyticsRoute)) {
+        return decide("NONE", null, 0, `Route "${analyticsRoute}" is deterministic. Claude blocked.`);
     }
 
-    // 3. LLM fallback route — always use Sonnet for SQL generation
+    // 3. ROOT_CAUSE with an operation and a valid pack → route to appropriate tier
+    if (analyticsRoute === "ROOT_CAUSE" && hasValidPack) {
+        const tier = selectClaudeTier(operation);
+        return decide(tier, operation, TOKEN_BUDGETS[operation] ?? 1000, `ROOT_CAUSE + ${operation} → ${tier}`);
+    }
+
+    // 4. ROOT_CAUSE without a valid pack → no Claude
+    if (analyticsRoute === "ROOT_CAUSE" && !hasValidPack) {
+        return decide("NONE", null, 0, "ROOT_CAUSE but no valid pack available. Claude skipped.");
+    }
+
+    // 5. LLM fallback or other → use Sonnet
     if (analyticsRoute === "LLM") {
-        const decision: ClaudeRouterDecision = {
-            shouldCallClaude: true,
-            tier: "SONNET",
-            operation: operation ?? "AD_HOC_REASONING",
-            model: MODELS.SONNET,
-            reason: `LLM fallback route. Using SONNET for ad-hoc reasoning.`,
-            maxTokens: TOKEN_BUDGETS.AD_HOC_REASONING
-        };
-        logDecision(decision);
-        return decision;
+        return decide("SONNET", operation, TOKEN_BUDGETS[operation] ?? 1500, `LLM fallback → SONNET for ${operation}`);
     }
 
-    // 4. Explicit operation request with no special route
-    if (operation) {
-        const tier = selectTier(operation);
-        const decision: ClaudeRouterDecision = {
-            shouldCallClaude: tier !== "NONE",
-            tier,
-            operation,
-            model: tier === "NONE" ? "" : MODELS[tier],
-            reason: `Explicit operation ${operation}. Assigned to ${tier}.`,
-            maxTokens: TOKEN_BUDGETS[operation] ?? 1000
-        };
-        logDecision(decision);
-        return decision;
-    }
-
-    // 5. Default: no Claude
-    const decision: ClaudeRouterDecision = {
-        shouldCallClaude: false,
-        tier: "NONE",
-        operation: null,
-        model: "",
-        reason: "No Claude operation requested. Using deterministic pipeline.",
-        maxTokens: 0
-    };
-    logDecision(decision);
-    return decision;
+    // 6. Default
+    return decide("NONE", null, 0, "No matching Claude route.");
 }
 
 /**
- * Quick check: should Claude be invoked at all for this route?
- */
-export function shouldUseClaude(analyticsRoute: string): boolean {
-    return !NONE_ROUTES.has(analyticsRoute);
-}
-
-/**
- * Selects the appropriate tier for a given operation.
+ * Given an operation, returns the appropriate tier.
  */
 export function selectClaudeTier(operation: ClaudeOperation): ClaudeTier {
-    return selectTier(operation);
-}
-
-/**
- * Returns the model identifier for a given tier.
- */
-export function getModelForTier(tier: Exclude<ClaudeTier, "NONE">): string {
-    return MODELS[tier];
+    if (HAIKU_OPS.has(operation)) return "HAIKU";
+    if (SONNET_OPS.has(operation)) return "SONNET";
+    return "NONE";
 }
 
 // ─── Internal ─────────────────────────────────────────────────────────────────
 
-function selectTier(operation: ClaudeOperation): ClaudeTier {
-    if (HAIKU_OPERATIONS.has(operation)) return "HAIKU";
-    if (SONNET_OPERATIONS.has(operation)) return "SONNET";
-    return "NONE";
-}
+function decide(
+    tier: ClaudeTier,
+    operation: ClaudeOperation | null,
+    maxTokens: number,
+    reason: string
+): ClaudeRouterDecision {
+    const decision: ClaudeRouterDecision = {
+        shouldCallClaude: tier !== "NONE",
+        tier,
+        operation,
+        reason,
+        maxTokens
+    };
 
-function logDecision(decision: ClaudeRouterDecision): void {
     console.log(
-        `[CLAUDE_ROUTER] shouldCall=${decision.shouldCallClaude} | ` +
-        `tier=${decision.tier} | ` +
-        `operation=${decision.operation ?? "none"} | ` +
-        `model=${decision.model || "n/a"} | ` +
-        `maxTokens=${decision.maxTokens} | ` +
-        `reason=${decision.reason}`
+        `[CLAUDE_ROUTER] shouldCall=${decision.shouldCallClaude} | tier=${tier} | ` +
+        `op=${operation ?? "none"} | maxTokens=${maxTokens} | reason=${reason}`
     );
+
+    return decision;
 }

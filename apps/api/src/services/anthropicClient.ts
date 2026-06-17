@@ -1,34 +1,42 @@
 // ─── Anthropic Client ─────────────────────────────────────────────────────────
 //
-// Production-grade Anthropic API client with:
-//   - Multi-model support (Haiku / Sonnet)
-//   - Retry with exponential backoff
-//   - Timeout handling
-//   - Token budget enforcement
-//   - Input sanitization
-//   - Cost tracking integration
-//   - Graceful failure
+// Single entry point for all Claude API calls.
 //
-// Environment: ANTHROPIC_API_KEY
+// Uses environment-configured model names from config/models.ts.
+// Provides: generateText(), generateNarrative(), generateRecommendations()
+//
+// Responsibilities:
+//   - Retry with exponential backoff (3 retries)
+//   - Timeout handling (30s)
+//   - Structured errors
+//   - Usage logging via [CLAUDE_USAGE]
+//   - Cost estimation
+//   - Prompt length safety (50K cap)
+//   - Never logs API keys
 // ───────────────────────────────────────────────────────────────────────────────
 
 import Anthropic from "@anthropic-ai/sdk";
-import { ClaudeTier } from "./claudeRouter.js";
-import { trackClaudeUsage } from "./claudeCostTracker.js";
+import { MODELS } from "../config/models.js";
+import { recordUsage } from "./tokenUsageService.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
-const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_PROMPT_LENGTH = 50_000; // characters — safety cap
+const MAX_PROMPT_CHARS = 50_000;
 
-const MODELS: Record<Exclude<ClaudeTier, "NONE">, string> = {
-    HAIKU:  "claude-3-5-haiku-20241022",
-    SONNET: "claude-3-5-sonnet-20241022"
+type ClaudeTier = "HAIKU" | "SONNET";
+
+// Cost per 1M tokens
+const COST_TABLE: Record<string, { input: number; output: number }> = {
+    "claude-haiku-4-5":              { input: 0.25,  output: 1.25 },
+    "claude-3-5-haiku-20241022":     { input: 0.25,  output: 1.25 },
+    "claude-sonnet-4-5":             { input: 3.00,  output: 15.00 },
+    "claude-3-5-sonnet-20241022":    { input: 3.00,  output: 15.00 },
+    "claude-3-7-sonnet-20250219":    { input: 3.00,  output: 15.00 }
 };
 
-// ─── Client Initialization ────────────────────────────────────────────────────
+// ─── Client ───────────────────────────────────────────────────────────────────
 
 let _client: Anthropic | null = null;
 
@@ -37,7 +45,7 @@ function getClient(): Anthropic {
         const apiKey = process.env.ANTHROPIC_API_KEY;
         if (!apiKey) {
             throw new AnthropicClientError(
-                "ANTHROPIC_API_KEY is not set. Claude integration is disabled.",
+                "ANTHROPIC_API_KEY is not set.",
                 "CONFIG_ERROR"
             );
         }
@@ -46,7 +54,18 @@ function getClient(): Anthropic {
     return _client;
 }
 
-// ─── Error Types ──────────────────────────────────────────────────────────────
+function getModel(tier: ClaudeTier): string {
+    const model = MODELS[tier];
+    if (!model) {
+        throw new AnthropicClientError(
+            `Model not configured for tier ${tier}. Set CLAUDE_${tier}_MODEL env var.`,
+            "CONFIG_ERROR"
+        );
+    }
+    return model;
+}
+
+// ─── Error ────────────────────────────────────────────────────────────────────
 
 export type AnthropicErrorCode =
     | "CONFIG_ERROR"
@@ -69,16 +88,7 @@ export class AnthropicClientError extends Error {
     }
 }
 
-// ─── Core API ─────────────────────────────────────────────────────────────────
-
-export interface GenerateTextOptions {
-    prompt: string;
-    systemPrompt: string;
-    tier: Exclude<ClaudeTier, "NONE">;
-    maxTokens: number;
-    temperature?: number;
-    operation: string;
-}
+// ─── Core: generateText() ─────────────────────────────────────────────────────
 
 export interface GenerateTextResult {
     text: string;
@@ -86,127 +96,28 @@ export interface GenerateTextResult {
     outputTokens: number;
     model: string;
     latencyMs: number;
+    estimatedCost: number;
 }
 
 /**
- * Core text generation function.
- * Sends a prompt to Claude and returns the raw text response.
+ * Send a prompt to Claude and receive raw text back.
  */
-export async function generateText(options: GenerateTextOptions): Promise<GenerateTextResult> {
-    // 1. Input sanitization
-    validatePrompt(options.prompt);
+export async function generateText(
+    prompt: string,
+    systemPrompt: string,
+    tier: ClaudeTier,
+    maxTokens: number = 1500,
+    temperature: number = 0.1
+): Promise<GenerateTextResult> {
+    validatePrompt(prompt);
 
-    const model = MODELS[options.tier];
-    const startTime = performance.now();
+    const model = getModel(tier);
+    const start = performance.now();
 
     console.log(
-        `[CLAUDE_INPUT] tier=${options.tier} | model=${model} | ` +
-        `operation=${options.operation} | maxTokens=${options.maxTokens} | ` +
-        `promptLength=${options.prompt.length}`
+        `[CLAUDE_INPUT] tier=${tier} | model=${model} | ` +
+        `maxTokens=${maxTokens} | promptChars=${prompt.length}`
     );
-
-    // 2. Retry loop
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            const client = getClient();
-            const response = await client.messages.create({
-                model,
-                max_tokens: options.maxTokens,
-                temperature: options.temperature ?? 0.0,
-                system: options.systemPrompt,
-                messages: [{ role: "user", content: options.prompt }]
-            });
-
-            const latencyMs = Math.round(performance.now() - startTime);
-            const inputTokens = response.usage?.input_tokens ?? 0;
-            const outputTokens = response.usage?.output_tokens ?? 0;
-
-            // Extract text
-            const textBlock = response.content.find(b => b.type === "text");
-            if (!textBlock || textBlock.type !== "text") {
-                throw new AnthropicClientError(
-                    "Claude returned no text content.",
-                    "INVALID_RESPONSE"
-                );
-            }
-
-            // Track cost
-            trackClaudeUsage(model, options.operation, inputTokens, outputTokens, latencyMs);
-
-            console.log(
-                `[CLAUDE_OUTPUT] model=${model} | operation=${options.operation} | ` +
-                `inputTokens=${inputTokens} | outputTokens=${outputTokens} | ` +
-                `latencyMs=${latencyMs} | responseLength=${textBlock.text.length}`
-            );
-
-            return {
-                text: textBlock.text,
-                inputTokens,
-                outputTokens,
-                model,
-                latencyMs
-            };
-        } catch (error: any) {
-            if (error instanceof AnthropicClientError) throw error;
-
-            const status = error?.status || 500;
-            const isRetryable = [429, 500, 503, 529].includes(status) ||
-                error.message?.includes("timeout");
-
-            if (isRetryable && attempt < MAX_RETRIES) {
-                const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-                console.warn(
-                    `[CLAUDE_RETRY] attempt=${attempt}/${MAX_RETRIES} | ` +
-                    `status=${status} | delay=${delay}ms | ` +
-                    `error=${error.message?.slice(0, 100)}`
-                );
-                await sleep(delay);
-                continue;
-            }
-
-            const latencyMs = Math.round(performance.now() - startTime);
-            const code: AnthropicErrorCode =
-                status === 429 ? "RATE_LIMITED" :
-                status === 529 ? "OVERLOADED" :
-                error.message?.includes("timeout") ? "TIMEOUT" :
-                "SERVER_ERROR";
-
-            console.error(
-                `[CLAUDE_ERROR] model=${model} | operation=${options.operation} | ` +
-                `code=${code} | status=${status} | latencyMs=${latencyMs} | ` +
-                `error=${error.message?.slice(0, 200)}`
-            );
-
-            throw new AnthropicClientError(
-                `Claude API failed after ${attempt} attempts: ${error.message}`,
-                code,
-                status
-            );
-        }
-    }
-
-    throw new AnthropicClientError("Maximum retries exceeded", "MAX_RETRIES_EXCEEDED");
-}
-
-// ─── Structured Output (Tool Use) ────────────────────────────────────────────
-
-export interface GenerateStructuredOptions<T> extends Omit<GenerateTextOptions, "maxTokens"> {
-    toolSchema: any;
-    maxTokens?: number;
-}
-
-/**
- * Structured output via Claude tool use.
- * Returns a strongly-typed JSON payload extracted from the tool call.
- */
-export async function generateStructured<T>(
-    options: GenerateStructuredOptions<T>
-): Promise<{ result: T; inputTokens: number; outputTokens: number; model: string; latencyMs: number }> {
-    validatePrompt(options.prompt);
-
-    const model = MODELS[options.tier];
-    const maxTokens = options.maxTokens ?? 2000;
-    const startTime = performance.now();
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -214,79 +125,116 @@ export async function generateStructured<T>(
             const response = await client.messages.create({
                 model,
                 max_tokens: maxTokens,
-                temperature: options.temperature ?? 0.0,
-                system: options.systemPrompt,
-                messages: [{ role: "user", content: options.prompt }],
-                tools: [options.toolSchema],
-                tool_choice: { type: "tool", name: options.toolSchema.name }
+                temperature,
+                system: systemPrompt,
+                messages: [{ role: "user", content: prompt }]
             });
 
-            const latencyMs = Math.round(performance.now() - startTime);
+            const latencyMs = Math.round(performance.now() - start);
             const inputTokens = response.usage?.input_tokens ?? 0;
             const outputTokens = response.usage?.output_tokens ?? 0;
+            const estimatedCost = estimateCost(model, inputTokens, outputTokens);
 
-            const toolBlock = response.content.find(b => b.type === "tool_use");
-            if (!toolBlock || toolBlock.type !== "tool_use") {
-                throw new AnthropicClientError(
-                    "Claude did not return expected structured tool output.",
-                    "INVALID_RESPONSE"
-                );
+            const textBlock = response.content.find(b => b.type === "text");
+            if (!textBlock || textBlock.type !== "text") {
+                throw new AnthropicClientError("Claude returned no text.", "INVALID_RESPONSE");
             }
 
-            trackClaudeUsage(model, options.operation, inputTokens, outputTokens, latencyMs);
+            // Log usage
+            console.log(
+                `[CLAUDE_USAGE] model=${model} | in=${inputTokens} | out=${outputTokens} | ` +
+                `cost=$${estimatedCost.toFixed(4)} | latency=${latencyMs}ms`
+            );
+
+            // Persist to DB
+            await recordUsage(model, "NARRATIVE_GENERATION", inputTokens, outputTokens).catch(() => {});
+
+            console.log(
+                `[CLAUDE_OUTPUT] model=${model} | responseChars=${textBlock.text.length} | latency=${latencyMs}ms`
+            );
 
             return {
-                result: toolBlock.input as unknown as T,
+                text: textBlock.text,
                 inputTokens,
                 outputTokens,
                 model,
-                latencyMs
+                latencyMs,
+                estimatedCost
             };
-        } catch (error: any) {
-            if (error instanceof AnthropicClientError) throw error;
+        } catch (err: any) {
+            if (err instanceof AnthropicClientError) throw err;
 
-            const status = error?.status || 500;
-            const isRetryable = [429, 500, 503, 529].includes(status);
+            const status = err?.status || 500;
+            const retryable = [429, 500, 503, 529].includes(status) || err.message?.includes("timeout");
 
-            if (isRetryable && attempt < MAX_RETRIES) {
+            if (retryable && attempt < MAX_RETRIES) {
                 const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+                console.warn(`[CLAUDE_RETRY] attempt=${attempt}/${MAX_RETRIES} | status=${status} | delay=${delay}ms`);
                 await sleep(delay);
                 continue;
             }
 
+            const code: AnthropicErrorCode =
+                status === 429 ? "RATE_LIMITED" :
+                status === 529 ? "OVERLOADED" :
+                err.message?.includes("timeout") ? "TIMEOUT" : "SERVER_ERROR";
+
             throw new AnthropicClientError(
-                `Claude structured call failed: ${error.message}`,
-                "SERVER_ERROR",
-                status
+                `Claude failed after ${attempt} attempts: ${err.message}`,
+                code, status
             );
         }
     }
 
-    throw new AnthropicClientError("Maximum retries exceeded", "MAX_RETRIES_EXCEEDED");
+    throw new AnthropicClientError("Max retries exceeded.", "MAX_RETRIES_EXCEEDED");
 }
 
-// ─── Safety ───────────────────────────────────────────────────────────────────
+// ─── Convenience: generateNarrative() ─────────────────────────────────────────
+
+/**
+ * Generates a narrative from a prompt using Haiku.
+ */
+export async function generateNarrativeText(
+    prompt: string,
+    systemPrompt: string
+): Promise<GenerateTextResult> {
+    return generateText(prompt, systemPrompt, "HAIKU", 1200, 0.1);
+}
+
+// ─── Convenience: generateRecommendations() ───────────────────────────────────
+
+/**
+ * Generates recommendations from a prompt using Sonnet.
+ */
+export async function generateRecommendationText(
+    prompt: string,
+    systemPrompt: string
+): Promise<GenerateTextResult> {
+    return generateText(prompt, systemPrompt, "SONNET", 1500, 0.2);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function validatePrompt(prompt: string): void {
     if (!prompt || prompt.trim().length === 0) {
         throw new AnthropicClientError("Prompt is empty.", "INVALID_RESPONSE");
     }
-    if (prompt.length > MAX_PROMPT_LENGTH) {
+    if (prompt.length > MAX_PROMPT_CHARS) {
         throw new AnthropicClientError(
-            `Prompt exceeds maximum length (${prompt.length} > ${MAX_PROMPT_LENGTH}).`,
+            `Prompt too long: ${prompt.length} > ${MAX_PROMPT_CHARS} chars.`,
             "PROMPT_TOO_LONG"
         );
     }
-
-    // Never send API keys
     if (/sk-ant-/i.test(prompt)) {
-        throw new AnthropicClientError(
-            "SECURITY: Prompt contains what appears to be an API key.",
-            "INVALID_RESPONSE"
-        );
+        throw new AnthropicClientError("SECURITY: Prompt contains API key pattern.", "INVALID_RESPONSE");
     }
 }
 
+function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+    const prices = COST_TABLE[model] ?? { input: 3.00, output: 15.00 };
+    return (inputTokens / 1_000_000) * prices.input + (outputTokens / 1_000_000) * prices.output;
+}
+
 function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(r => setTimeout(r, ms));
 }

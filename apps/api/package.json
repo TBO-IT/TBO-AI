@@ -5,7 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "test:claude": "doppler run -- tsx src/scripts/testClaude.ts",
+    "test:connection": "doppler run -- tsx src/scripts/testClaudeConnection.ts",
+    "test:narrative": "doppler run -- tsx src/scripts/testNarrative.ts",
+    "test:recommendations": "doppler run -- tsx src/scripts/testRecommendations.ts"
   },
   "keywords": [],
   "author": "",
