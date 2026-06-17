@@ -15,6 +15,8 @@ import { executeQuery } from "./queryExecutionService.js";
 import { summarizeResults } from "./resultSummarizationService.js";
 import { extractInsights } from "./insightEngine.js";
 import { QuestionValidationError } from "../ai/questionTypes.js";
+import { buildDatasetMetadata } from "./metadataService.js";
+import { resolveEntities } from "../ai/entityResolver.js";
 
 export class ChatOrchestrator {
     static async execute(datasetId: string, question: string): Promise<any> {
@@ -27,6 +29,31 @@ export class ChatOrchestrator {
 
         const tempPath = await downloadDataset(dataset.storagePath);
 
+        const metadata =
+            await buildDatasetMetadata(
+                tempPath
+            );
+
+        const entityFilters =
+            resolveEntities(
+                question,
+                metadata
+            );
+
+        console.log(
+            "ENTITY FILTERS:",
+            entityFilters
+        );
+
+        console.log(
+            "DATASET METADATA:",
+            JSON.stringify(
+                metadata,
+                null,
+                2
+            )
+        );
+
         try {
             const schema = await getDatasetSchema(tempPath);
             console.log(`[SCHEMA_COLUMNS] (${schema.length} cols):`, schema.map(c => `${c.column_name}(${c.column_type})`).join(" | "));
@@ -37,6 +64,16 @@ export class ChatOrchestrator {
             // 2. Question Intelligence Gate
             const parsedQuestion = analyzeQuestion(question);
             const validation = validateQuestion(parsedQuestion, semanticLayer);
+
+            parsedQuestion.filters = [
+                ...parsedQuestion.filters,
+                ...entityFilters
+            ];
+
+            console.log(
+                "MERGED FILTERS:",
+                parsedQuestion.filters
+            );
 
             if (!validation.valid) {
                 throw new QuestionValidationError(validation);
@@ -123,6 +160,9 @@ export class ChatOrchestrator {
             if (!sqlValidation.valid) {
                 throw new Error(`Generated SQL failed validation: ${sqlValidation.error}`);
             }
+
+            console.log("FINAL SQL:");
+            console.log(sql);
 
             const queryResults = await executeQuery(sql, tempPath);
 
@@ -234,3 +274,5 @@ Write a concise, executive-grade narrative explaining the findings. Do not hallu
         }
     }
 }
+
+
