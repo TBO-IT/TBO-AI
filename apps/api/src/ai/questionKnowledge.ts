@@ -182,14 +182,96 @@ export const DIMENSION_SYNONYMS: SynonymEntry[] = [
 // Keyword patterns used to detect analytical intent
 
 export const INTENT_SIGNALS = {
-    ROOT_CAUSE: ["why", "reason", "cause", "explain", "decline", "drop", "fell", "fell down", "lost", "decreased"],
-    TREND: ["trend", "over time", "month over month", "mom", "wow", "yoy", "weekly", "monthly", "quarterly", "historically", "growing", "declining", "trajectory"],
-    COMPARISON: ["compare", "versus", "vs", "vs.", "difference between", "contrast", "against", "relative to", "compared to"],
-    RANKING: ["top", "bottom", "best", "worst", "highest", "lowest", "rank", "ranking", "leader", "lagging", "most", "least"],
-    CORRELATION: ["correlation", "correlate", "relationship", "linked", "associated", "drives", "impact of", "effect of"],
-    ANOMALY: ["anomaly", "anomalies", "unusual", "outlier", "outliers", "unexpected", "spike", "dip", "strange"],
-    BREAKDOWN: ["break down", "breakdown", "split by", "split", "segment", "segmented", "by", "across", "per"],
-    SUMMARY: ["overview", "summary", "summarize", "total", "overall", "all", "show me", "what is", "how much", "how many"]
+    /**
+     * CONTRIBUTION — dimension-member attribution queries.
+     * CHECKED BEFORE ROOT_CAUSE in detectIntent().
+     * Must NOT include outcome words (decline/drop) — those appear in contribution questions.
+     */
+    CONTRIBUTION: [
+        "contribut",       // contribution, contributor, contributors, contributed
+        "driver",          // driver, drivers
+        "driving",
+        "drove",
+        "impact",          // impact, impacted, impacting
+        "largest impact",
+        "biggest impact",
+        "most impact",
+        "top contributor",
+        "top negative",
+        "top positive"
+    ],
+
+    /**
+     * ROOT_CAUSE — genuine causal inquiry only.
+     * IMPORTANT: "decline", "drop", "decrease", "increase", "growth" are intentionally
+     * EXCLUDED. Those are outcome words that appear in contribution questions and must
+     * not leak into the ROOT_CAUSE route.
+     */
+    ROOT_CAUSE: [
+        "why did",
+        "why does",
+        "why is ",
+        "why are",
+        "why was",
+        "why were",
+        "root cause",
+        "root-cause",
+        "what caused",
+        "what happened",
+        "what went wrong",
+        "explain the",
+        "explain why",
+        "explain how"
+    ],
+
+    TREND: [
+        "trend", "over time",
+        "month over month", "mom", "wow", "yoy", "qoq",
+        "weekly", "monthly", "quarterly", "annually",
+        "historically", "history",
+        "trajectory", "time series"
+    ],
+
+    COMPARISON: [
+        "compare", "comparison",
+        "versus", " vs ", "vs.",
+        "difference between", "contrast",
+        "against", "relative to", "compared to",
+        "side by side"
+    ],
+
+    RANKING: [
+        "top", "bottom", "best", "worst",
+        "highest", "lowest",
+        "rank", "ranking",
+        "leader", "lagging",
+        "most", "least"
+    ],
+
+    CORRELATION: [
+        "correlation", "correlate",
+        "relationship", "linked", "associated",
+        "impact of", "effect of"
+    ],
+
+    ANOMALY: [
+        "anomaly", "anomalies",
+        "unusual", "outlier", "outliers",
+        "unexpected", "spike", "dip", "strange"
+    ],
+
+    BREAKDOWN: [
+        "break down", "breakdown",
+        "split by", "split",
+        "segment", "segmented",
+        "by", "across", "per"
+    ],
+
+    SUMMARY: [
+        "overview", "summary", "summarize",
+        "total", "overall", "all",
+        "show me", "what is", "how much", "how many"
+    ]
 };
 
 // ─── Time Reference Signals ───────────────────────────────────────────────────

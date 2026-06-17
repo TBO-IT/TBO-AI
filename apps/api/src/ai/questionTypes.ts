@@ -6,6 +6,7 @@ export type QuestionIntent =
     | "ROOT_CAUSE"
     | "TREND"
     | "COMPARISON"
+    | "CONTRIBUTION"
     | "RANKING"
     | "SUMMARY"
     | "BREAKDOWN"

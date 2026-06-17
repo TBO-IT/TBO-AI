@@ -253,31 +253,97 @@ function extractTimeReferences(normalizedQuestion: string): string[] {
 
 // ─── Intent Detection ─────────────────────────────────────────────────────────
 
+/**
+ * Intent Detector — Strict Precedence Cascade
+ *
+ * Replaces the old score-counting approach, which had no ordering guarantees.
+ * The first matching rule wins. Priority order matches the router's route precedence.
+ *
+ * Precedence:
+ *  1. TREND        — time-series / periodicity language
+ *  2. COMPARISON   — side-by-side / "vs" language
+ *  3. CONTRIBUTION — attribution / driver language  ← BEFORE ROOT_CAUSE
+ *  4. ROOT_CAUSE   — genuine causal language only (no outcome words)
+ *  5. RANKING      — top / bottom / best / worst
+ *  6. BREAKDOWN    — split / segment / by dimension
+ *  7. SUMMARY      — default fallback
+ *
+ * CRITICAL: CONTRIBUTION fires before ROOT_CAUSE.
+ * "which hotels contributed most to the decline" must return CONTRIBUTION,
+ * not ROOT_CAUSE, even though it contains the word "decline".
+ */
 function detectIntent(normalizedQuestion: string): QuestionIntent {
-    const scores: Record<QuestionIntent, number> = {
-        ROOT_CAUSE: 0, TREND: 0, COMPARISON: 0, RANKING: 0,
-        CORRELATION: 0, ANOMALY: 0, BREAKDOWN: 0, SUMMARY: 0
-    };
+    const q = normalizedQuestion.toLowerCase();
 
-    for (const [intent, signals] of Object.entries(INTENT_SIGNALS)) {
-        for (const signal of signals) {
-            if (containsPhrase(normalizedQuestion, signal)) {
-                scores[intent as QuestionIntent]++;
-            }
-        }
+    // ── Helper: partial match (for prefix-style signals like "contribut") ───────
+    const hasPartial = (signals: string[]) =>
+        signals.some(s => q.includes(s));
+
+    // ── Helper: phrase match (whole-word / whole-phrase) ───────────────────────
+    const hasPhrase = (signals: string[]) =>
+        signals.some(s => containsPhrase(q, s));
+
+    // ── 1. TREND ──────────────────────────────────────────────────────────────
+    if (hasPhrase(INTENT_SIGNALS.TREND)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: TREND_PHRASE\n  INTENT:       TREND`);
+        return "TREND";
     }
 
-    let maxScore = 0;
-    let bestIntent: QuestionIntent = "SUMMARY";
-
-    for (const [intent, score] of Object.entries(scores)) {
-        if (score > maxScore) {
-            maxScore = score;
-            bestIntent = intent as QuestionIntent;
-        }
+    // ── 2. COMPARISON ─────────────────────────────────────────────────────────
+    if (hasPartial(INTENT_SIGNALS.COMPARISON)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: COMPARISON_KEYWORD\n  INTENT:       COMPARISON`);
+        return "COMPARISON";
     }
 
-    return bestIntent;
+    // ── 3. CONTRIBUTION ───────────────────────────────────────────────────────
+    // MUST be checked BEFORE ROOT_CAUSE.
+    // Contribution questions often contain outcome words ("decline", "drop")
+    // that would falsely match ROOT_CAUSE if ROOT_CAUSE were checked first.
+    if (hasPartial(INTENT_SIGNALS.CONTRIBUTION)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: CONTRIBUTION_KEYWORD\n  INTENT:       CONTRIBUTION`);
+        return "CONTRIBUTION";
+    }
+
+    // ── 4. ROOT_CAUSE ─────────────────────────────────────────────────────────
+    // Only genuine causal markers — "decline", "drop", "decrease" are intentionally
+    // absent from ROOT_CAUSE signals in questionKnowledge.ts.
+    if (hasPartial(INTENT_SIGNALS.ROOT_CAUSE)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: ROOT_CAUSE_KEYWORD\n  INTENT:       ROOT_CAUSE`);
+        return "ROOT_CAUSE";
+    }
+    // Leading "why" — genuine question start, not buried mid-sentence
+    if (q.trim().startsWith("why ")) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: ROOT_CAUSE_LEADING_WHY\n  INTENT:       ROOT_CAUSE`);
+        return "ROOT_CAUSE";
+    }
+
+    // ── 5. RANKING ────────────────────────────────────────────────────────────
+    if (hasPhrase(INTENT_SIGNALS.RANKING)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: RANKING_KEYWORD\n  INTENT:       RANKING`);
+        return "RANKING";
+    }
+
+    // ── 6. ANOMALY ────────────────────────────────────────────────────────────
+    if (hasPhrase(INTENT_SIGNALS.ANOMALY)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: ANOMALY_KEYWORD\n  INTENT:       ANOMALY`);
+        return "ANOMALY";
+    }
+
+    // ── 7. CORRELATION ────────────────────────────────────────────────────────
+    if (hasPhrase(INTENT_SIGNALS.CORRELATION)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: CORRELATION_KEYWORD\n  INTENT:       CORRELATION`);
+        return "CORRELATION";
+    }
+
+    // ── 8. BREAKDOWN ──────────────────────────────────────────────────────────
+    if (hasPhrase(INTENT_SIGNALS.BREAKDOWN)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: BREAKDOWN_KEYWORD\n  INTENT:       BREAKDOWN`);
+        return "BREAKDOWN";
+    }
+
+    // ── 9. SUMMARY (default fallback) ─────────────────────────────────────────
+    console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: DEFAULT_FALLBACK\n  INTENT:       SUMMARY`);
+    return "SUMMARY";
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
