@@ -45,7 +45,7 @@ function buildEntityFilterConditions(
     if (stringCols.length === 0) return "";
 
     const conditions = entityFilters.map(f => {
-        const safe = f.value.replace(/'/g, "''");
+        const safe = String(f.value).replace(/'/g, "''");
         const colChecks = stringCols.map(c => `"${c.column_name}" ILIKE '%${safe}%'`).join(" OR ");
         return `(${colChecks})`;
     });
@@ -134,7 +134,13 @@ export function generateTemplatedSql(
     if (timeReferences.length > 0) {
         const timeCol = semanticLayer.primaryTimeDimension || semanticLayer.availableTimeColumns?.[0];
         if (!timeCol) return null;
-        selectDims += `date_trunc('month', CAST("${timeCol}" AS DATE)) AS month, `;
+        selectDims += `date_trunc(
+    'month',
+    STRPTIME(
+        "${timeCol}",
+        '%m/%d/%Y'
+    )
+) AS month, `;
         groupBy += groupBy ? `, month` : `GROUP BY month`;
     }
 

@@ -33,8 +33,8 @@ export interface QuestionFilter {
     /** SQL comparison operator */
     operator: FilterOperator;
 
-    /** The filter value (e.g. "31-45 days", "Pattaya", "Winning") */
-    value: string;
+    /** The filter value (e.g. "31-45 days", "Pattaya", "Winning", 4, 2024) */
+    value: string | number;
 }
 
 // ─── Parsed Question ──────────────────────────────────────────────────────────

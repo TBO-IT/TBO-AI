@@ -84,8 +84,8 @@ export class ChatOrchestrator {
             let explanation = "";
 
             // Check SQL Cache first
-            const cachedSql = await getCachedSql(semanticLayer.datasetType, question.toLowerCase().trim());
-
+            //const cachedSql = await getCachedSql(semanticLayer.datasetType, question.toLowerCase().trim());
+            const cachedSql = null
             if (cachedSql) {
                 sql = cachedSql;
                 explanation = "Retrieved from SQL cache.";

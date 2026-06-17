@@ -6,7 +6,7 @@ import {
     TIME_SIGNALS
 } from "./questionKnowledge.js";
 import { DIMENSION_REGISTRY } from "./dimensionRegistry.js";
-
+import { buildTimeFilter } from "./timeFilterExtractor.js";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
@@ -72,13 +72,13 @@ function extractApwBucketFilters(question: string): QuestionFilter[] {
 
     // Build a set of patterns for each bucket — both the full form and shorthand
     const bucketPatterns: Array<{ bucket: string; patterns: string[] }> = [
-        { bucket: "< 10 days",  patterns: ["<10days", "<10", "under10"] },
+        { bucket: "< 10 days", patterns: ["<10days", "<10", "under10"] },
         { bucket: "11-30 days", patterns: ["11-30days", "11-30"] },
         { bucket: "31-45 days", patterns: ["31-45days", "31-45"] },
         { bucket: "46-60 days", patterns: ["46-60days", "46-60"] },
         { bucket: "61-90 days", patterns: ["61-90days", "61-90"] },
-        { bucket: "90+ days",   patterns: ["90+days", "90+", "over90", "above90"] },
-        { bucket: "Other",      patterns: ["other"] },
+        { bucket: "90+ days", patterns: ["90+days", "90+", "over90", "above90"] },
+        { bucket: "Other", patterns: ["other"] },
     ];
 
     for (const { bucket, patterns } of bucketPatterns) {
@@ -192,7 +192,13 @@ function extractTimeFilters(normalizedQuestion: string): QuestionFilter[] {
 
     for (const signal of sorted) {
         if (containsPhrase(tempText, signal)) {
-            filters.push({ dimension: "time", operator: "=", value: signal });
+            //filters.push({ dimension: "time", operator: "=", value: signal });
+            const filter =
+                buildTimeFilter(signal);
+
+            if (filter) {
+                filters.push(filter);
+            }
             tempText = tempText.replace(
                 new RegExp(`(?:^|\\s|\\b)${signal}(?:\\s|$|\\b)`, "ig"), " "
             );
@@ -215,13 +221,13 @@ function extractAllFilters(originalQuestion: string, normalizedQuestion: string)
 
     // Collect all already-identified values so named-entity extractor can skip them
     const recognizedValues = new Set([
-        ...apwFilters.map(f => f.value.toLowerCase()),
-        ...statusFilters.map(f => f.value.toLowerCase())
+        ...apwFilters.map(f => String(f.value).toLowerCase()),
+        ...statusFilters.map(f => String(f.value).toLowerCase())
     ]);
 
     // Named entity extractor for open-ended proper nouns (cities, suppliers, etc.)
     const entityFilters = extractNamedEntityFilters(originalQuestion).filter(
-        f => !recognizedValues.has(f.value.toLowerCase())
+        f => !recognizedValues.has(String(f.value).toLowerCase())
     );
 
     return [...apwFilters, ...statusFilters, ...entityFilters];
@@ -282,11 +288,27 @@ function detectIntent(normalizedQuestion: string): QuestionIntent {
 export function analyzeQuestion(question: string): QuestionAnalysis {
     const normalizedQuestion = normalize(question);
 
-    const metrics    = extractMetrics(normalizedQuestion);
+    const metrics = extractMetrics(normalizedQuestion);
     const dimensions = extractDimensions(normalizedQuestion);
-    const filters    = extractAllFilters(question, normalizedQuestion);
-    const timeRefs   = extractTimeReferences(normalizedQuestion);
-    const intent     = detectIntent(normalizedQuestion);
+    //const filters = extractAllFilters(question, normalizedQuestion);
+    const filters = [
+
+        ...extractAllFilters(
+            question,
+            normalizedQuestion
+        ),
+
+        ...extractTimeFilters(
+            question
+        )
+
+    ];
+    console.log(
+        "TIME FILTERS:",
+        extractTimeFilters(question)
+    )
+    const timeRefs = extractTimeReferences(normalizedQuestion);
+    const intent = detectIntent(normalizedQuestion);
 
     const analysis: QuestionAnalysis = {
         metrics,
