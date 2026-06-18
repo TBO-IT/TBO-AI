@@ -18,6 +18,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "../config/models.js";
 import { recordUsage } from "./tokenUsageService.js";
+import { trackClaudeUsage } from "./claudeCostTracker.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,23 @@ export async function generateText(
                 `[CLAUDE_USAGE] model=${model} | in=${inputTokens} | out=${outputTokens} | ` +
                 `cost=$${estimatedCost.toFixed(4)} | latency=${latencyMs}ms`
             );
+
+            console.log(
+                `\n` +
+                `┌─────────────────────────────────────────────────\n` +
+                `│ [TOKEN_COST] Claude API Call Summary\n` +
+                `│  Model:         ${model}\n` +
+                `│  Tier:          ${tier}\n` +
+                `│  Input Tokens:  ${inputTokens.toLocaleString()}\n` +
+                `│  Output Tokens: ${outputTokens.toLocaleString()}\n` +
+                `│  Total Tokens:  ${(inputTokens + outputTokens).toLocaleString()}\n` +
+                `│  Cost:          $${estimatedCost.toFixed(6)}\n` +
+                `│  Latency:       ${latencyMs}ms\n` +
+                `└─────────────────────────────────────────────────`
+            );
+
+            // Track in cost tracker for aggregation & dashboards
+            trackClaudeUsage(model, "CLAUDE_CALL", inputTokens, outputTokens, latencyMs);
 
             // Persist to DB
             await recordUsage(model, "NARRATIVE_GENERATION", inputTokens, outputTokens).catch(() => {});

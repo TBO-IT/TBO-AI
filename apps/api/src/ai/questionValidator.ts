@@ -97,7 +97,7 @@ export function validateQuestion(
         }
 
         // Validate the value against the allowlist (if one exists)
-        if (!isValidFilterValue(filter.dimension, filter.value)) {
+        if (!isValidFilterValue(filter.dimension, String(filter.value))) {
             const validList = dimDef.validValues?.join(", ") ?? "any";
             errors.push(
                 `Invalid filter value '${filter.value}' for dimension '${dimDef.label}'. ` +
@@ -115,10 +115,17 @@ export function validateQuestion(
             errors.push("Root cause analysis requires a specific metric to analyze.");
             missingRootCauseReqs = true;
         }
-        if (parsedQuestion.dimensions.length === 0 && parsedQuestion.filters.length === 0) {
+
+        const hasDimension = parsedQuestion.dimensions.length > 0;
+        const hasFilter = parsedQuestion.filters.length > 0;
+        const hasInvestigationTarget = hasDimension || hasFilter;
+
+        if (!hasInvestigationTarget) {
             errors.push("Root cause analysis requires a dimension or specific filter to investigate.");
             missingRootCauseReqs = true;
         }
+
+        console.log(`[ROOT_CAUSE_VALIDATION] hasDimension=${hasDimension} | hasFilter=${hasFilter} | dimensions=[${parsedQuestion.dimensions.join(",")}] | mergedFilters=[${parsedQuestion.filters.map(f => `${f.dimension}=${f.value}`).join(",")}] | valid=${!missingRootCauseReqs}`);
 
         if (missingRootCauseReqs) {
             suggestions.push("For root cause questions, please specify the metric and the specific area (e.g., 'Why did bookings drop in Paris?').");

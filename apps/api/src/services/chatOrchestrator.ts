@@ -7,7 +7,7 @@ import { analyzeQuestion } from "../ai/questionAnalyzer.js";
 import { validateQuestion } from "../ai/questionValidator.js";
 import { routeQuery } from "../ai/queryRouter.js";
 import { getCachedSql, setCachedSql } from "./queryCacheService.js";
-import { getCachedNarrative, setCachedNarrative } from "./narrativeCacheService.js";
+import { getCachedNarrative, setCachedNarrative, invalidateNarrativeCache } from "./narrativeCacheService.js";
 import { ClaudeOutputSchemas, GeneratedQueryResponse } from "../ai/outputSchemas.js";
 import { validateSqlSyntax } from "../ai/sqlValidator.js";
 import { executeQuery } from "./queryExecutionService.js";
@@ -23,7 +23,7 @@ import { buildClaudeInputPack } from "./claudeInputContract.js";
 import { classifyResponseSource, detectNarrativeRequest, detectRecommendationRequest, ResponseSource } from "./claudeRequestDetector.js";
 import { routeClaude } from "./claudeRouter.js";
 import { generateNarrative } from "./narrativeGenerator.js";
-import { generateRecommendations } from "./recommendationGenerator.js";
+import { generateRecommendations, Recommendation } from "./recommendationGenerator.js";
 import { startTimer, logCache, logRootCause, logClaude } from "./analyticsLogger.js";
 import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContradiction } from "./analyticsMetrics.js";
 
@@ -33,6 +33,14 @@ export class ChatOrchestrator {
         let routeType = "";
 
         console.log(`\n[QUESTION] "${question}"`);
+
+        // ── 0. Early Recommendation Detection ─────────────────────────────
+        // Runs BEFORE route selection. Recommendation queries require a
+        // RootCausePack, so they must be forced to ROOT_CAUSE regardless of
+        // what the question analyzer classifies (e.g. SUMMARY).
+        const isRecommendation = detectRecommendationRequest(question);
+        const isNarrative = detectNarrativeRequest(question);
+        console.log(`[PRE_ROUTER] recommendation=${isRecommendation} | narrative=${isNarrative}`);
 
         // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
         const dataset = await getDataset(datasetId);
@@ -65,16 +73,23 @@ export class ChatOrchestrator {
 
             // ── 2. Question Analysis ───────────────────────────────────────────
             const parsedQuestion = analyzeQuestion(question);
-            const validation = validateQuestion(parsedQuestion, semanticLayer);
+            
+            const rawFilters = [...parsedQuestion.filters];
+            const resolvedFilters = [...entityFilters];
 
             // Merge entity filters and deduplicate to prevent comparison engine
             // from seeing dozens of duplicate suppliername/destination entries.
-            parsedQuestion.filters = dedupeFilters([
+            // This MUST happen before validation so the validator sees the investigation target.
+            const mergedFilters = dedupeFilters([
                 ...parsedQuestion.filters,
                 ...entityFilters
             ]);
+            parsedQuestion.filters = mergedFilters;
 
             console.log("MERGED FILTERS:", parsedQuestion.filters);
+            console.log(`[PRE_VALIDATION] dimensions=${parsedQuestion.dimensions.length} | rawFilters=${rawFilters.length} | resolvedFilters=${resolvedFilters.length} | mergedFilters=${mergedFilters.length}`);
+
+            const validation = validateQuestion(parsedQuestion, semanticLayer);
 
             if (!validation.valid) {
                 throw new QuestionValidationError(validation);
@@ -101,14 +116,28 @@ export class ChatOrchestrator {
 
                 console.log("ROUTING:", JSON.stringify(routing, null, 2));
 
+                // ── Route Override: Recommendation / Narrative → ROOT_CAUSE ───
+                // Recommendation and narrative queries need a RootCausePack.
+                // If the analyzer classified this as SUMMARY/TEMPLATE/etc.,
+                // override to ROOT_CAUSE so the full analytical pipeline runs.
+                if ((isRecommendation || isNarrative) && routeType !== "ROOT_CAUSE" && routeType !== "LLM") {
+                    console.log(
+                        `[PRE_ROUTER] ${isRecommendation ? "Recommendation" : "Narrative"} query detected — ` +
+                        `overriding route from ${routeType} to ROOT_CAUSE`
+                    );
+                    routeType = "ROOT_CAUSE";
+                }
+
                 // ── TEMPLATE ───────────────────────────────────────────────────
-                if (routing.route === "TEMPLATE") {
+                // Check routeType (override-aware) for flow control.
+                // Check routing.route for TS discriminated union narrowing (.sql access).
+                if (routeType === "TEMPLATE" && routing.route === "TEMPLATE") {
                     sql = routing.sql;
                     explanation = routing.explanation;
                 }
 
                 // ── TREND ──────────────────────────────────────────────────────
-                else if (routing.route === "TREND") {
+                else if (routeType === "TREND") {
                     const result = generateTrendSql(parsedQuestion, semanticLayer);
                     if (result) {
                         sql = result.sql;
@@ -120,7 +149,7 @@ export class ChatOrchestrator {
                 }
 
                 // ── COMPARISON ─────────────────────────────────────────────────
-                else if (routing.route === "COMPARISON") {
+                else if (routeType === "COMPARISON") {
                     const result = generateComparisonSql(parsedQuestion, semanticLayer);
                     if (result) {
                         sql = result.sql;
@@ -132,7 +161,7 @@ export class ChatOrchestrator {
                 }
 
                 // ── CONTRIBUTION ───────────────────────────────────────────────
-                else if (routing.route === "CONTRIBUTION") {
+                else if (routeType === "CONTRIBUTION") {
                     const result = generateContributionSql(parsedQuestion, semanticLayer);
                     if (result) {
                         sql = result.sql;
@@ -146,7 +175,7 @@ export class ChatOrchestrator {
                 // ── ROOT_CAUSE ─────────────────────────────────────────────────
                 // Root cause uses the Contribution Engine for SQL across multiple
                 // dimensions, then wraps the results in the Root Cause Pack Builder.
-                else if (routing.route === "ROOT_CAUSE") {
+                else if (routeType === "ROOT_CAUSE") {
                     const availableDims = ["hotel", "chain", "supplier", "apw"].filter(dim => 
                         semanticLayer.dimensions.some(d => d.toLowerCase() === dim.toLowerCase())
                     );
@@ -272,6 +301,8 @@ export class ChatOrchestrator {
                 claudeInputPack = buildClaudeInputPack(question, rootCausePack);
             }
 
+            console.log(`[CLASSIFIER] responseSource=${responseSource} | isRecommendation=${isRecommendation} | isNarrative=${isNarrative}`);
+
             console.log(`[ROUTE_DECISION] routeType=${routeType} | responseSource=${responseSource} | hasRootCausePack=${!!rootCausePack} | hasClaudeInputPack=${!!claudeInputPack}`);
 
             if (rootCausePack?.contradictionDetected) {
@@ -283,7 +314,8 @@ export class ChatOrchestrator {
             const cachedNarrative = await getCachedNarrative(
                 datasetId,
                 question.toLowerCase().trim(),
-                sql
+                sql,
+                responseSource
             );
 
             if (cachedNarrative) {
@@ -297,23 +329,29 @@ export class ChatOrchestrator {
 
                 // ── CLAUDE_RECOMMENDATION: Sonnet generates recommendations ───
                 if (responseSource === "CLAUDE_RECOMMENDATION" && claudeInputPack) {
+                    console.log(`🔥 RECOMMENDATION_BRANCH_ENTERED`);
                     console.log(`[NARRATIVE_REQUEST] source=CLAUDE_RECOMMENDATION | routing to recommendationGenerator`);
 
                     const routerDecision = routeClaude("ROOT_CAUSE", "RECOMMENDATIONS", true);
                     console.log(`[CLAUDE_ROUTER] tier=${routerDecision.tier} | op=${routerDecision.operation} | shouldCall=${routerDecision.shouldCallClaude}`);
 
                     try {
+                        console.log(`🔥 CALLING_SONNET`);
+                        console.log(`[ROUTE_CLAUDE_INPUT] analyticsRoute=ROOT_CAUSE | operation=RECOMMENDATIONS | hasValidPack=true`);
                         console.log(`[CLAUDE_CALL] operation=RECOMMENDATIONS | tier=SONNET`);
                         const recResult = await generateRecommendations(claudeInputPack);
+                        console.log(`🔥 SONNET_RETURNED`);
+                        console.log(`[ROUTE_CLAUDE_OUTPUT] tier=${routerDecision.tier} | operation=${routerDecision.operation} | shouldCallClaude=${routerDecision.shouldCallClaude}`);
                         recommendations = recResult.recommendations;
 
                         console.log(`[CLAUDE_RESPONSE] recommendations=${recommendations.length} | claudeUsed=${recResult.claudeUsed} | claudeFailed=${recResult.claudeFailed}`);
 
-                        // Also generate a narrative to accompany recommendations
-                        const narResult = await generateNarrative(claudeInputPack);
-                        narrative = narResult.rawNarrative;
-                        console.log(`[NARRATIVE_GENERATOR] claudeUsed=${narResult.claudeUsed} | chars=${narrative.length}`);
-                        console.log(`[NARRATIVE_VALUE_SET] source=CLAUDE_RECOMMENDATION | preview="${narrative.slice(0, 100)}"`);
+                        // Build narrative from recommendation results.
+                        // DO NOT call generateNarrative() here — it uses HAIKU,
+                        // which would override the SONNET tier and produce a
+                        // narrative-style response instead of recommendations.
+                        narrative = buildRecommendationNarrative(recommendations, claudeInputPack);
+                        console.log(`[NARRATIVE_VALUE_SET] source=CLAUDE_RECOMMENDATION | generator=generateRecommendations | preview="${narrative.slice(0, 100)}"`);
                     } catch (err: any) {
                         console.error(`[CLAUDE_CALL] FAILED: ${err.message}`);
                         narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
@@ -329,6 +367,7 @@ export class ChatOrchestrator {
                     console.log(`[CLAUDE_ROUTER] tier=${routerDecision.tier} | op=${routerDecision.operation} | shouldCall=${routerDecision.shouldCallClaude}`);
 
                     try {
+                        console.log(`[ROUTE_CLAUDE_INPUT] analyticsRoute=ROOT_CAUSE | operation=NARRATIVE_GENERATION | hasValidPack=true`);
                         console.log(`[CLAUDE_CALL] operation=NARRATIVE_GENERATION | tier=HAIKU`);
                         const narResult = await generateNarrative(claudeInputPack);
                         narrative = narResult.rawNarrative;
@@ -351,7 +390,7 @@ export class ChatOrchestrator {
                     console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS | preview="${narrative.slice(0, 100)}"`);
                 }
 
-                await setCachedNarrative(datasetId, question.toLowerCase().trim(), sql, narrative);
+                await setCachedNarrative(datasetId, question.toLowerCase().trim(), sql, narrative, responseSource);
             }
 
             // ── 8. Record metrics ─────────────────────────────────────────────
@@ -456,4 +495,40 @@ function buildDeterministicNarrative(
     }
 
     return narrative;
+}
+
+// ─── Recommendation narrative builder ────────────────────────────────────────
+
+/**
+ * Formats Sonnet-generated recommendations into a user-facing narrative.
+ * Used in the CLAUDE_RECOMMENDATION branch to avoid a redundant
+ * generateNarrative() → HAIKU call.
+ */
+function buildRecommendationNarrative(
+    recommendations: Recommendation[],
+    pack: { question: string; metricName: string }
+): string {
+    if (recommendations.length === 0) {
+        return "No actionable recommendations could be generated from the available data.";
+    }
+
+    let narrative = `**Strategic Recommendations for: "${pack.question}"**\n\n`;
+    narrative += `Based on root cause analysis of ${pack.metricName}:\n\n`;
+
+    for (let i = 0; i < recommendations.length; i++) {
+        const rec = recommendations[i];
+        narrative += `**${i + 1}. ${rec.action}**\n`;
+        if (rec.rationale) {
+            narrative += `${rec.rationale}\n`;
+        }
+        if (rec.supportingEvidence.length > 0) {
+            narrative += `Evidence: ${rec.supportingEvidence.join("; ")}\n`;
+        }
+        if (rec.expectedImpact) {
+            narrative += `Expected impact: ${rec.expectedImpact}\n`;
+        }
+        narrative += "\n";
+    }
+
+    return narrative.trim();
 }
