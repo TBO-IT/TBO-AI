@@ -82,6 +82,22 @@ export function buildClaudeInputPack(
         `validation=${claudePack.validationStatus}`
     );
 
+    if (!executivePack.primaryTarget) {
+        console.warn(`[CLAUDE_CONTRACT_WARN] actionabilityTargets (primaryTarget) is empty`);
+    }
+    if (!executivePack.recommendations?.length) {
+        console.warn(`[CLAUDE_CONTRACT_WARN] recommendationTargets is empty`);
+    }
+    if (!executivePack.drilldowns?.length) {
+        console.warn(`[CLAUDE_CONTRACT_WARN] drilldownInsights is empty`);
+    }
+    if (!executivePack.competitiveGaps?.length && claudePack.question.toLowerCase().includes("beat")) {
+        console.warn(`[CLAUDE_CONTRACT_WARN] competitiveGaps is empty for a competitor query`);
+    }
+
+    console.log("[CLAUDE_INPUT_PACK_DUMP]");
+    console.log(JSON.stringify(claudePack, null, 2));
+
     return claudePack;
 }
 

@@ -38,12 +38,14 @@ function FormattedText({ text }: { text: string }) {
 // ── Section Renderer ──
 
 const SECTION_ORDER = [
+    "PRIMARY TARGET",
+    "SUPPORTING TARGETS",
+    "RECOMMENDED ACTIONS",
     "EXECUTIVE SUMMARY",
     "KEY TAKEAWAY",
     "TOP RISKS",
     "TOP OPPORTUNITIES",
     "KEY TRADEOFFS",
-    "RECOMMENDED ACTIONS",
     "EXPECTED IMPACT",
     "SCENARIO OUTLOOK",
     "CONFIDENCE ASSESSMENT",
@@ -51,12 +53,14 @@ const SECTION_ORDER = [
 ];
 
 const SECTION_ICONS: Record<string, string> = {
+    "PRIMARY TARGET": "🎯",
+    "SUPPORTING TARGETS": "📌",
+    "RECOMMENDED ACTIONS": "✅",
     "EXECUTIVE SUMMARY": "📊",
     "KEY TAKEAWAY": "💡",
     "TOP RISKS": "🔴",
     "TOP OPPORTUNITIES": "🟢",
     "KEY TRADEOFFS": "⚖️",
-    "RECOMMENDED ACTIONS": "🎯",
     "EXPECTED IMPACT": "📈",
     "SCENARIO OUTLOOK": "🔮",
     "CONFIDENCE ASSESSMENT": "🛡️",
@@ -101,7 +105,7 @@ function parseExecutiveResponse(raw: string): Record<string, string> | null {
 function SectionCard({ title, content, defaultOpen = false }: { title: string; content: string; defaultOpen?: boolean }) {
     const [open, setOpen] = useState(defaultOpen);
     const icon = SECTION_ICONS[title] || "📌";
-    const alwaysOpen = title === "EXECUTIVE SUMMARY" || title === "KEY TAKEAWAY" || title === "LEADERSHIP MESSAGE";
+    const alwaysOpen = title === "PRIMARY TARGET" || title === "EXECUTIVE SUMMARY" || title === "KEY TAKEAWAY" || title === "LEADERSHIP MESSAGE";
 
     return (
         <div className={cn(
@@ -214,13 +218,32 @@ export default function CopilotPage() {
                 timestamp: new Date(),
             };
             setMessages(prev => [...prev, assistantMessage]);
-        } catch {
+        } catch (err: any) {
+            console.error("[PIPELINE_FATAL]", err);
+            
+            let errorContent = "Internal Processing Error: An unknown error occurred.";
+            
+            if (err.response?.status === 422 && err.response?.data?.errors) {
+                const validationErrors = err.response.data.errors.join("\n- ");
+                const suggestions = err.response.data.suggestions?.join("\n- ") || "";
+                errorContent = `**Question Validation Failed**\n\n- ${validationErrors}`;
+                if (suggestions) {
+                    errorContent += `\n\n**Suggestions:**\n- ${suggestions}`;
+                }
+            } else if (err.response?.data?.detail) {
+                errorContent = `Internal Processing Error:\n${err.response.data.detail}`;
+            } else if (err.response?.data?.error) {
+                errorContent = `Internal Processing Error:\n${err.response.data.error}`;
+            } else if (err.message) {
+                errorContent = `Internal Processing Error:\n${err.message}`;
+            }
+
             setMessages(prev => [
                 ...prev,
                 {
                     id: (Date.now() + 1).toString(),
                     role: "assistant",
-                    content: "I wasn't able to process that request. Please try rephrasing your question.",
+                    content: errorContent,
                     timestamp: new Date(),
                 },
             ]);
@@ -383,7 +406,7 @@ export default function CopilotPage() {
                                         {SECTION_ORDER.map(section => {
                                             const content = msg.sections![section];
                                             if (!content) return null;
-                                            const alwaysOpen = section === "EXECUTIVE SUMMARY" || section === "KEY TAKEAWAY" || section === "LEADERSHIP MESSAGE";
+                                            const alwaysOpen = section === "PRIMARY TARGET" || section === "EXECUTIVE SUMMARY" || section === "KEY TAKEAWAY" || section === "LEADERSHIP MESSAGE";
                                             return (
                                                 <SectionCard
                                                     key={section}

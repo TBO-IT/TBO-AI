@@ -102,15 +102,15 @@ export function routeClaude(
         return decide("NONE", null, 0, `Route "${analyticsRoute}" is deterministic. Claude blocked.`);
     }
 
-    // 3. ROOT_CAUSE with an operation and a valid pack → route to appropriate tier
-    if (analyticsRoute === "ROOT_CAUSE" && hasValidPack) {
+    // 3. ROOT_CAUSE or COMPETITOR_STRATEGY with an operation and a valid pack → route to appropriate tier
+    if ((analyticsRoute === "ROOT_CAUSE" || analyticsRoute === "COMPETITOR_STRATEGY") && hasValidPack) {
         const tier = selectClaudeTier(operation);
-        return decide(tier, operation, TOKEN_BUDGETS[operation] ?? 1000, `ROOT_CAUSE + ${operation} → ${tier}`);
+        return decide(tier, operation, TOKEN_BUDGETS[operation] ?? 1000, `${analyticsRoute} + ${operation} → ${tier}`);
     }
 
-    // 4. ROOT_CAUSE without a valid pack → no Claude
-    if (analyticsRoute === "ROOT_CAUSE" && !hasValidPack) {
-        return decide("NONE", null, 0, "ROOT_CAUSE but no valid pack available. Claude skipped.");
+    // 4. ROOT_CAUSE / COMPETITOR_STRATEGY without a valid pack → no Claude
+    if ((analyticsRoute === "ROOT_CAUSE" || analyticsRoute === "COMPETITOR_STRATEGY") && !hasValidPack) {
+        return decide("NONE", null, 0, `${analyticsRoute} but no valid pack available. Claude skipped.`);
     }
 
     // 5. LLM fallback or other → use Sonnet

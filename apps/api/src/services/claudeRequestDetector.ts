@@ -57,7 +57,12 @@ const RECOMMENDATION_PATTERNS: RegExp[] = [
     /\bfix(es|ing)?\b/i,
     /\bopportunit(y|ies)\b/i,
     /\bmitigat(e|ion)\b/i,
-    /\baddress(ing)?\b/i
+    /\baddress(ing)?\b/i,
+    /\bfocus\s+on\b/i,
+    /\bprioritiz(e|ing|ation)\b/i,
+    /\bwin\s+against\b/i,
+    /\bbeat\b/i,
+    /\bcompet(e|ing|itive)\b/i
 ];
 
 // ─── Public API ───────────────────────────────────────────────────────────────

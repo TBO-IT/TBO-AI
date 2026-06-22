@@ -29,7 +29,7 @@ router.post("/", async (req, res) => {
         console.error("Error in chat execution pipeline:", error);
         return res.status(500).json({
             error: "An error occurred while processing your query.",
-            detail: error.message || String(error)
+            detail: error.stack || error.message || String(error)
         });
     }
 });

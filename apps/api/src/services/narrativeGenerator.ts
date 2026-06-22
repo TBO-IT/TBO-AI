@@ -35,18 +35,17 @@ export interface NarrativeResult {
 }
 
 const SYSTEM_PROMPT =
-    `You are an Executive Analytics Copilot writing a C-suite briefing memo for a travel industry executive.
+    `You are an elite Revenue Operator and Analytics Copilot for a travel industry executive.
 
 RULES:
 1. Use ONLY the facts provided in the user message.
 2. NEVER invent numbers that are not in the data.
 3. NEVER invent entity names that are not in the data.
-4. NEVER fabricate recommendations — just explain the findings.
+4. NEVER fabricate recommendations — use the exact attributed targets provided.
 5. If a contradiction is noted, explain it FIRST before any other analysis.
-6. Use concise, executive business language. No technical jargon.
-7. Never reference SQL, databases, queries, DuckDB, or technical infrastructure.
-8. Structure: Executive Summary -> Key Takeaway -> Top Risks -> Top Opportunities -> Key Tradeoffs -> Recommended Actions -> Expected Impact -> Scenario Outlook -> Confidence Assessment -> Leadership Message.
-9. Keep the total response under 800 words.`;
+6. Use concise, direct, action-oriented business language. No fluff.
+7. Structure: PRIMARY TARGET -> SUPPORTING TARGETS -> RECOMMENDED ACTIONS -> EXECUTIVE SUMMARY -> KEY TAKEAWAY -> TOP RISKS -> TOP OPPORTUNITIES -> SCENARIO OUTLOOK.
+8. Keep the total response under 800 words.`;
 
 // ─── Public: buildNarrativePrompt ─────────────────────────────────────────────
 
@@ -57,20 +56,15 @@ RULES:
 export function buildNarrativePrompt(pack: ClaudeInputPack): string {
     const ep = pack.executivePack;
 
-    // Formatting rules to enforce V3 quality
+    // Formatting rules to enforce Actionability
     const rules = [
-        "Write an executive briefing intended for the CEO / CRO / Commercial Leadership.",
-        "You are the VP of Revenue Strategy.",
-        "Do not repeat metrics unnecessarily.",
-        "Focus on business significance and prioritize material findings.",
-        "Explain why leadership should care.",
-        "Surface tradeoffs, future risks, and growth opportunities explicitly.",
-        "Explicitly reference recommended actions, expected impacts, and scenarios.",
-        "Rule 1: Answer 'What happened?' within the first paragraph.",
-        "Rule 2: Answer 'Why does it matter?' within the second paragraph.",
-        "Rule 3: Answer 'What should leadership do?' before ending.",
-        "Rule 4: Never list more than 3 Risks, 3 Opportunities, 3 Tradeoffs, or 3 Actions.",
-        "Rule 5: Always identify the single most important insight."
+        "Write an action-oriented briefing for the CEO / CRO.",
+        "You are the Revenue Operator.",
+        "Rule 1: Always list the PRIMARY TARGET and SUPPORTING TARGETS first.",
+        "Rule 2: List the RECOMMENDED ACTIONS immediately after the targets.",
+        "Rule 3: Answer 'What happened?' in the EXECUTIVE SUMMARY.",
+        "Rule 4: Focus on business impact and actionable next steps.",
+        "Rule 5: Never invent data or targets."
     ].join("\n");
 
     const risksText = ep.topRisks.slice(0, 3)
@@ -97,8 +91,16 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
         .map(s => `  • [${s.type}]: ${s.description}`)
         .join("\n");
 
-    const impactsText = ep.actionImpacts.slice(0, 3)
-        .map(i => `  • ${i.action} (${i.confidence} confidence): ${i.expectedImpact}`)
+    const primaryTargetText = ep.primaryTarget 
+        ? `${ep.primaryTarget.name} (${ep.primaryTarget.entityType}): ${ep.primaryTarget.reason}`
+        : "None identified.";
+
+    const supportingTargetsText = ep.drilldowns.slice(0, 3)
+        .map(d => `  • ${d.name} (${d.entityType}): ${d.reason}`)
+        .join("\n");
+
+    const newActionsText = ep.recommendations.slice(0, 3)
+        .map(r => `  • ${r.targetName}: ${r.expectedImpact}`)
         .join("\n");
 
     const warnings = pack.validationErrors.length > 0 
@@ -116,20 +118,20 @@ HEADLINE: ${ep.headline}
 EXECUTIVE SUMMARY: ${ep.executiveSummary}
 KEY TAKEAWAY: ${ep.keyTakeaway}
 
+PRIMARY TARGET:
+  • ${primaryTargetText}
+
+SUPPORTING TARGETS:
+${supportingTargetsText || "  • None identified."}
+
 TOP RISKS:
 ${risksText || "  • None identified."}
 
 TOP OPPORTUNITIES:
 ${oppsText || "  • None identified."}
 
-KEY TRADEOFFS:
-${tradeoffsText || "  • None identified."}
-
 RECOMMENDED ACTIONS:
-${actionsText || "  • None identified."}
-
-EXPECTED IMPACT:
-${impactsText || "  • None identified."}
+${newActionsText || "  • None identified."}
 
 SCENARIO OUTLOOK:
 ${scenariosText || "  • None identified."}
@@ -147,6 +149,15 @@ Write the executive briefing following these rules:
 ${rules}
 
 Structure the output EXACTLY like this:
+PRIMARY TARGET
+[text]
+
+SUPPORTING TARGETS
+[text]
+
+RECOMMENDED ACTIONS
+[text]
+
 EXECUTIVE SUMMARY
 [text]
 
@@ -159,22 +170,7 @@ TOP RISKS
 TOP OPPORTUNITIES
 [text]
 
-KEY TRADEOFFS
-[text]
-
-RECOMMENDED ACTIONS
-[text]
-
-EXPECTED IMPACT
-[text]
-
 SCENARIO OUTLOOK
-[text]
-
-CONFIDENCE ASSESSMENT
-[text]
-
-LEADERSHIP MESSAGE
 [text]
 
 Use ONLY the facts above. Do NOT invent data.`;
@@ -237,16 +233,18 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
     const scenarios = ep.scenarios.map(s => `  • [${s.type}] ${s.description}`).join("\n");
     const impacts = ep.actionImpacts.map(i => `  • ${i.action}: ${i.expectedImpact}`).join("\n");
 
-    let raw = `EXECUTIVE SUMMARY\n${ep.headline} ${ep.executiveSummary}\n\n`;
+    const primaryTarget = ep.primaryTarget ? `  • ${ep.primaryTarget.name} (${ep.primaryTarget.entityType}): ${ep.primaryTarget.reason}` : "  • None identified";
+    const supportingTargets = ep.drilldowns.map(d => `  • ${d.name} (${d.entityType}): ${d.reason}`).join("\n");
+    const newActions = ep.recommendations.map(r => `  • ${r.targetName}: ${r.expectedImpact}`).join("\n");
+
+    let raw = `PRIMARY TARGET\n${primaryTarget}\n\n`;
+    raw += `SUPPORTING TARGETS\n${supportingTargets || "  • None identified"}\n\n`;
+    raw += `RECOMMENDED ACTIONS\n${newActions || "  • None identified"}\n\n`;
+    raw += `EXECUTIVE SUMMARY\n${ep.headline} ${ep.executiveSummary}\n\n`;
     raw += `KEY TAKEAWAY\n${ep.keyTakeaway}\n\n`;
     raw += `TOP RISKS\n${risks || "  • None identified"}\n\n`;
     raw += `TOP OPPORTUNITIES\n${opps || "  • None identified"}\n\n`;
-    raw += `KEY TRADEOFFS\n${tradeoffs || "  • None identified"}\n\n`;
-    raw += `RECOMMENDED ACTIONS\n${actions || "  • None identified"}\n\n`;
-    raw += `EXPECTED IMPACT\n${impacts || "  • None identified"}\n\n`;
-    raw += `SCENARIO OUTLOOK\n${scenarios || "  • None identified"}\n\n`;
-    raw += `CONFIDENCE ASSESSMENT\n${ep.confidenceAssessment.rationale}\n\n`;
-    raw += `LEADERSHIP MESSAGE\n${ep.leadershipMessage}\n`;
+    raw += `SCENARIO OUTLOOK\n${scenarios || "  • None identified"}\n`;
 
     return {
         executiveSummary: ep.executiveSummary,

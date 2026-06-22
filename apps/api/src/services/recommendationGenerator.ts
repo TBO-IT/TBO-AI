@@ -32,23 +32,42 @@ export interface RecommendationResult {
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT =
-    `You are a Strategic Travel Industry Consultant advising a C-level executive.
+export const SYSTEM_PROMPT = `You are a Chief Revenue Officer (CRO) of a global travel technology company.
+Your role is to transition raw analytics into high-leverage Decision Intelligence.
+
+CORE DIRECTIVE:
+You must answer: "What should leadership focus on?"
+Do not act like a junior analyst summarizing data.
+Act like an executive prioritizing the highest ROI actions.
 
 RULES:
-1. Use ONLY the data facts provided. NEVER invent numbers or entity names.
-2. Generate 3-5 actionable recommendations.
-3. Each recommendation MUST reference specific entities and numbers from the data.
-4. Focus on strategic business actions, not technical fixes.
+1. Always prioritize VULNERABILITIES (negative contributors) and competitive gaps.
+2. If asked what to fix or how to compete, do NOT recommend scaling strengths.
+3. Be direct, authoritative, and action-oriented.
+4. Recommendations MUST be linked to the explicitly provided TARGETS.
 
-FORMAT each recommendation EXACTLY as:
+TARGET-FIRST RESPONSE FORMAT:
+Your response MUST exactly follow this structure:
 
-ACTION: [one-line actionable directive]
-RATIONALE: [why this matters, citing specific data]
-EVIDENCE: [comma-separated data points from the provided facts]
-IMPACT: [expected business outcome]
+PRIMARY TARGET
+Entity: [Target Name]
+Reason: [Why we are focusing on this]
+Business Impact: [Metric Delta]
+Expected ROI: [Expected Impact text]
 
-Separate each recommendation with a blank line.`;
+RECOMMENDED ACTIONS
+[Action 1 derived from Drilldowns]
+[Action 2 derived from Drilldowns]
+...
+
+DRIVERS (Supporting Evidence)
+[Brief summary of other drivers]
+
+RISKS
+[Brief summary of risks]
+
+NARRATIVE
+[2-3 sentences of executive narrative summarizing the strategy]`;
 
 // ─── Public: buildRecommendationPrompt ────────────────────────────────────────
 
@@ -58,47 +77,51 @@ Separate each recommendation with a blank line.`;
 export function buildRecommendationPrompt(pack: ClaudeInputPack): string {
     const ep = pack.executivePack;
 
-    const implicationsText = ep.strategicImplications.map(i => `  • [${i.severity}] ${i.implication}`).join("\n");
-    const actionsText = ep.topActions.map(a => `  • [${a.priority}] ${a.action}: ${a.rationale}`).join("\n");
-    const oppsText = ep.topOpportunities.map(o => `  • [${o.severity}] ${o.title}: ${o.explanation}`).join("\n");
-    const tradeoffsText = ep.tradeoffs.map(t => `  • ${t.title}: ${t.explanation}`).join("\n");
-    const scenariosText = ep.scenarios.map(s => `  • [${s.type}]: ${s.description}`).join("\n");
-    const impactsText = ep.actionImpacts.map(i => `  • ${i.action} (${i.confidence}): ${i.expectedImpact}`).join("\n");
+    // Phase 5 Enforcement: Prioritize V4 Targets
+    const competitiveGapsText = (ep.competitiveGaps ?? []).map(g => `  • Target: ${g.dimension} | Gap: ${g.gap.toFixed(2)} | Action: ${g.recommendation}`).join("\n");
+    const v4RecommendationsText = (ep.recommendations ?? []).map(r => `  • [${r.targetType}] ${r.targetName}: ${r.expectedImpact}`).join("\n");
+    const actionabilityTargetsText = (ep.actionabilityTargets ?? []).map(t => `  • [${t.entityType}] ${t.name}: ${t.reason}`).join("\n");
+    
+    const primaryTargetText = ep.primaryTarget 
+        ? `${ep.primaryTarget.name} (${ep.primaryTarget.entityType}): ${ep.primaryTarget.reason}`
+        : "None identified.";
+
+    const supportingTargetsText = (ep.drilldowns ?? []).map(d => `  • ${d.name} (${d.entityType}): ${d.reason}`).join("\n");
+    
+    // Supporting Evidence (Legacy/Raw Context)
+    const risksText = (ep.topRisks ?? []).map(r => `  • ${r.title}: ${r.description}`).join("\n");
+    const oppsText = (ep.topOpportunities ?? []).map(o => `  • ${o.title}: ${o.description}`).join("\n");
+    const driversText = (ep.topDrivers ?? []).map(d => `  • ${d.dimension}: ${d.contributor} (${d.metricDelta} pts)`).join("\n");
 
     return `USER QUESTION: "${pack.question}"
 METRIC: ${pack.metricName}
 OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' points (' + pack.metricChange.direction + ')' : 'N/A'}
-PERIOD: Prior → Current
 
-EXECUTIVE SUMMARY: ${ep.executiveSummary}
-LEADERSHIP MESSAGE: ${ep.leadershipMessage}
-KEY TAKEAWAY: ${ep.keyTakeaway}
+PRIORITY 1: PRIMARY TARGET
+  • ${primaryTargetText}
 
-STRATEGIC IMPLICATIONS:
-${implicationsText || "  • None identified."}
+PRIORITY 2: RECOMMENDATION TARGETS
+${v4RecommendationsText || "  • None identified."}
+${competitiveGapsText ? "\nCOMPETITIVE GAPS (Treat as Recommendation Targets):\n" + competitiveGapsText : ""}
 
-KEY TRADEOFFS:
-${tradeoffsText || "  • None identified."}
+PRIORITY 3: ACTIONABILITY TARGETS
+${actionabilityTargetsText || "  • None identified."}
 
-RECOMMENDED ACTIONS TO PRIORITIZE:
-${actionsText || "  • None identified."}
+PRIORITY 4: DRILLDOWN INSIGHTS
+${supportingTargetsText || "  • None identified."}
 
-EXPECTED IMPACT:
-${impactsText || "  • None identified."}
-
-SCENARIO OUTLOOK:
-${scenariosText || "  • None identified."}
-
-KEY OPPORTUNITIES TO SCALE:
-${oppsText || "  • None identified."}
-
-CONFIDENCE ASSESSMENT:
-${ep.confidenceAssessment.rationale}
+SUPPORTING EVIDENCE (Do NOT generate recommendations directly from these unless explicitly linked to Priority 1-4 targets):
+RISKS:
+${risksText || "  • None"}
+OPPORTUNITIES:
+${oppsText || "  • None"}
+TOP DRIVERS:
+${driversText || "  • None"}
 
 TOTAL DATA POINTS: ${pack.totalRows}
 
 Generate 3 strategic recommendations based ONLY on the data above.
-Focus on action-oriented output, prioritizing the actions and strategic implications provided.
+Focus on action-oriented output, prioritizing the explicitly provided TARGETS AND GAPS.
 Format output strictly adhering to action-oriented structures.`;
 }
 
@@ -193,15 +216,18 @@ export function buildDeterministicRecommendations(pack: ClaudeInputPack): Recomm
         return { recommendations: recs, claudeUsed: false, claudeFailed: true };
     }
 
-    const actions = pack.executivePack.topActions.slice(0, 3);
+    // Fallback using V4 recommendations first
+    const v4Actions = (pack.executivePack.recommendations ?? []).slice(0, 3);
     
-    for (const a of actions) {
-        recs.push({
-            action: a.action,
-            rationale: a.rationale,
-            supportingEvidence: [`Priority: ${a.priority}`, `Entity: ${a.relatedEntity}`],
-            expectedImpact: `Address strategic priority and mitigate/scale associated impact.`
-        });
+    if (v4Actions.length > 0) {
+        for (const a of v4Actions) {
+            recs.push({
+                action: a.expectedImpact, // using expectedImpact as action proxy for deterministic
+                rationale: a.reason,
+                supportingEvidence: [`Target: ${a.targetName}`, `Type: ${a.targetType}`],
+                expectedImpact: a.expectedImpact
+            });
+        }
     }
 
     // Fallback if no actions generated

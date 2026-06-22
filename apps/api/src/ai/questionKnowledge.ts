@@ -221,7 +221,12 @@ export const INTENT_SIGNALS = {
         "what went wrong",
         "explain the",
         "explain why",
-        "explain how"
+        "explain how",
+        "focus on",
+        "prioritize",
+        "fix",
+        "improve",
+        "action"
     ],
 
     TREND: [
@@ -271,6 +276,15 @@ export const INTENT_SIGNALS = {
         "overview", "summary", "summarize",
         "total", "overall", "all",
         "show me", "what is", "how much", "how many"
+    ],
+    COMPETITOR_STRATEGY: [
+        "beat",
+        "outperform",
+        "win against",
+        "compete against",
+        "competitor strategy",
+        "versus competitor",
+        "vs competitor"
     ]
 };
 

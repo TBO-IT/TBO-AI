@@ -138,6 +138,14 @@ export function validateQuestion(
         `VALIDATED_FILTERS=[${parsedQuestion.filters.map(f => `${f.dimension}=${f.value}`).join(",")}]`
     );
 
+    if (errors.length > 0) {
+        console.error(
+            `[VALIDATION_REJECT] question="${parsedQuestion.originalQuestion}" | ` +
+            `intent=${parsedQuestion.intent} | ` +
+            `errors=[${errors.join(" | ")}]`
+        );
+    }
+
     return {
         valid: errors.length === 0,
         errors,

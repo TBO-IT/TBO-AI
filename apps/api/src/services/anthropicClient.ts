@@ -19,6 +19,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "../config/models.js";
 import { recordUsage } from "./tokenUsageService.js";
 import { trackClaudeUsage } from "./claudeCostTracker.js";
+import { logClaude } from "./analyticsLogger.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,9 @@ export async function generateText(
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
+            console.log("\n[CLAUDE_SYSTEM_PROMPT]\n" + systemPrompt);
+            console.log("\n[CLAUDE_USER_PROMPT]\n" + prompt);
+
             const client = getClient();
             const response = await client.messages.create({
                 model,
@@ -140,6 +144,16 @@ export async function generateText(
             if (!textBlock || textBlock.type !== "text") {
                 throw new AnthropicClientError("Claude returned no text.", "INVALID_RESPONSE");
             }
+
+            console.log("\n[CLAUDE_RESPONSE]\n" + textBlock.text);
+
+            logClaude(`Claude API Call: ${model}`, latencyMs, {
+                tier,
+                inputTokens,
+                outputTokens,
+                totalTokens: inputTokens + outputTokens,
+                cost: estimatedCost
+            });
 
             // Log usage
             console.log(

@@ -10,6 +10,10 @@ import { ActionImpact, generateActionImpacts } from "./actionImpactEngine.js";
 import { Tradeoff, detectTradeoffs } from "./tradeoffEngine.js";
 import { DependencyInsight, detectDependencies } from "./dependencyEngine.js";
 import { ConfidenceAssessment, assessConfidence } from "./confidenceEngine.js";
+import { ActionabilityTarget } from "./actionabilityEngine.js";
+import { DrilldownInsight } from "./entityDrilldownEngine.js";
+import { RecommendationTarget } from "./recommendationAttributionEngine.js";
+import { CompetitiveGap } from "../analytics/competitorStrategyEngine.js";
 
 export interface ExecutivePack {
     headline: string;
@@ -27,6 +31,12 @@ export interface ExecutivePack {
     dependencies: DependencyInsight[];
     confidenceAssessment: ConfidenceAssessment;
     leadershipMessage: string;
+
+    actionabilityTargets: ActionabilityTarget[];
+    primaryTarget?: ActionabilityTarget;
+    drilldowns: DrilldownInsight[];
+    recommendations: RecommendationTarget[];
+    competitiveGaps?: CompetitiveGap[];
 }
 
 function generateHeadline(metricName: string, metricChange: MetricChange | null): string {
@@ -152,6 +162,10 @@ export function buildExecutivePack(pack: RootCausePack): ExecutivePack {
         tradeoffs,
         dependencies,
         confidenceAssessment,
-        leadershipMessage
+        leadershipMessage,
+        actionabilityTargets: pack.actionabilityTargets || [],
+        primaryTarget: pack.primaryTarget,
+        drilldowns: pack.drilldowns || [],
+        recommendations: pack.recommendations || []
     };
 }

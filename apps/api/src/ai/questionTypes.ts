@@ -11,7 +11,8 @@ export type QuestionIntent =
     | "SUMMARY"
     | "BREAKDOWN"
     | "CORRELATION"
-    | "ANOMALY";
+    | "ANOMALY"
+    | "COMPETITOR_STRATEGY";
 
 // ─── Component Extraction Types ───────────────────────────────────────────────
 

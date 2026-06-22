@@ -9,6 +9,7 @@ export type RouteType =
     | "TREND"
     | "COMPARISON"
     | "CONTRIBUTION"
+    | "COMPETITOR_STRATEGY"
     | "ROOT_CAUSE"
     | "LLM";
 
@@ -17,6 +18,7 @@ export type RoutingDecision =
     | { route: "TREND";        type: "TREND";        explanation: string }
     | { route: "COMPARISON";   type: "COMPARISON";   explanation: string }
     | { route: "CONTRIBUTION"; type: "CONTRIBUTION"; explanation: string }
+    | { route: "COMPETITOR_STRATEGY"; type: "COMPETITOR_STRATEGY"; explanation: string }
     | { route: "ROOT_CAUSE";   type: "ROOT_CAUSE";   explanation: string }
     | { route: "LLM";          type: "LLM";          explanation: string };
 
@@ -91,7 +93,12 @@ const ROOT_CAUSE_SIGNALS: string[] = [
     "what went wrong",
     "explain the",
     "explain why",
-    "explain how"
+    "explain how",
+    "focus on",
+    "prioritize",
+    "fix",
+    "improve",
+    "action"
 ];
 
 /**
@@ -256,6 +263,16 @@ export function routeQuery(
             route: "COMPARISON",
             type: "COMPARISON",
             explanation: "Routed to Comparison Engine — deterministic side-by-side SQL generation."
+        };
+    }
+
+    // ── Priority 2.5: COMPETITOR STRATEGY ──────────────────────────────────────
+    if (intent === "COMPETITOR_STRATEGY") {
+        logRouterDecision(analysis, "COMPETITOR_STRATEGY", "COMPETITOR_INTENT");
+        return {
+            route: "COMPETITOR_STRATEGY",
+            type: "COMPETITOR_STRATEGY",
+            explanation: "Routed to Competitor Strategy Engine — deterministic gap analysis."
         };
     }
 

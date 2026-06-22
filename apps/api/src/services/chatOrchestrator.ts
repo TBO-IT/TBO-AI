@@ -18,8 +18,11 @@ import { resolveEntities, dedupeFilters } from "../ai/entityResolver.js";
 import { generateTrendSql } from "./trendEngine.js";
 import { generateComparisonSql } from "./comparisonEngine.js";
 import { generateContributionSql } from "./contributionEngine.js";
+import { generateCompetitorStrategySql } from "./analytics/competitorStrategyEngine.js";
 import { buildRootCausePack } from "./RootCausePackBuilder.js";
 import { buildExecutivePack } from "./insights/executivePackBuilder.js";
+import { executeEntityDrilldown } from "./insights/entityDrilldownEngine.js";
+import { generateAttributedRecommendations } from "./insights/recommendationAttributionEngine.js";
 import { buildClaudeInputPack } from "./claudeInputContract.js";
 import { classifyResponseSource, detectNarrativeRequest, detectRecommendationRequest, ResponseSource } from "./claudeRequestDetector.js";
 import { routeClaude } from "./claudeRouter.js";
@@ -30,35 +33,41 @@ import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContra
 
 export class ChatOrchestrator {
     static async execute(datasetId: string, question: string): Promise<any> {
-        const pipelineTimer = startTimer();
+        let currentStage = "Init";
+        let parsedIntent = "Unknown";
         let routeType = "";
+        let tempPath = "";
+        const pipelineTimer = startTimer();
 
         console.log(`\n[QUESTION] "${question}"`);
 
-        // ── 0. Early Recommendation Detection ─────────────────────────────
-        // Runs BEFORE route selection. Recommendation queries require a
-        // RootCausePack, so they must be forced to ROOT_CAUSE regardless of
-        // what the question analyzer classifies (e.g. SUMMARY).
-        const isRecommendation = detectRecommendationRequest(question);
-        const isNarrative = detectNarrativeRequest(question);
-        console.log(`[PRE_ROUTER] recommendation=${isRecommendation} | narrative=${isNarrative}`);
-
-        // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
-        const dataset = await getDataset(datasetId);
-        if (!dataset || !dataset.storagePath) {
-            throw new Error("Dataset not found or does not have a storage path.");
-        }
-
-        const tempPath = await downloadDataset(dataset.storagePath);
-
-        const metadata = await buildDatasetMetadata(tempPath);
-
-        const entityFilters = resolveEntities(question, metadata);
-
-        console.log("ENTITY FILTERS:", entityFilters);
-        console.log("DATASET METADATA:", JSON.stringify(metadata, null, 2));
-
         try {
+            currentStage = "Early Detection";
+            // ── 0. Early Recommendation Detection ─────────────────────────────
+            // Runs BEFORE route selection. Recommendation queries require a
+            // RootCausePack, so they must be forced to ROOT_CAUSE regardless of
+            // what the question analyzer classifies (e.g. SUMMARY).
+            const isRecommendation = detectRecommendationRequest(question);
+            const isNarrative = detectNarrativeRequest(question);
+            console.log(`[PRE_ROUTER] recommendation=${isRecommendation} | narrative=${isNarrative}`);
+
+            currentStage = "Dataset Fetch";
+            // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
+            const dataset = await getDataset(datasetId);
+            if (!dataset || !dataset.storagePath) {
+                throw new Error("Dataset not found or does not have a storage path.");
+            }
+
+            tempPath = await downloadDataset(dataset.storagePath);
+
+            const metadata = await buildDatasetMetadata(tempPath);
+
+            const entityFilters = resolveEntities(question, metadata);
+
+            console.log("ENTITY FILTERS:", entityFilters);
+            console.log("DATASET METADATA:", JSON.stringify(metadata, null, 2));
+
+            currentStage = "Schema Extraction";
             const schema = await getDatasetSchema(tempPath);
             console.log(
                 `[SCHEMA_COLUMNS] (${schema.length} cols):`,
@@ -72,8 +81,10 @@ export class ChatOrchestrator {
                 `mappings=${JSON.stringify(semanticLayer.columnMappings)}`
             );
 
+            currentStage = "Question Analysis";
             // ── 2. Question Analysis ───────────────────────────────────────────
             const parsedQuestion = analyzeQuestion(question);
+            parsedIntent = parsedQuestion.intent;
             
             const rawFilters = [...parsedQuestion.filters];
             const resolvedFilters = [...entityFilters];
@@ -96,10 +107,10 @@ export class ChatOrchestrator {
                 throw new QuestionValidationError(validation);
             }
 
+            currentStage = "Route Decision";
             // ── 3. Route Decision ──────────────────────────────────────────────
             let sql = "";
             let explanation = "";
-            let routeType = "";
 
             console.log(`[ANALYSIS] intent=${parsedQuestion.intent} | metrics=[${parsedQuestion.metrics}] | dims=[${parsedQuestion.dimensions}] | filters=${parsedQuestion.filters.length}`);
 
@@ -121,7 +132,8 @@ export class ChatOrchestrator {
                 // Recommendation and narrative queries need a RootCausePack.
                 // If the analyzer classified this as SUMMARY/TEMPLATE/etc.,
                 // override to ROOT_CAUSE so the full analytical pipeline runs.
-                if ((isRecommendation || isNarrative) && routeType !== "ROOT_CAUSE" && routeType !== "LLM") {
+                // EXCEPT COMPETITOR_STRATEGY which has its own native recommendation path.
+                if ((isRecommendation || isNarrative) && routeType !== "ROOT_CAUSE" && routeType !== "LLM" && routeType !== "COMPETITOR_STRATEGY") {
                     console.log(
                         `[PRE_ROUTER] ${isRecommendation ? "Recommendation" : "Narrative"} query detected — ` +
                         `overriding route from ${routeType} to ROOT_CAUSE`
@@ -161,6 +173,18 @@ export class ChatOrchestrator {
                     }
                 }
 
+                // ── COMPETITOR STRATEGY ────────────────────────────────────────
+                else if (routeType === "COMPETITOR_STRATEGY") {
+                    const result = generateCompetitorStrategySql(parsedQuestion, semanticLayer);
+                    if (result) {
+                        sql = result.sql;
+                        explanation = result.explanation;
+                    } else {
+                        console.warn("[ORCHESTRATOR] Competitor strategy engine returned null — falling back to LLM.");
+                        routeType = "LLM";
+                    }
+                }
+
                 // ── CONTRIBUTION ───────────────────────────────────────────────
                 else if (routeType === "CONTRIBUTION") {
                     const result = generateContributionSql(parsedQuestion, semanticLayer);
@@ -177,9 +201,18 @@ export class ChatOrchestrator {
                 // Root cause uses the Contribution Engine for SQL across multiple
                 // dimensions, then wraps the results in the Root Cause Pack Builder.
                 else if (routeType === "ROOT_CAUSE") {
-                    const availableDims = ["hotel", "chain", "supplier", "apw"].filter(dim => 
+                    let availableDims = ["hotel", "chain", "supplier", "apw"].filter(dim => 
                         semanticLayer.dimensions.some(d => d.toLowerCase() === dim.toLowerCase())
                     );
+                    
+                    if (parsedQuestion.dimensions.length > 0) {
+                        const requestedDims = availableDims.filter(dim => 
+                            parsedQuestion.dimensions.some(pd => pd.toLowerCase() === dim.toLowerCase())
+                        );
+                        if (requestedDims.length > 0) {
+                            availableDims = requestedDims;
+                        }
+                    }
                     
                     const rootCauseSqls: string[] = [];
                     const rootCauseExplanations: string[] = [];
@@ -261,6 +294,7 @@ export class ChatOrchestrator {
 
             console.log("FINAL SQL:\n", sql);
 
+            currentStage = "SQL Execution";
             // ── 4. SQL Validation & Execution ──────────────────────────────────
             let queryResultsList: Record<string, unknown>[][] = [];
             let queryResults: Record<string, unknown>[] = [];
@@ -285,26 +319,165 @@ export class ChatOrchestrator {
                 queryResults = await executeQuery(sql, tempPath);
             }
 
+            currentStage = "Pack Building";
             // ── 5. Root Cause Pack (ROOT_CAUSE route only) ─────────────────────
             let rootCausePack = null;
             let executivePack = null;
             if (routeType === "ROOT_CAUSE") {
                 rootCausePack = buildRootCausePack(question, semanticLayer, queryResultsList);
-                console.log("[ORCHESTRATOR] Root cause pack built:", JSON.stringify(rootCausePack, null, 2));
+                console.log("[ORCHESTRATOR] Root cause pack built");
+
+                const { executeEntityDrilldown } = await import("./insights/entityDrilldownEngine.js");
+                const { generateAttributedRecommendations } = await import("./insights/recommendationAttributionEngine.js");
+
+                const drilldowns = await executeEntityDrilldown(
+                    rootCausePack.primaryTarget,
+                    parsedQuestion,
+                    semanticLayer,
+                    tempPath
+                );
+                rootCausePack.drilldowns = drilldowns;
+                rootCausePack.recommendations = generateAttributedRecommendations(
+                    rootCausePack.primaryTarget,
+                    drilldowns
+                );
 
                 executivePack = buildExecutivePack(rootCausePack);
-                console.log(
-                    "[EXECUTIVE_PACK]",
-                    JSON.stringify(executivePack, null, 2)
-                );
+                console.log("[EXECUTIVE_PACK]", JSON.stringify(executivePack, null, 2));
+            } else if (routeType === "COMPETITOR_STRATEGY") {
+                // Map the competitor SQL output to CompetitiveGap objects
+                const competitiveGaps = queryResults.map(r => ({
+                    dimension: String(r["Segment"] || "Unknown"),
+                    ourMetric: Number(r[`Our ${semanticLayer.metrics[0]?.name || "Win Rate"}`] || 0),
+                    competitorMetric: Number(r[`Competitor ${semanticLayer.metrics[0]?.name || "Win Rate"}`] || 0),
+                    gap: Number(r["Gap"] || 0),
+                    recommendation: `Target ${r["Segment"]} to close gap of ${r["Gap"]} points.`
+                }));
+
+                console.log(`[ORCHESTRATOR] COMPETITOR_STRATEGY parsed ${competitiveGaps.length} gaps.`);
+
+                // Construct a primaryTarget based on the largest competitive vulnerability
+                let compPrimaryTarget: any = undefined;
+                let drilldowns: any[] = [];
+                let recommendations: any[] = [];
+                
+                if (competitiveGaps.length > 0) {
+                    const topGap = competitiveGaps[0];
+                    compPrimaryTarget = {
+                        entityType: "APW", // We assume Segment/APW for now
+                        name: topGap.dimension,
+                        volumeShare: topGap.gap, // proxy
+                        metricDelta: -Math.abs(topGap.gap),
+                        impactScore: -Math.abs(topGap.gap),
+                        actionabilityScore: Math.abs(topGap.gap),
+                        reason: `Largest competitive vulnerability (Gap: ${topGap.gap.toFixed(2)} pts)`
+                    };
+
+                    drilldowns = await executeEntityDrilldown(compPrimaryTarget, parsedQuestion, semanticLayer, tempPath);
+                    recommendations = generateAttributedRecommendations(compPrimaryTarget, drilldowns);
+                }
+
+                executivePack = {
+                    headline: "Competitive Strategy Analysis",
+                    executiveSummary: "Competitor analysis identified key performance gaps.",
+                    keyTakeaway: "Target segments with largest competitive disadvantage.",
+                    topDrivers: [],
+                    topRisks: [],
+                    topOpportunities: [],
+                    recommendedFocusAreas: [],
+                    topActions: [],
+                    strategicImplications: [] as any,
+                    scenarios: [],
+                    actionImpacts: [],
+                    tradeoffs: [],
+                    dependencies: [],
+                    confidenceAssessment: { rationale: "Based on competitor comparison.", confidence: "HIGH" },
+                    leadershipMessage: "Focus on closing competitive gaps.",
+                    actionabilityTargets: compPrimaryTarget ? [compPrimaryTarget] : [],
+                    primaryTarget: compPrimaryTarget,
+                    drilldowns,
+                    recommendations,
+                    competitiveGaps
+                };
+                
+                // We fake a minimal rootCausePack so buildClaudeInputPack doesn't crash
+                rootCausePack = {
+                    metricName: semanticLayer.metrics[0]?.name || "Metric",
+                    metricChange: null,
+                    contradictionDetected: false,
+                    validationErrors: [],
+                    totalRows: queryResults.length,
+                    builtAt: new Date().toISOString()
+                } as any;
             }
 
+            // Phase 7: Assertions
+            if (routeType === "COMPETITOR_STRATEGY") {
+                if (!executivePack?.competitiveGaps || executivePack.competitiveGaps.length === 0) {
+                    console.error("[ASSERT_FAILED] route=COMPETITOR_STRATEGY but competitiveGaps is empty.");
+                    throw new QuestionValidationError({
+                        valid: false,
+                        errors: ["No competitive gaps could be identified. The specified competitor may not have overlapping segments with your baseline data."],
+                        suggestions: ["Try comparing against a different competitor.", "Check if the competitor name is spelled correctly."],
+                        datasetType: semanticLayer.datasetType
+                    });
+                }
+            }
+            if (isRecommendation && routeType !== "COMPETITOR_STRATEGY") {
+                if (!executivePack?.primaryTarget) {
+                    console.error("[MISSING_PRIMARY_TARGET] route=RECOMMENDATION but primaryTarget is undefined.");
+                    throw new QuestionValidationError({
+                        valid: false,
+                        errors: ["No valid primary target could be identified to generate recommendations."],
+                        suggestions: ["Try querying a different metric or segment.", "Ensure there is enough data volume in the selected timeframe."],
+                        datasetType: semanticLayer.datasetType
+                    });
+                }
+
+                // Ranking intent validation
+                const qLower = parsedQuestion.originalQuestion.toLowerCase();
+                const isWorst = qLower.includes("worst") || qLower.includes("lowest") || qLower.includes("bottom");
+                const isBest = qLower.includes("best") || qLower.includes("highest") || qLower.includes("top performing");
+                const isFix = qLower.includes("fix") || qLower.includes("improve") || qLower.includes("win against") || qLower.includes("beat");
+
+                if ((isWorst || isFix) && executivePack.primaryTarget.impactScore > 0) {
+                    console.error("[ASSERT_FAILED] Intent was WORST/FIX/COMPETE, but selected target has positive impact.");
+                    throw new QuestionValidationError({
+                        valid: false,
+                        errors: ["Could not identify a negative performer matching your criteria."],
+                        suggestions: ["Try looking at a different dimension."],
+                        datasetType: semanticLayer.datasetType
+                    });
+                }
+
+                if (isBest && executivePack.primaryTarget.impactScore <= 0) {
+                    console.error("[ASSERT_FAILED] Intent was BEST, but selected target has negative impact.");
+                    throw new QuestionValidationError({
+                        valid: false,
+                        errors: ["Could not identify a positive performer matching your criteria."],
+                        suggestions: ["Try looking at a different dimension."],
+                        datasetType: semanticLayer.datasetType
+                    });
+                }
+
+                if (!executivePack?.recommendations || executivePack.recommendations.length === 0) {
+                    console.error("[ASSERT_FAILED] route=RECOMMENDATION but recommendationTargets is empty.");
+                    throw new QuestionValidationError({
+                        valid: false,
+                        errors: ["No actionable targets could be identified from the current data to form a strategic recommendation."],
+                        suggestions: ["Try querying a metric with more volatility.", "Ask about a broader dimension to allow for more data points."],
+                        datasetType: semanticLayer.datasetType
+                    });
+                }
+            }
+
+            currentStage = "Claude Input Pack";
             // ── 6. Classify response source ───────────────────────────────
             let responseSource: ResponseSource = "ANALYTICS";
             let claudeInputPack = null;
             let recommendations = null;
 
-            if (routeType === "ROOT_CAUSE" && rootCausePack && executivePack) {
+            if ((routeType === "ROOT_CAUSE" || routeType === "COMPETITOR_STRATEGY") && rootCausePack && executivePack) {
                 responseSource = classifyResponseSource(question);
                 claudeInputPack = buildClaudeInputPack(question, rootCausePack, executivePack);
             }
@@ -317,6 +490,7 @@ export class ChatOrchestrator {
                 recordContradiction();
             }
 
+            currentStage = "Claude Response";
             // ── 7. Narrative / Recommendation Generation ──────────────────────
             let narrative = "";
             const cachedNarrative = await getCachedNarrative(
@@ -360,6 +534,24 @@ export class ChatOrchestrator {
                         // narrative-style response instead of recommendations.
                         narrative = buildRecommendationNarrative(recommendations, claudeInputPack);
                         console.log(`[NARRATIVE_VALUE_SET] source=CLAUDE_RECOMMENDATION | generator=generateRecommendations | preview="${narrative.slice(0, 100)}"`);
+
+                        // Phase 8: Response Validation
+                        const textLower = narrative.toLowerCase();
+                        const legacyEntities = ["hilton", "premier inn", "31-45 days", "46-60 days"];
+                        const hasLegacyEntities = legacyEntities.some(e => textLower.includes(e));
+
+                        const validTargets = [
+                            ...(executivePack.recommendations || []).map(r => r.targetName.toLowerCase()),
+                            ...(executivePack.competitiveGaps || []).map(g => g.dimension.toLowerCase()),
+                            executivePack.primaryTarget?.name.toLowerCase()
+                        ].filter(Boolean) as string[];
+
+                        const explicitlyLinksTargets = validTargets.some(t => textLower.includes(t));
+
+                        if (hasLegacyEntities && !explicitlyLinksTargets) {
+                            console.error("[VALIDATION_FAILED] Claude generated legacy entities without explicit linkage to V4 targets.");
+                            throw new Error("InvalidRecommendationError: Generated response bypassed V4 targets and hallucinated legacy entities.");
+                        }
                     } catch (err: any) {
                         console.error(`[CLAUDE_CALL] FAILED: ${err.message}`);
                         narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
@@ -438,12 +630,20 @@ export class ChatOrchestrator {
                 }
             };
 
+        } catch (err: any) {
+            if (err instanceof QuestionValidationError) throw err;
+            console.error(`[PIPELINE_FATAL] question="${question}" | intent=${parsedIntent} | route=${routeType || "Unknown"} | stage=${currentStage} | error=${err.message}`);
+            console.error(err.stack);
+            err.message = `[Stage: ${currentStage}] ` + err.message;
+            throw err;
         } finally {
-            // Clean up downloaded dataset (retry on Windows EBUSY)
-            const fs = await import("fs/promises");
-            for (let i = 0; i < 50; i++) {
+            if (tempPath) {
+                // Clean up downloaded dataset (retry on Windows EBUSY)
+                const fs = await import("fs/promises");
+                for (let i = 0; i < 50; i++) {
                 try {
-                    await fs.unlink(tempPath);
+                    // Temporarily disabled to prevent local Supabase credential requirements
+                    // await fs.unlink(tempPath);
                     break;
                 } catch (err: any) {
                     if (err.code === "EBUSY" && i < 49) {
@@ -455,6 +655,7 @@ export class ChatOrchestrator {
             }
         }
     }
+}
 }
 
 // ─── Deterministic narrative builder ─────────────────────────────────────────

@@ -3,6 +3,9 @@ import { validateRootCausePack } from "./RootCausePackValidator.js";
 import { PrioritizedInsight, prioritizeInsights } from "./insights/insightPrioritizer.js";
 import { ExecutiveRisk, detectRisks } from "./insights/riskEngine.js";
 import { ExecutiveOpportunity, detectOpportunities } from "./insights/opportunityEngine.js";
+import { ActionabilityTarget, calculateActionabilityTargets, DecisionIntent } from "./insights/actionabilityEngine.js";
+import { DrilldownInsight } from "./insights/entityDrilldownEngine.js";
+import { RecommendationTarget } from "./insights/recommendationAttributionEngine.js";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ContributorEntry {
@@ -45,6 +48,11 @@ export interface RootCausePack {
     priorityDrivers: PrioritizedInsight[];
     risks: ExecutiveRisk[];
     opportunities: ExecutiveOpportunity[];
+
+    actionabilityTargets?: ActionabilityTarget[];
+    primaryTarget?: ActionabilityTarget;
+    drilldowns?: DrilldownInsight[];
+    recommendations?: RecommendationTarget[];
 
     affectedHotels: ContributorEntry[];
     affectedChains: ContributorEntry[];
@@ -361,6 +369,7 @@ export function buildRootCausePack(
         priorityDrivers,
         risks,
         opportunities,
+        actionabilityTargets: [],
         affectedHotels,
         affectedChains,
         affectedSuppliers,
@@ -369,6 +378,34 @@ export function buildRootCausePack(
         totalRows,
         builtAt: new Date().toISOString()
     };
+
+    // Calculate actionability
+    const allContributorsWithType = [
+        ...affectedHotels.map(e => ({ entry: e, type: "HOTEL" as const })),
+        ...affectedChains.map(e => ({ entry: e, type: "CHAIN" as const })),
+        ...affectedSuppliers.map(e => ({ entry: e, type: "SUPPLIER" as const })),
+        ...affectedAPWBuckets.map(e => ({ entry: e, type: "APW" as const }))
+    ];
+
+    let intent = DecisionIntent.EXPLAIN;
+    const qLower = question.toLowerCase();
+    
+    if (qLower.includes("win against") || qLower.includes("beat") || qLower.includes("outperform") || qLower.includes("competitor")) {
+        intent = DecisionIntent.COMPETE;
+    } else if (qLower.includes("fix") || qLower.includes("worst") || qLower.includes("lowest") || qLower.includes("bottom")) {
+        intent = DecisionIntent.FIX;
+    } else if (qLower.includes("improve")) {
+        intent = DecisionIntent.IMPROVE;
+    } else if (qLower.includes("focus on") || qLower.includes("prioritize")) {
+        intent = DecisionIntent.PRIORITIZE;
+    } else if (qLower.includes("expand") || qLower.includes("scale") || qLower.includes("best") || qLower.includes("highest")) {
+        intent = DecisionIntent.EXPAND;
+    } else if (qLower.includes("protect") || qLower.includes("defend") || qLower.includes("risk")) {
+        intent = DecisionIntent.PROTECT;
+    }
+
+    pack.actionabilityTargets = calculateActionabilityTargets(allContributorsWithType, intent);
+    pack.primaryTarget = pack.actionabilityTargets.length > 0 ? pack.actionabilityTargets[0] : undefined;
 
     // Validate the pack to catch any lingering attribution bugs
     pack.validationErrors = validateRootCausePack(pack);

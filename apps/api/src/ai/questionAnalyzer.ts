@@ -304,6 +304,12 @@ function detectIntent(normalizedQuestion: string): QuestionIntent {
         return "TREND";
     }
 
+    // ── 1.5 COMPETITOR_STRATEGY ───────────────────────────────────────────────
+    if (hasPartial(INTENT_SIGNALS.COMPETITOR_STRATEGY)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: COMPETITOR_KEYWORD\n  INTENT:       COMPETITOR_STRATEGY`);
+        return "COMPETITOR_STRATEGY";
+    }
+
     // ── 2. COMPARISON ─────────────────────────────────────────────────────────
     if (hasPartial(INTENT_SIGNALS.COMPARISON)) {
         console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: COMPARISON_KEYWORD\n  INTENT:       COMPARISON`);
