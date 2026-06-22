@@ -12,6 +12,7 @@ import datasetRoutes from "./routes/dataset.js";
 import chatRoutes from "./routes/chat.js";
 import metricsRoutes from "./routes/metrics.js";
 import testRouter from "./routes/test.js";
+import reportRoutes from "./routes/reports.js";
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ app.use("/test", testRouter);
 app.use("/api", meRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/auth", authRoutes);
+app.use("/reports", reportRoutes);
 
 app.get("/", (req, res) => {
     res.json({ message: "Hello from api" })

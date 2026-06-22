@@ -1,61 +1,81 @@
 import {
-  SignedIn,
-  SignedOut,
-  SignIn,
-  useAuth,
+    SignedIn,
+    SignedOut,
+    SignIn,
+    useAuth,
 } from "@clerk/clerk-react";
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { setupAuthInterceptor } from "./api/authInterceptor";
+import { ThemeProvider } from "./context/ThemeContext";
 import AppLayout from "./layouts/AppLayout";
-import ChatPage from "./pages/ChatPage";
+
+// ── Pages ──
+import CopilotPage from "./pages/CopilotPage";
 import UploadPage from "./pages/UploadPage";
 import DatasetsPage from "./pages/DatasetsPage";
+import ReportsPage from "./pages/ReportsPage";
+import ReportDetailPage from "./pages/ReportDetailPage";
+import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
 
+// ── Query Client ──
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 5 * 60 * 1000,     // 5 minutes
+            retry: 2,
+            refetchOnWindowFocus: false,
+        },
+    },
+});
+
 function AppContent() {
-  const { getToken } = useAuth();
+    const { getToken } = useAuth();
 
-  useEffect(() => {
-    setupAuthInterceptor(getToken);
-  }, [getToken]);
+    useEffect(() => {
+        setupAuthInterceptor(getToken);
+    }, [getToken]);
 
-  return (
-    <BrowserRouter>
-      <SignedOut>
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
-          <SignIn routing="hash" />
-        </div>
-      </SignedOut>
+    return (
+        <BrowserRouter>
+            <SignedOut>
+                <div className="min-h-screen flex items-center justify-center bg-[#0a0e1a]">
+                    <SignIn routing="hash" />
+                </div>
+            </SignedOut>
 
-      <SignedIn>
-        <Routes>
-          {/* Main Layout containing application routes */}
-          <Route element={<AppLayout />}>
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/upload" element={<UploadPage />} />
-            <Route path="/datasets" element={<DatasetsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            
-            {/* Redirect root path to chat */}
-            <Route path="/" element={<Navigate to="/chat" replace />} />
-            
-            {/* Catch-all route redirecting back to chat */}
-            <Route path="*" element={<Navigate to="/chat" replace />} />
-          </Route>
-        </Routes>
-      </SignedIn>
-    </BrowserRouter>
-  );
+            <SignedIn>
+                <Routes>
+                    <Route element={<AppLayout />}>
+                        <Route path="/copilot" element={<CopilotPage />} />
+                        <Route path="/datasets" element={<DatasetsPage />} />
+                        <Route path="/datasets/upload" element={<UploadPage />} />
+                        <Route path="/reports" element={<ReportsPage />} />
+                        <Route path="/reports/:id" element={<ReportDetailPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/profile" element={<ProfilePage />} />
+
+                        {/* Redirects */}
+                        <Route path="/" element={<Navigate to="/copilot" replace />} />
+                        <Route path="/chat" element={<Navigate to="/copilot" replace />} />
+                        <Route path="/upload" element={<Navigate to="/datasets/upload" replace />} />
+                        <Route path="*" element={<Navigate to="/copilot" replace />} />
+                    </Route>
+                </Routes>
+            </SignedIn>
+        </BrowserRouter>
+    );
 }
 
-import { ThemeProvider } from "./context/ThemeContext";
-
 export default function App() {
-  return (
-    <ThemeProvider>
-      <AppContent />
-    </ThemeProvider>
-  );
+    return (
+        <QueryClientProvider client={queryClient}>
+            <ThemeProvider>
+                <AppContent />
+            </ThemeProvider>
+        </QueryClientProvider>
+    );
 }
