@@ -8,49 +8,37 @@
 // Usage: doppler run -- tsx src/scripts/testNarrative.ts
 // ───────────────────────────────────────────────────────────────────────────────
 
-import { ClaudeInputPack } from "../services/claudeInputContract.js";
+import { buildSemanticLayer } from "../ai/semanticLayer.js";
+import { buildRootCausePack } from "../services/RootCausePackBuilder.js";
+import { buildExecutivePack } from "../services/insights/executivePackBuilder.js";
+import { buildClaudeInputPack } from "../services/claudeInputContract.js";
 import { buildNarrativePrompt, generateNarrative } from "../services/narrativeGenerator.js";
 
-// ─── Fake Pack ────────────────────────────────────────────────────────────────
+const MOCK_SCHEMA = [
+    { column_name: "hotel", column_type: "VARCHAR" },
+    { column_name: "chain", column_type: "VARCHAR" },
+    { column_name: "suppliername", column_type: "VARCHAR" },
+    { column_name: "scraped_date", column_type: "VARCHAR" },
+    { column_name: "Win", column_type: "BIGINT" },
+    { column_name: "Lose", column_type: "BIGINT" },
+    { column_name: "status", column_type: "VARCHAR" },
+    { column_name: "destination", column_type: "VARCHAR" },
+    { column_name: "l2b", column_type: "DOUBLE" },
+    { column_name: "apw", column_type: "DOUBLE" },
+    { column_name: "apw_bucket", column_type: "VARCHAR" }
+];
 
-const FAKE_PACK: ClaudeInputPack = {
-    question: "why did we lose win rate from april to may",
-    metricName: "Win Rate",
-    metricChange: {
-        direction: "decline",
-        currentValue: 53.42,
-        priorValue: 58.30,
-        absoluteChange: -4.88,
-        relativeChangePct: -8.37,
-        currentPeriod: "May",
-        priorPeriod: "April"
-    },
-    topPositiveContributors: [
-        { name: "Pramana Natura", metricValue: 80.95, volume: 21, volumeSharePct: 1.5, metricDelta: 30.95, weightedContribution: 0.46, contributionPct: 9.5 },
-        { name: "Novotel Bangkok", metricValue: 72.00, volume: 50, volumeSharePct: 3.6, metricDelta: 12.00, weightedContribution: 0.43, contributionPct: 8.8 }
-    ],
-    topNegativeContributors: [
-        { name: "Sofitel Bangkok Sukhumvit", metricValue: 45.00, volume: 200, volumeSharePct: 14.3, metricDelta: -15.00, weightedContribution: -2.14, contributionPct: -43.9 },
-        { name: "Mercure Pattaya", metricValue: 38.00, volume: 100, volumeSharePct: 7.1, metricDelta: -22.00, weightedContribution: -1.57, contributionPct: -32.2 },
-        { name: "ibis Styles Bangkok", metricValue: 50.00, volume: 60, volumeSharePct: 4.3, metricDelta: -8.00, weightedContribution: -0.34, contributionPct: -7.0 }
-    ],
-    affectedHotels: [
-        { name: "Sofitel Bangkok Sukhumvit", metricValue: 45, volume: 200, volumeSharePct: 14.3, metricDelta: -15, weightedContribution: -2.14, contributionPct: -43.9 },
-        { name: "Mercure Pattaya", metricValue: 38, volume: 100, volumeSharePct: 7.1, metricDelta: -22, weightedContribution: -1.57, contributionPct: -32.2 }
-    ],
-    affectedChains: [],
-    affectedSuppliers: [
-        { name: "Affiliate", metricValue: 52, volume: 500, volumeSharePct: 35.7, metricDelta: -3, weightedContribution: -1.07, contributionPct: -21.9 },
-        { name: "Synxis", metricValue: 60, volume: 400, volumeSharePct: 28.6, metricDelta: 2, weightedContribution: 0.57, contributionPct: 11.7 }
-    ],
-    affectedAPWBuckets: [],
-    trendSummary: [],
-    contradictionDetected: false,
-    validationStatus: "PASSED",
-    validationErrors: [],
-    totalRows: 1400,
-    builtAt: new Date().toISOString()
-};
+const mockResults: Record<string, unknown>[][] = [[
+    { "Hotel": "Pramana Natura", "Volume": 21, "Volume Share %": 1.5, "Win Rate": 80.95, "Metric Delta": 30.95, "Weighted Contribution": 0.46, "Contribution %": 9.5, "Overall Metric Change": -4.88 },
+    { "Hotel": "Novotel Bangkok", "Volume": 50, "Volume Share %": 3.6, "Win Rate": 72.00, "Metric Delta": 12.00, "Weighted Contribution": 0.43, "Contribution %": 8.8, "Overall Metric Change": -4.88 },
+    { "Hotel": "Sofitel Bangkok Sukhumvit", "Volume": 200, "Volume Share %": 14.3, "Win Rate": 45.00, "Metric Delta": -15.00, "Weighted Contribution": -2.14, "Contribution %": -43.9, "Overall Metric Change": -4.88 },
+    { "Hotel": "Mercure Pattaya", "Volume": 100, "Volume Share %": 7.1, "Win Rate": 38.00, "Metric Delta": -22.00, "Weighted Contribution": -1.57, "Contribution %": -32.2, "Overall Metric Change": -4.88 }
+]];
+
+const sl = buildSemanticLayer(MOCK_SCHEMA);
+const rootPack = buildRootCausePack("why did we lose win rate from april to may", sl, mockResults);
+const execPack = buildExecutivePack(rootPack);
+const FAKE_PACK = buildClaudeInputPack("why did we lose win rate from april to may", rootPack, execPack);
 
 // ─── Run ──────────────────────────────────────────────────────────────────────
 

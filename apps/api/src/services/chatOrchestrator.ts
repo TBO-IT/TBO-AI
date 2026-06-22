@@ -19,6 +19,7 @@ import { generateTrendSql } from "./trendEngine.js";
 import { generateComparisonSql } from "./comparisonEngine.js";
 import { generateContributionSql } from "./contributionEngine.js";
 import { buildRootCausePack } from "./RootCausePackBuilder.js";
+import { buildExecutivePack } from "./insights/executivePackBuilder.js";
 import { buildClaudeInputPack } from "./claudeInputContract.js";
 import { classifyResponseSource, detectNarrativeRequest, detectRecommendationRequest, ResponseSource } from "./claudeRequestDetector.js";
 import { routeClaude } from "./claudeRouter.js";
@@ -286,9 +287,16 @@ export class ChatOrchestrator {
 
             // ── 5. Root Cause Pack (ROOT_CAUSE route only) ─────────────────────
             let rootCausePack = null;
+            let executivePack = null;
             if (routeType === "ROOT_CAUSE") {
                 rootCausePack = buildRootCausePack(question, semanticLayer, queryResultsList);
                 console.log("[ORCHESTRATOR] Root cause pack built:", JSON.stringify(rootCausePack, null, 2));
+
+                executivePack = buildExecutivePack(rootCausePack);
+                console.log(
+                    "[EXECUTIVE_PACK]",
+                    JSON.stringify(executivePack, null, 2)
+                );
             }
 
             // ── 6. Classify response source ───────────────────────────────
@@ -296,9 +304,9 @@ export class ChatOrchestrator {
             let claudeInputPack = null;
             let recommendations = null;
 
-            if (routeType === "ROOT_CAUSE" && rootCausePack) {
+            if (routeType === "ROOT_CAUSE" && rootCausePack && executivePack) {
                 responseSource = classifyResponseSource(question);
-                claudeInputPack = buildClaudeInputPack(question, rootCausePack);
+                claudeInputPack = buildClaudeInputPack(question, rootCausePack, executivePack);
             }
 
             console.log(`[CLASSIFIER] responseSource=${responseSource} | isRecommendation=${isRecommendation} | isNarrative=${isNarrative}`);

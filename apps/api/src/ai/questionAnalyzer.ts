@@ -134,6 +134,21 @@ const STOP_WORDS = new Set([
     "give", "list", "tell", "find", "get"
 ]);
 
+const TIME_COMPARISON_TERMS = new Set([
+    "wow",
+    "qoq",
+    "mom",
+    "yoy",
+    "week over week",
+    "quarter over quarter",
+    "month over month",
+    "year over year",
+    "week-over-week",
+    "quarter-over-quarter",
+    "month-over-month",
+    "year-over-year"
+]);
+
 function extractNamedEntityFilters(originalQuestion: string): QuestionFilter[] {
     const filters: QuestionFilter[] = [];
     const tokens = originalQuestion.split(/\s+/);
@@ -149,7 +164,7 @@ function extractNamedEntityFilters(originalQuestion: string): QuestionFilter[] {
             DIMENSION_SYNONYMS.some(e => e.synonyms.some(s => s === normalized)) ||
             STOP_WORDS.has(normalized);
 
-        if (!isKnownTerm) {
+        if (!isKnownTerm && !TIME_COMPARISON_TERMS.has(normalized)) {
             // This is an unknown proper noun — create an unclassified ILIKE filter
             // The dimension is "unknown" and will be resolved by the filterBuilder
             // against all string columns (fallback behavior)
@@ -348,6 +363,8 @@ function detectIntent(normalizedQuestion: string): QuestionIntent {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+import { isExecutiveQuestion } from "../services/claudeRequestDetector.js";
+
 /**
  * Parses a natural language question into a structured QuestionAnalysis.
  */
@@ -356,7 +373,6 @@ export function analyzeQuestion(question: string): QuestionAnalysis {
 
     const metrics = extractMetrics(normalizedQuestion);
     const dimensions = extractDimensions(normalizedQuestion);
-    //const filters = extractAllFilters(question, normalizedQuestion);
     const filters = [
 
         ...extractAllFilters(
@@ -374,7 +390,18 @@ export function analyzeQuestion(question: string): QuestionAnalysis {
         extractTimeFilters(question)
     )
     const timeRefs = extractTimeReferences(normalizedQuestion);
-    const intent = detectIntent(normalizedQuestion);
+    let intent = detectIntent(normalizedQuestion);
+
+    // ─── Executive Routing Override ───────────────────────────────────────────
+    if (isExecutiveQuestion(question)) {
+        const hasTimeComparison = Array.from(TIME_COMPARISON_TERMS).some(term =>
+            normalizedQuestion.includes(term)
+        );
+        if (hasTimeComparison) {
+            console.log(`[ROUTE_OVERRIDE] executiveInterpretation=true | Changing intent from ${intent} to ROOT_CAUSE`);
+            intent = "ROOT_CAUSE";
+        }
+    }
 
     const analysis: QuestionAnalysis = {
         metrics,

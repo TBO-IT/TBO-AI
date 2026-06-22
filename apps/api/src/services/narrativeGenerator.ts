@@ -34,8 +34,6 @@ export interface NarrativeResult {
     claudeFailed: boolean;
 }
 
-// ─── System Prompt ────────────────────────────────────────────────────────────
-
 const SYSTEM_PROMPT =
     `You are an Executive Analytics Copilot writing a C-suite briefing memo for a travel industry executive.
 
@@ -47,8 +45,8 @@ RULES:
 5. If a contradiction is noted, explain it FIRST before any other analysis.
 6. Use concise, executive business language. No technical jargon.
 7. Never reference SQL, databases, queries, DuckDB, or technical infrastructure.
-8. Structure: Executive Summary → Key Drivers → Risks.
-9. Keep the total response under 400 words.`;
+8. Structure: Executive Summary -> Key Takeaway -> Top Risks -> Top Opportunities -> Key Tradeoffs -> Recommended Actions -> Expected Impact -> Scenario Outlook -> Confidence Assessment -> Leadership Message.
+9. Keep the total response under 800 words.`;
 
 // ─── Public: buildNarrativePrompt ─────────────────────────────────────────────
 
@@ -57,76 +55,129 @@ RULES:
  * This function is exported for testing and inspection.
  */
 export function buildNarrativePrompt(pack: ClaudeInputPack): string {
-    const lines: string[] = [];
+    const ep = pack.executivePack;
 
-    lines.push(`USER QUESTION: "${pack.question}"`);
-    lines.push(`METRIC: ${pack.metricName}`);
-    lines.push(`VALIDATION: ${pack.validationStatus}`);
+    // Formatting rules to enforce V3 quality
+    const rules = [
+        "Write an executive briefing intended for the CEO / CRO / Commercial Leadership.",
+        "You are the VP of Revenue Strategy.",
+        "Do not repeat metrics unnecessarily.",
+        "Focus on business significance and prioritize material findings.",
+        "Explain why leadership should care.",
+        "Surface tradeoffs, future risks, and growth opportunities explicitly.",
+        "Explicitly reference recommended actions, expected impacts, and scenarios.",
+        "Rule 1: Answer 'What happened?' within the first paragraph.",
+        "Rule 2: Answer 'Why does it matter?' within the second paragraph.",
+        "Rule 3: Answer 'What should leadership do?' before ending.",
+        "Rule 4: Never list more than 3 Risks, 3 Opportunities, 3 Tradeoffs, or 3 Actions.",
+        "Rule 5: Always identify the single most important insight."
+    ].join("\n");
 
-    // Contradiction — must come first
-    if (pack.contradictionDetected) {
-        lines.push("");
-        lines.push(`CONTRADICTION ALERT:`);
-        lines.push(`The user's question assumes a "${pack.expectedDirection}" in ${pack.metricName}.`);
-        lines.push(`However, the data shows the metric actually ${pack.metricChange?.direction === "increase" ? "increased" : "declined"} by ${Math.abs(pack.metricChange?.absoluteChange ?? 0).toFixed(2)} points.`);
-        lines.push(`You MUST address this contradiction FIRST in your response.`);
-    }
+    const risksText = ep.topRisks.slice(0, 3)
+        .map(r => `  • [${r.severity}] ${r.title}: ${r.explanation}`)
+        .join("\n");
 
-    // Metric change
-    if (pack.metricChange) {
-        lines.push("");
-        lines.push(`OVERALL CHANGE: ${pack.metricChange.absoluteChange > 0 ? "+" : ""}${pack.metricChange.absoluteChange.toFixed(2)} points (${pack.metricChange.direction})`);
-        lines.push(`PERIOD: ${pack.metricChange.priorPeriod} → ${pack.metricChange.currentPeriod}`);
-        if (pack.metricChange.relativeChangePct !== 0) {
-            lines.push(`RELATIVE: ${pack.metricChange.relativeChangePct > 0 ? "+" : ""}${pack.metricChange.relativeChangePct.toFixed(1)}%`);
-        }
-    }
+    const oppsText = ep.topOpportunities.slice(0, 3)
+        .map(o => `  • [${o.severity}] ${o.title}: ${o.explanation}`)
+        .join("\n");
 
-    // Positive contributors
-    if (pack.topPositiveContributors.length > 0) {
-        lines.push("");
-        lines.push("TOP POSITIVE CONTRIBUTORS:");
-        for (const c of pack.topPositiveContributors.slice(0, 5)) {
-            lines.push(`  • ${c.name}: +${c.weightedContribution.toFixed(2)} pts (${c.contributionPct.toFixed(1)}% of total change), ${c.volumeSharePct.toFixed(1)}% volume share`);
-        }
-    }
+    const actionsText = ep.topActions.slice(0, 3)
+        .map(a => `  • [${a.priority}] ${a.action}: ${a.rationale}`)
+        .join("\n");
 
-    // Negative contributors
-    if (pack.topNegativeContributors.length > 0) {
-        lines.push("");
-        lines.push("TOP NEGATIVE CONTRIBUTORS:");
-        for (const c of pack.topNegativeContributors.slice(0, 5)) {
-            lines.push(`  • ${c.name}: ${c.weightedContribution.toFixed(2)} pts (${c.contributionPct.toFixed(1)}% of total change), ${c.volumeSharePct.toFixed(1)}% volume share`);
-        }
-    }
+    const implicationsText = ep.strategicImplications.slice(0, 3)
+        .map(i => `  • [${i.severity}] ${i.implication}`)
+        .join("\n");
 
-    // Dimension counts
-    const dims: string[] = [];
-    if (pack.affectedHotels.length > 0) dims.push(`${pack.affectedHotels.length} hotels`);
-    if (pack.affectedChains.length > 0) dims.push(`${pack.affectedChains.length} chains`);
-    if (pack.affectedSuppliers.length > 0) dims.push(`${pack.affectedSuppliers.length} suppliers`);
-    if (pack.affectedAPWBuckets.length > 0) dims.push(`${pack.affectedAPWBuckets.length} APW buckets`);
-    if (dims.length > 0) {
-        lines.push("");
-        lines.push(`DIMENSIONS ANALYZED: ${dims.join(", ")}`);
-    }
+    const tradeoffsText = ep.tradeoffs.slice(0, 3)
+        .map(t => `  • ${t.title}: ${t.explanation}`)
+        .join("\n");
 
-    lines.push(`TOTAL DATA POINTS: ${pack.totalRows}`);
+    const scenariosText = ep.scenarios
+        .map(s => `  • [${s.type}]: ${s.description}`)
+        .join("\n");
 
-    // Validation errors
-    if (pack.validationErrors.length > 0) {
-        lines.push("");
-        lines.push("DATA QUALITY WARNINGS:");
-        for (const e of pack.validationErrors) {
-            lines.push(`  ⚠ ${e}`);
-        }
-    }
+    const impactsText = ep.actionImpacts.slice(0, 3)
+        .map(i => `  • ${i.action} (${i.confidence} confidence): ${i.expectedImpact}`)
+        .join("\n");
 
-    lines.push("");
-    lines.push("Write an executive briefing with: Executive Summary, Key Drivers, and Risks.");
-    lines.push("Use ONLY the facts above. Do NOT invent data.");
+    const warnings = pack.validationErrors.length > 0 
+        ? `\nDATA QUALITY WARNINGS:\n${pack.validationErrors.map(e => `  ⚠ ${e}`).join("\n")}\n` 
+        : "";
 
-    return lines.join("\n");
+    return `USER QUESTION: "${pack.question}"
+METRIC: ${pack.metricName}
+VALIDATION: ${pack.validationStatus}
+
+OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' points (' + pack.metricChange.direction + ')' : 'N/A'}
+PERIOD: Prior → Current
+
+HEADLINE: ${ep.headline}
+EXECUTIVE SUMMARY: ${ep.executiveSummary}
+KEY TAKEAWAY: ${ep.keyTakeaway}
+
+TOP RISKS:
+${risksText || "  • None identified."}
+
+TOP OPPORTUNITIES:
+${oppsText || "  • None identified."}
+
+KEY TRADEOFFS:
+${tradeoffsText || "  • None identified."}
+
+RECOMMENDED ACTIONS:
+${actionsText || "  • None identified."}
+
+EXPECTED IMPACT:
+${impactsText || "  • None identified."}
+
+SCENARIO OUTLOOK:
+${scenariosText || "  • None identified."}
+
+STRATEGIC IMPLICATIONS:
+${implicationsText || "  • None identified."}
+
+CONFIDENCE ASSESSMENT:
+${ep.confidenceAssessment.rationale}
+
+LEADERSHIP MESSAGE: ${ep.leadershipMessage}
+TOTAL DATA POINTS: ${pack.totalRows}
+${warnings}
+Write the executive briefing following these rules:
+${rules}
+
+Structure the output EXACTLY like this:
+EXECUTIVE SUMMARY
+[text]
+
+KEY TAKEAWAY
+[text]
+
+TOP RISKS
+[text]
+
+TOP OPPORTUNITIES
+[text]
+
+KEY TRADEOFFS
+[text]
+
+RECOMMENDED ACTIONS
+[text]
+
+EXPECTED IMPACT
+[text]
+
+SCENARIO OUTLOOK
+[text]
+
+CONFIDENCE ASSESSMENT
+[text]
+
+LEADERSHIP MESSAGE
+[text]
+
+Use ONLY the facts above. Do NOT invent data.`;
 }
 
 // ─── Public: generateNarrative ────────────────────────────────────────────────
@@ -175,61 +226,38 @@ export async function generateNarrative(pack: ClaudeInputPack): Promise<Narrativ
 
 // ─── Deterministic Fallback ───────────────────────────────────────────────────
 
-function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeResult {
-    const keyDrivers: string[] = [];
-    const risks: string[] = [];
+export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeResult {
+    const ep = pack.executivePack;
 
-    // Contradiction
-    if (pack.contradictionDetected) {
-        const summary =
-            `The question assumes a ${pack.expectedDirection} in ${pack.metricName}.\n\n` +
-            `However, the data shows ${pack.metricName} actually ` +
-            `${pack.metricChange?.direction === "increase" ? "increased" : "declined"} ` +
-            `by ${Math.abs(pack.metricChange?.absoluteChange ?? 0).toFixed(2)} points.`;
+    const risks = ep.topRisks.map(r => `  • [${r.severity}] ${r.title}`).join("\n");
+    const opps = ep.topOpportunities.map(o => `  • [${o.severity}] ${o.title}`).join("\n");
+    const actions = ep.topActions.map(a => `  • [${a.priority}] ${a.action}`).join("\n");
+    const implications = ep.strategicImplications.map(i => `  • [${i.severity}] ${i.implication}`).join("\n");
+    const tradeoffs = ep.tradeoffs.map(t => `  • ${t.title}`).join("\n");
+    const scenarios = ep.scenarios.map(s => `  • [${s.type}] ${s.description}`).join("\n");
+    const impacts = ep.actionImpacts.map(i => `  • ${i.action}: ${i.expectedImpact}`).join("\n");
 
-        return {
-            executiveSummary: summary,
-            keyDrivers: [],
-            risks: ["The assumption in the question does not match the data."],
-            rawNarrative: summary,
-            contradictionNote: `Expected: ${pack.expectedDirection}. Actual: ${pack.metricChange?.direction}.`,
-            claudeUsed: false,
-            claudeFailed: false
-        };
-    }
-
-    // Summary
-    let summary = "";
-    if (pack.metricChange) {
-        const dir = pack.metricChange.direction;
-        const abs = Math.abs(pack.metricChange.absoluteChange).toFixed(2);
-        summary = `${pack.metricName} ${dir === "increase" ? "improved" : dir === "decline" ? "declined" : "remained flat"} by ${abs} points from ${pack.metricChange.priorPeriod} to ${pack.metricChange.currentPeriod}.`;
-    } else {
-        summary = `Analysis of ${pack.metricName} across ${pack.totalRows} data points.`;
-    }
-
-    // Drivers
-    for (const c of pack.topPositiveContributors.slice(0, 5)) {
-        keyDrivers.push(`${c.name}: +${c.weightedContribution.toFixed(2)} pts (${c.contributionPct.toFixed(1)}% of change), ${c.volumeSharePct.toFixed(1)}% volume`);
-    }
-
-    // Risks
-    for (const c of pack.topNegativeContributors.slice(0, 5)) {
-        risks.push(`${c.name}: ${c.weightedContribution.toFixed(2)} pts (${c.contributionPct.toFixed(1)}% of change), ${c.volumeSharePct.toFixed(1)}% volume`);
-    }
-
-    const rawNarrative =
-        summary +
-        (keyDrivers.length > 0 ? `\n\nKey Drivers:\n${keyDrivers.map(d => `• ${d}`).join("\n")}` : "") +
-        (risks.length > 0 ? `\n\nRisks:\n${risks.map(r => `• ${r}`).join("\n")}` : "");
+    let raw = `EXECUTIVE SUMMARY\n${ep.headline} ${ep.executiveSummary}\n\n`;
+    raw += `KEY TAKEAWAY\n${ep.keyTakeaway}\n\n`;
+    raw += `TOP RISKS\n${risks || "  • None identified"}\n\n`;
+    raw += `TOP OPPORTUNITIES\n${opps || "  • None identified"}\n\n`;
+    raw += `KEY TRADEOFFS\n${tradeoffs || "  • None identified"}\n\n`;
+    raw += `RECOMMENDED ACTIONS\n${actions || "  • None identified"}\n\n`;
+    raw += `EXPECTED IMPACT\n${impacts || "  • None identified"}\n\n`;
+    raw += `SCENARIO OUTLOOK\n${scenarios || "  • None identified"}\n\n`;
+    raw += `CONFIDENCE ASSESSMENT\n${ep.confidenceAssessment.rationale}\n\n`;
+    raw += `LEADERSHIP MESSAGE\n${ep.leadershipMessage}\n`;
 
     return {
-        executiveSummary: summary,
-        keyDrivers,
-        risks,
-        rawNarrative,
+        executiveSummary: ep.executiveSummary,
+        keyDrivers: ep.topDrivers.map(d => d.name),
+        risks: ep.topRisks.map(r => r.title),
+        rawNarrative: raw,
         claudeUsed: false,
-        claudeFailed: false
+        claudeFailed: true,
+        contradictionNote: pack.contradictionDetected
+            ? "Note: The user's expected direction contradicts the actual data."
+            : undefined
     };
 }
 

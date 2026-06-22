@@ -1,6 +1,8 @@
 import { EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { validateRootCausePack } from "./RootCausePackValidator.js";
-
+import { PrioritizedInsight, prioritizeInsights } from "./insights/insightPrioritizer.js";
+import { ExecutiveRisk, detectRisks } from "./insights/riskEngine.js";
+import { ExecutiveOpportunity, detectOpportunities } from "./insights/opportunityEngine.js";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ContributorEntry {
@@ -31,7 +33,7 @@ export interface TrendPoint {
 export interface RootCausePack {
     metricName: string;
     metricChange: MetricChange | null;
-    
+
     // Contradiction detection
     contradictionDetected?: boolean;
     expectedDirection?: string;
@@ -39,12 +41,16 @@ export interface RootCausePack {
 
     topPositiveContributors: ContributorEntry[];
     topNegativeContributors: ContributorEntry[];
-    
+
+    priorityDrivers: PrioritizedInsight[];
+    risks: ExecutiveRisk[];
+    opportunities: ExecutiveOpportunity[];
+
     affectedHotels: ContributorEntry[];
     affectedChains: ContributorEntry[];
     affectedSuppliers: ContributorEntry[];
     affectedAPWBuckets: ContributorEntry[];
-    
+
     trendSummary: TrendPoint[];
     totalRows: number;
     builtAt: string;
@@ -80,16 +86,16 @@ function toStr(v: unknown): string {
 // ─── Contributor row parsing ──────────────────────────────────────────────────
 
 const COLS = {
-    dimensionValue:       ["dimension_value"],
-    metricValue:          ["metric_value"],
-    volume:               ["Volume", "volume"],
-    volumeSharePct:       ["Volume Share %", "volume_share_pct", "Current Volume Share %"],
-    metricDelta:          ["Metric Delta", "metric_delta", "Metric Change", "metric_change"],
+    dimensionValue: ["dimension_value"],
+    metricValue: ["metric_value"],
+    volume: ["Volume", "volume"],
+    volumeSharePct: ["Volume Share %", "volume_share_pct", "Current Volume Share %"],
+    metricDelta: ["Metric Delta", "metric_delta", "Metric Change", "metric_change"],
     weightedContribution: ["Weighted Contribution", "weighted_contribution"],
-    contributionPct:      ["Contribution %", "contribution_pct", "Contribution to Change %"],
-    overallMetricChange:  ["Overall Metric Change", "overall_metric_change"],
-    period:               ["period"],
-    entity:               ["entity"]
+    contributionPct: ["Contribution %", "contribution_pct", "Contribution to Change %"],
+    overallMetricChange: ["Overall Metric Change", "overall_metric_change"],
+    period: ["period"],
+    entity: ["entity"]
 } as const;
 
 function parseContributorRow(
@@ -97,20 +103,20 @@ function parseContributorRow(
     metricName: string
 ): ContributorEntry | null {
     const keys = Object.keys(row);
-    
+
     // Bug 1 Fix: Entity Attribution. 
     // Isolate the dimension name column by ignoring all known stat/metric columns.
     const knownStats = [
-        ...COLS.metricValue, ...COLS.volume, ...COLS.volumeSharePct, 
-        ...COLS.metricDelta, ...COLS.weightedContribution, ...COLS.contributionPct, 
+        ...COLS.metricValue, ...COLS.volume, ...COLS.volumeSharePct,
+        ...COLS.metricDelta, ...COLS.weightedContribution, ...COLS.contributionPct,
         ...COLS.overallMetricChange, ...COLS.period, ...COLS.entity,
         metricName.toLowerCase()
     ];
-    
+
     let nameKey = findCol(row, COLS.dimensionValue);
     if (!nameKey) {
-        nameKey = keys.find(k => 
-            !knownStats.some(s => k.toLowerCase().includes(s.toLowerCase())) && 
+        nameKey = keys.find(k =>
+            !knownStats.some(s => k.toLowerCase().includes(s.toLowerCase())) &&
             typeof row[k] === "string"
         );
     }
@@ -121,21 +127,21 @@ function parseContributorRow(
     const name = toStr(row[nameKey]);
     if (!name) return null;
 
-    const metricValueKey  = findCol(row, COLS.metricValue)  ?? findCol(row, [metricName]);
-    const volumeKey       = findCol(row, COLS.volume);
-    const volumeShareKey  = findCol(row, COLS.volumeSharePct);
-    const metricDeltaKey  = findCol(row, COLS.metricDelta);
+    const metricValueKey = findCol(row, COLS.metricValue) ?? findCol(row, [metricName]);
+    const volumeKey = findCol(row, COLS.volume);
+    const volumeShareKey = findCol(row, COLS.volumeSharePct);
+    const metricDeltaKey = findCol(row, COLS.metricDelta);
     const weightedContrib = findCol(row, COLS.weightedContribution);
     const contributionKey = findCol(row, COLS.contributionPct);
 
     return {
         name,
-        metricValue:          metricValueKey  ? toNum(row[metricValueKey])  : 0,
-        volume:               volumeKey       ? toNum(row[volumeKey])       : 0,
-        volumeSharePct:       volumeShareKey  ? toNum(row[volumeShareKey])  : 0,
-        metricDelta:          metricDeltaKey  ? toNum(row[metricDeltaKey])  : 0,
+        metricValue: metricValueKey ? toNum(row[metricValueKey]) : 0,
+        volume: volumeKey ? toNum(row[volumeKey]) : 0,
+        volumeSharePct: volumeShareKey ? toNum(row[volumeShareKey]) : 0,
+        metricDelta: metricDeltaKey ? toNum(row[metricDeltaKey]) : 0,
         weightedContribution: weightedContrib ? toNum(row[weightedContrib]) : 0,
-        contributionPct:      contributionKey ? toNum(row[contributionKey]) : 0
+        contributionPct: contributionKey ? toNum(row[contributionKey]) : 0
     };
 }
 
@@ -156,20 +162,20 @@ function extractMetricChange(
         // Wait, the orchestrator just extracts "Metric Delta" per row.
         // But what about the OVERALL current/prior values? 
         // If we don't have them, we can't fully populate MetricChange, but we CAN populate direction and absoluteChange.
-        
+
         const absoluteChange = toNum(first[overallChangeKey]);
-        
+
         // Let's just mock the current/prior period labels if they aren't provided by the column headers.
         return {
-            currentPeriod:     "Current",
-            priorPeriod:       "Prior",
-            currentValue:      0, // We don't have this readily available without a dedicated query
-            priorValue:        0,
-            absoluteChange:    +absoluteChange.toFixed(4),
+            currentPeriod: "Current",
+            priorPeriod: "Prior",
+            currentValue: 0, // We don't have this readily available without a dedicated query
+            priorValue: 0,
+            absoluteChange: +absoluteChange.toFixed(4),
             relativeChangePct: 0,
             direction: absoluteChange > 0.001 ? "increase"
-                     : absoluteChange < -0.001 ? "decline"
-                     : "flat"
+                : absoluteChange < -0.001 ? "decline"
+                    : "flat"
         };
     }
 
@@ -184,17 +190,17 @@ function extractMetricChange(
             const bVal = toNum(rowB[metricKey]);
             const absChange = aVal - bVal;
             return {
-                currentPeriod:     toStr(rowA[entityKey]),
-                priorPeriod:       toStr(rowB[entityKey]),
-                currentValue:      +aVal.toFixed(4),
-                priorValue:        +bVal.toFixed(4),
-                absoluteChange:    +absChange.toFixed(4),
+                currentPeriod: toStr(rowA[entityKey]),
+                priorPeriod: toStr(rowB[entityKey]),
+                currentValue: +aVal.toFixed(4),
+                priorValue: +bVal.toFixed(4),
+                absoluteChange: +absChange.toFixed(4),
                 relativeChangePct: bVal !== 0
                     ? +((absChange / Math.abs(bVal)) * 100).toFixed(2)
                     : 0,
                 direction: absChange > 0.001 ? "increase"
-                         : absChange < -0.001 ? "decline"
-                         : "flat"
+                    : absChange < -0.001 ? "decline"
+                        : "flat"
             };
         }
     }
@@ -206,7 +212,7 @@ function extractMetricChange(
 
 function detectContradiction(question: string, direction: "increase" | "decline" | "flat" | undefined) {
     if (!direction || direction === "flat") return { contradictionDetected: false };
-    
+
     const q = question.toLowerCase();
     const isDeclineExpected = q.match(/\b(lose|decline|drop|decrease|down|worse)\b/);
     const isIncreaseExpected = q.match(/\b(increase|improve|grow|up|better|gain)\b/);
@@ -223,16 +229,16 @@ function detectContradiction(question: string, direction: "increase" | "decline"
 // ─── Dimension classification ─────────────────────────────────────────────────
 
 const DIM_COLUMN_MAP: Record<string, "hotel" | "chain" | "supplier" | "destination" | "apw"> = {
-    "Hotel":       "hotel",
-    "hotel":       "hotel",
-    "Chain":       "chain",
-    "chain":       "chain",
-    "Supplier":    "supplier",
-    "supplier":    "supplier",
+    "Hotel": "hotel",
+    "hotel": "hotel",
+    "Chain": "chain",
+    "chain": "chain",
+    "Supplier": "supplier",
+    "supplier": "supplier",
     "Destination": "destination",
     "destination": "destination",
-    "APW Bucket":  "apw",
-    "apw":         "apw"
+    "APW Bucket": "apw",
+    "apw": "apw"
 };
 
 function detectDimensionCategory(
@@ -253,11 +259,11 @@ function detectDimensionCategory(
     for (const dim of semanticLayer.dimensions) {
         const found = keys.some(k => k.toLowerCase().includes(dim.toLowerCase()));
         if (found) {
-            if (dim === "hotel")       return "hotel";
-            if (dim === "chain")       return "chain";
-            if (dim === "supplier")    return "supplier";
+            if (dim === "hotel") return "hotel";
+            if (dim === "chain") return "chain";
+            if (dim === "supplier") return "supplier";
             if (dim === "destination") return "destination";
-            if (dim === "apw")         return "apw";
+            if (dim === "apw") return "apw";
         }
     }
 
@@ -279,15 +285,15 @@ export function buildRootCausePack(
 ): RootCausePack {
 
     const metricName = semanticLayer.metrics[0]?.name ?? "Metric";
-    
-    const affectedHotels:      ContributorEntry[] = [];
-    const affectedChains:      ContributorEntry[] = [];
-    const affectedSuppliers:   ContributorEntry[] = [];
-    const affectedAPWBuckets:  ContributorEntry[] = [];
-    
+
+    const affectedHotels: ContributorEntry[] = [];
+    const affectedChains: ContributorEntry[] = [];
+    const affectedSuppliers: ContributorEntry[] = [];
+    const affectedAPWBuckets: ContributorEntry[] = [];
+
     let metricChange: MetricChange | null = null;
     let totalRows = 0;
-    
+
     const allValidEntries: ContributorEntry[] = [];
 
     // Process each result set (each represents one dimension's contribution analysis)
@@ -299,15 +305,15 @@ export function buildRootCausePack(
         const entries: ContributorEntry[] = queryResults
             .map(row => parseContributorRow(row, metricName))
             .filter((e): e is ContributorEntry => e !== null && e.name !== "" && isFinite(e.contributionPct));
-            
+
         allValidEntries.push(...entries);
 
         // Classify and bucket
         const dimCategory = detectDimensionCategory(queryResults, semanticLayer);
-        if (dimCategory === "hotel")       affectedHotels.push(...entries);
-        else if (dimCategory === "chain")  affectedChains.push(...entries);
+        if (dimCategory === "hotel") affectedHotels.push(...entries);
+        else if (dimCategory === "chain") affectedChains.push(...entries);
         else if (dimCategory === "supplier") affectedSuppliers.push(...entries);
-        else if (dimCategory === "apw")    affectedAPWBuckets.push(...entries);
+        else if (dimCategory === "apw") affectedAPWBuckets.push(...entries);
 
         // Extract metric change from the first set that has it
         if (!metricChange) {
@@ -330,6 +336,21 @@ export function buildRootCausePack(
         .sort((a, b) => a.weightedContribution - b.weightedContribution)
         .slice(0, 10);
 
+    const priorityDrivers = prioritizeInsights(
+        positives,
+        negatives
+    );
+
+    const risks =
+        detectRisks(
+            priorityDrivers,
+            metricChange
+        );
+    const opportunities =
+        detectOpportunities(
+            priorityDrivers
+        );
+
     const pack: RootCausePack = {
         metricName,
         metricChange,
@@ -337,6 +358,9 @@ export function buildRootCausePack(
         expectedDirection: contradictionInfo.expectedDirection,
         topPositiveContributors: positives,
         topNegativeContributors: negatives,
+        priorityDrivers,
+        risks,
+        opportunities,
         affectedHotels,
         affectedChains,
         affectedSuppliers,

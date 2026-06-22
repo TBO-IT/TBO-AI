@@ -31,7 +31,16 @@ const NARRATIVE_PATTERNS: RegExp[] = [
     /\bnarrative\b/i,
     /\bwrite[\s-]up\b/i,
     /\boverview\b/i,
-    /\btell\s+me\s+why\b/i
+    /\btell\s+me\s+why\b/i,
+    /\bmost\s+important\b/i,
+    /\bleadership\s+should\s+know\b/i,
+    /\bwhat\s+matters\s+most\b/i,
+    /\bbiggest\s+insight\b/i,
+    /\bkey\s+takeaway\b/i,
+    /\bexecutive\s+takeaway\b/i,
+    /\bwhat\s+should\s+executives\s+know\b/i,
+    /\bsingle\s+biggest\s+risk\b/i,
+    /\bsingle\s+biggest\s+opportunity\b/i
 ];
 
 // ─── Recommendation Signals ───────────────────────────────────────────────────
@@ -82,6 +91,33 @@ export function detectRecommendationRequest(question: string): boolean {
     const match = RECOMMENDATION_PATTERNS.some(p => p.test(q));
 
     console.log(`[CLAUDE_DETECT] recommendation=${match} | question="${question.slice(0, 80)}"`);
+    return match;
+}
+
+/**
+ * Detects whether the user's question is asking for high-level executive interpretation.
+ * Used by the router to override raw analytics routes (e.g., TREND) and force ROOT_CAUSE.
+ */
+export function isExecutiveQuestion(question: string): boolean {
+    const q = question.toLowerCase();
+    const EXECUTIVE_PATTERNS: RegExp[] = [
+        /\bleadership\b/i,
+        /\bexecutive\b/i,
+        /\bceo\b/i,
+        /\bcro\b/i,
+        /\bboard\b/i,
+        /\bmost\s+important\b/i,
+        /\bbiggest\s+insight\b/i,
+        /\bkey\s+takeaway\b/i,
+        /\bwhat\s+matters\s+most\b/i,
+        /\bwhat\s+should\s+executives\s+know\b/i,
+        /\blargest\s+takeaway\b/i,
+        /\bsingle\s+biggest\s+risk\b/i,
+        /\bsingle\s+biggest\s+opportunity\b/i
+    ];
+    
+    const match = EXECUTIVE_PATTERNS.some(p => p.test(q));
+    console.log(`[EXECUTIVE_DETECT] executive=${match}`);
     return match;
 }
 

@@ -56,62 +56,50 @@ Separate each recommendation with a blank line.`;
  * Builds the Claude prompt. Exported for testing.
  */
 export function buildRecommendationPrompt(pack: ClaudeInputPack): string {
-    const lines: string[] = [];
+    const ep = pack.executivePack;
 
-    lines.push(`USER QUESTION: "${pack.question}"`);
-    lines.push(`METRIC: ${pack.metricName}`);
+    const implicationsText = ep.strategicImplications.map(i => `  • [${i.severity}] ${i.implication}`).join("\n");
+    const actionsText = ep.topActions.map(a => `  • [${a.priority}] ${a.action}: ${a.rationale}`).join("\n");
+    const oppsText = ep.topOpportunities.map(o => `  • [${o.severity}] ${o.title}: ${o.explanation}`).join("\n");
+    const tradeoffsText = ep.tradeoffs.map(t => `  • ${t.title}: ${t.explanation}`).join("\n");
+    const scenariosText = ep.scenarios.map(s => `  • [${s.type}]: ${s.description}`).join("\n");
+    const impactsText = ep.actionImpacts.map(i => `  • ${i.action} (${i.confidence}): ${i.expectedImpact}`).join("\n");
 
-    if (pack.metricChange) {
-        lines.push(`OVERALL CHANGE: ${pack.metricChange.absoluteChange > 0 ? "+" : ""}${pack.metricChange.absoluteChange.toFixed(2)} points (${pack.metricChange.direction})`);
-        lines.push(`PERIOD: ${pack.metricChange.priorPeriod} → ${pack.metricChange.currentPeriod}`);
-    }
+    return `USER QUESTION: "${pack.question}"
+METRIC: ${pack.metricName}
+OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' points (' + pack.metricChange.direction + ')' : 'N/A'}
+PERIOD: Prior → Current
 
-    if (pack.contradictionDetected) {
-        lines.push("");
-        lines.push(`CONTRADICTION: User expected "${pack.expectedDirection}", data shows "${pack.metricChange?.direction}".`);
-    }
+EXECUTIVE SUMMARY: ${ep.executiveSummary}
+LEADERSHIP MESSAGE: ${ep.leadershipMessage}
+KEY TAKEAWAY: ${ep.keyTakeaway}
 
-    if (pack.topPositiveContributors.length > 0) {
-        lines.push("");
-        lines.push("TOP POSITIVE CONTRIBUTORS:");
-        for (const c of pack.topPositiveContributors.slice(0, 5)) {
-            lines.push(`  • ${c.name}: +${c.weightedContribution.toFixed(2)} pts, ${c.volumeSharePct.toFixed(1)}% volume, metric=${c.metricValue.toFixed(2)}`);
-        }
-    }
+STRATEGIC IMPLICATIONS:
+${implicationsText || "  • None identified."}
 
-    if (pack.topNegativeContributors.length > 0) {
-        lines.push("");
-        lines.push("TOP NEGATIVE CONTRIBUTORS:");
-        for (const c of pack.topNegativeContributors.slice(0, 5)) {
-            lines.push(`  • ${c.name}: ${c.weightedContribution.toFixed(2)} pts, ${c.volumeSharePct.toFixed(1)}% volume, metric=${c.metricValue.toFixed(2)}`);
-        }
-    }
+KEY TRADEOFFS:
+${tradeoffsText || "  • None identified."}
 
-    // High-volume underperformers
-    const allEntities = [
-        ...pack.affectedHotels,
-        ...pack.affectedChains,
-        ...pack.affectedSuppliers
-    ];
-    const underperformers = allEntities
-        .filter(e => e.volumeSharePct > 5 && e.metricDelta < -1)
-        .sort((a, b) => a.weightedContribution - b.weightedContribution)
-        .slice(0, 3);
+RECOMMENDED ACTIONS TO PRIORITIZE:
+${actionsText || "  • None identified."}
 
-    if (underperformers.length > 0) {
-        lines.push("");
-        lines.push("HIGH-VOLUME UNDERPERFORMERS:");
-        for (const e of underperformers) {
-            lines.push(`  • ${e.name}: ${e.volumeSharePct.toFixed(1)}% volume, delta=${e.metricDelta.toFixed(2)} pts`);
-        }
-    }
+EXPECTED IMPACT:
+${impactsText || "  • None identified."}
 
-    lines.push("");
-    lines.push(`TOTAL DATA POINTS: ${pack.totalRows}`);
-    lines.push("");
-    lines.push("Generate 3-5 strategic recommendations based ONLY on the data above.");
+SCENARIO OUTLOOK:
+${scenariosText || "  • None identified."}
 
-    return lines.join("\n");
+KEY OPPORTUNITIES TO SCALE:
+${oppsText || "  • None identified."}
+
+CONFIDENCE ASSESSMENT:
+${ep.confidenceAssessment.rationale}
+
+TOTAL DATA POINTS: ${pack.totalRows}
+
+Generate 3 strategic recommendations based ONLY on the data above.
+Focus on action-oriented output, prioritizing the actions and strategic implications provided.
+Format output strictly adhering to action-oriented structures.`;
 }
 
 // ─── Public: generateRecommendations ──────────────────────────────────────────
@@ -126,11 +114,7 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
         assertClaudeInputSafe(pack);
     } catch (err) {
         console.error("[RECOMMENDATION_ENGINE] Safety gate blocked:", err);
-        return {
-            recommendations: buildDeterministicRecommendations(pack),
-            claudeUsed: false,
-            claudeFailed: false
-        };
+        return buildDeterministicRecommendations(pack);
     }
 
     // 2. Build prompt
@@ -149,11 +133,7 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
         // If Claude returned nothing useful, fall back
         if (recommendations.length === 0) {
             console.warn("[RECOMMENDATION_ENGINE] Claude returned 0 recommendations — using deterministic");
-            return {
-                recommendations: buildDeterministicRecommendations(pack),
-                claudeUsed: true,
-                claudeFailed: true
-            };
+            return buildDeterministicRecommendations(pack);
         }
 
         return {
@@ -163,11 +143,7 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
         };
     } catch (err: any) {
         console.error(`[RECOMMENDATION_ENGINE] Claude Sonnet failed (${err.code ?? "UNKNOWN"}) — using deterministic`);
-        return {
-            recommendations: buildDeterministicRecommendations(pack),
-            claudeUsed: false,
-            claudeFailed: true
-        };
+        return buildDeterministicRecommendations(pack);
     }
 }
 
@@ -203,51 +179,44 @@ function parseClaudeRecommendations(text: string): Recommendation[] {
 
 // ─── Deterministic Fallback ───────────────────────────────────────────────────
 
-function buildDeterministicRecommendations(pack: ClaudeInputPack): Recommendation[] {
+export function buildDeterministicRecommendations(pack: ClaudeInputPack): RecommendationResult {
     const recs: Recommendation[] = [];
-
-    // Investigate top negative contributors
-    const topNeg = pack.topNegativeContributors.slice(0, 3);
-    if (topNeg.length > 0) {
-        const names = topNeg.map(c => c.name);
-        const totalDrag = topNeg.reduce((s, c) => s + c.weightedContribution, 0);
-        recs.push({
-            action: `Investigate underperformance in ${names.join(", ")}`,
-            rationale: `These entities account for ${totalDrag.toFixed(2)} points of negative impact on ${pack.metricName}.`,
-            supportingEvidence: topNeg.map(c =>
-                `${c.name}: ${c.weightedContribution.toFixed(2)} pts, ${c.volumeSharePct.toFixed(1)}% volume`
-            ),
-            expectedImpact: `Recovering ${Math.abs(totalDrag).toFixed(2)} points on ${pack.metricName}.`
-        });
-    }
-
-    // Replicate top performers
-    const topPos = pack.topPositiveContributors.slice(0, 2);
-    for (const c of topPos) {
-        recs.push({
-            action: `Replicate the strategy of ${c.name}`,
-            rationale: `${c.name} contributed +${c.weightedContribution.toFixed(2)} points to ${pack.metricName}.`,
-            supportingEvidence: [
-                `Metric value: ${c.metricValue.toFixed(2)}`,
-                `Volume share: ${c.volumeSharePct.toFixed(1)}%`,
-                `Contribution: +${c.weightedContribution.toFixed(2)} pts`
-            ],
-            expectedImpact: `Potential +${(c.weightedContribution * 1.5).toFixed(2)} pts if replicated.`
-        });
-    }
-
-    // Contradiction
+    
+    // Contradiction fallback
     if (pack.contradictionDetected) {
         recs.push({
-            action: "Reassess the analytical assumptions underlying this question",
-            rationale: `The question assumes a ${pack.expectedDirection}, but ${pack.metricName} actually ${pack.metricChange?.direction}.`,
-            supportingEvidence: [
-                `Expected: ${pack.expectedDirection}`,
-                `Actual: ${pack.metricChange?.direction} (${pack.metricChange?.absoluteChange?.toFixed(2)} pts)`
-            ],
-            expectedImpact: "Prevents misguided interventions based on incorrect assumptions."
+            action: "Reassess the underlying assumptions of the question.",
+            rationale: `The data shows ${pack.metricChange?.direction} instead of ${pack.expectedDirection}.`,
+            supportingEvidence: ["Contradiction detected in expectation vs reality"],
+            expectedImpact: "Align strategy with actual data."
+        });
+        return { recommendations: recs, claudeUsed: false, claudeFailed: true };
+    }
+
+    const actions = pack.executivePack.topActions.slice(0, 3);
+    
+    for (const a of actions) {
+        recs.push({
+            action: a.action,
+            rationale: a.rationale,
+            supportingEvidence: [`Priority: ${a.priority}`, `Entity: ${a.relatedEntity}`],
+            expectedImpact: `Address strategic priority and mitigate/scale associated impact.`
         });
     }
 
-    return recs.slice(0, 5);
+    // Fallback if no actions generated
+    if (recs.length === 0) {
+        recs.push({
+            action: "Monitor ongoing performance.",
+            rationale: "No material drivers, risks, or opportunities identified.",
+            supportingEvidence: [],
+            expectedImpact: "Maintain current stability."
+        });
+    }
+
+    return {
+        recommendations: recs,
+        claudeUsed: false,
+        claudeFailed: true
+    };
 }

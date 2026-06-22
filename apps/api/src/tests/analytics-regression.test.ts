@@ -12,6 +12,7 @@ import { routeQuery } from "../ai/queryRouter.js";
 import { buildSemanticLayer, EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { buildRootCausePack } from "../services/RootCausePackBuilder.js";
 import { buildClaudeInputPack, assertClaudeInputSafe } from "../services/claudeInputContract.js";
+import { buildExecutivePack } from "../services/insights/executivePackBuilder.js";
 import { checkClaudeAllowed } from "../services/claudeGuardrailService.js";
 import { generateRecommendations } from "../services/recommendationGenerator.js";
 import { validateQueryPreExecution } from "../services/queryValidationService.js";
@@ -132,7 +133,7 @@ describe("Claude Input Contract", () => {
         ]];
         const sl = getSemanticLayer();
         const pack = buildRootCausePack("test", sl, mockResults);
-        const claudePack = buildClaudeInputPack("test", pack);
+        const claudePack = buildClaudeInputPack("test", pack, buildExecutivePack(pack));
 
         assert.ok(claudePack.metricName);
         assert.ok(claudePack.builtAt);
@@ -145,7 +146,7 @@ describe("Claude Input Contract", () => {
         ]];
         const sl = getSemanticLayer();
         const pack = buildRootCausePack("test", sl, mockResults);
-        const claudePack = buildClaudeInputPack("test", pack);
+        const claudePack = buildClaudeInputPack("test", pack, buildExecutivePack(pack));
 
         // This should NOT throw
         assertClaudeInputSafe(claudePack);
@@ -260,38 +261,36 @@ describe("Analytics Metrics Service", () => {
 // ─── Phase 2.8: Recommendation Engine ─────────────────────────────────────────
 
 describe("Recommendation Engine", () => {
-    it("generates recommendations from a valid pack", () => {
+    it("generates recommendations from a valid pack", async () => {
         const mockResults: Record<string, unknown>[][] = [[
             { "Hotel": "Sofitel", "Volume": 200, "Volume Share %": 30, "Win Rate": 60, "Metric Delta": 5, "Weighted Contribution": 2.5, "Contribution %": 50, "Overall Metric Change": 5.0 },
             { "Hotel": "Mercure", "Volume": 100, "Volume Share %": 15, "Win Rate": 40, "Metric Delta": -10, "Weighted Contribution": -1.5, "Contribution %": -30, "Overall Metric Change": 5.0 }
         ]];
         const sl = getSemanticLayer();
         const pack = buildRootCausePack("why did win rate change", sl, mockResults);
-        const claudePack = buildClaudeInputPack("why did win rate change", pack);
-        const recs = generateRecommendations(claudePack);
+        const claudePack = buildClaudeInputPack("why did win rate change", pack, buildExecutivePack(pack));
+        const { recommendations: recs } = await generateRecommendations(claudePack);
 
         assert.ok(recs.length > 0, "Should generate at least one recommendation");
         // Each recommendation should have required fields
         for (const rec of recs) {
-            assert.ok(rec.title, "Recommendation must have a title");
-            assert.ok(rec.description, "Recommendation must have a description");
-            assert.ok(rec.affectedDimension, "Recommendation must cite affected dimension");
+            assert.ok(rec.action, "Recommendation must have an action");
+            assert.ok(rec.rationale, "Recommendation must have a rationale");
             assert.ok(rec.expectedImpact, "Recommendation must state expected impact");
             assert.ok(rec.supportingEvidence.length > 0, "Recommendation must cite evidence");
-            assert.ok(["HIGH", "MEDIUM", "LOW"].includes(rec.priority), "Priority must be valid");
         }
     });
 
-    it("generates contradiction recommendation when contradiction detected", () => {
+    it("generates contradiction recommendation when contradiction detected", async () => {
         const mockResults: Record<string, unknown>[][] = [[
             { "Hotel": "Sofitel", "Volume": 200, "Volume Share %": 30, "Win Rate": 60, "Metric Delta": 5, "Weighted Contribution": 2.5, "Contribution %": 50, "Overall Metric Change": 5.0 }
         ]];
         const sl = getSemanticLayer();
         const pack = buildRootCausePack("why did we lose win rate", sl, mockResults);
-        const claudePack = buildClaudeInputPack("why did we lose win rate", pack);
-        const recs = generateRecommendations(claudePack);
+        const claudePack = buildClaudeInputPack("why did we lose win rate", pack, buildExecutivePack(pack));
+        const { recommendations: recs } = await generateRecommendations(claudePack);
 
-        const contradictionRec = recs.find(r => r.title.includes("Reassess"));
+        const contradictionRec = recs.find(r => r.action.includes("Reassess"));
         assert.ok(contradictionRec, "Should generate a contradiction recommendation");
     });
 });

@@ -1,4 +1,5 @@
-import { RootCausePack, ContributorEntry, MetricChange } from "./RootCausePackBuilder.js";
+import { RootCausePack, MetricChange } from "./RootCausePackBuilder.js";
+import { ExecutivePack } from "./insights/executivePackBuilder.js";
 
 // ─── Claude Input Contract ────────────────────────────────────────────────────
 //
@@ -7,20 +8,6 @@ import { RootCausePack, ContributorEntry, MetricChange } from "./RootCausePackBu
 //
 // NEVER expose: raw SQL, raw rows, raw datasets, file paths, column names.
 // ───────────────────────────────────────────────────────────────────────────────
-
-/**
- * Sanitized contributor summary for Claude consumption.
- * Contains only business-meaningful fields — no internal IDs or raw column references.
- */
-export interface ClaudeContributorSummary {
-    name: string;
-    metricValue: number;
-    volume: number;
-    volumeSharePct: number;
-    metricDelta: number;
-    weightedContribution: number;
-    contributionPct: number;
-}
 
 /**
  * The ONLY structure Claude is allowed to consume.
@@ -36,20 +23,8 @@ export interface ClaudeInputPack {
     /** Overall metric change between periods (null for single-period analysis) */
     metricChange: MetricChange | null;
 
-    /** Top entities that pulled the metric UP */
-    topPositiveContributors: ClaudeContributorSummary[];
-
-    /** Top entities that pulled the metric DOWN */
-    topNegativeContributors: ClaudeContributorSummary[];
-
-    /** Dimension-specific breakdowns */
-    affectedHotels: ClaudeContributorSummary[];
-    affectedChains: ClaudeContributorSummary[];
-    affectedSuppliers: ClaudeContributorSummary[];
-    affectedAPWBuckets: ClaudeContributorSummary[];
-
-    /** Trend data points (if available) */
-    trendSummary: { period: string; value: number }[];
+    /** The executive abstraction layer */
+    executivePack: ExecutivePack;
 
     /** Whether the user's stated expectation contradicts the data */
     contradictionDetected: boolean;
@@ -70,78 +45,39 @@ export interface ClaudeInputPack {
     builtAt: string;
 }
 
-// ─── Builder ──────────────────────────────────────────────────────────────────
-
 /**
- * Converts a ContributorEntry to a Claude-safe summary.
- * Strips any internal fields and enforces finite numbers.
- */
-function sanitizeContributor(entry: ContributorEntry): ClaudeContributorSummary {
-    return {
-        name:                 entry.name,
-        metricValue:          safeNum(entry.metricValue),
-        volume:               safeNum(entry.volume),
-        volumeSharePct:       safeNum(entry.volumeSharePct),
-        metricDelta:          safeNum(entry.metricDelta),
-        weightedContribution: safeNum(entry.weightedContribution),
-        contributionPct:      safeNum(entry.contributionPct)
-    };
-}
-
-function safeNum(v: number): number {
-    return isFinite(v) ? +v.toFixed(4) : 0;
-}
-
-/**
- * Builds a ClaudeInputPack from a validated RootCausePack.
+ * Builds a ClaudeInputPack from an ExecutivePack and RootCausePack metadata.
  * 
  * This is the ONLY entry point for creating data that Claude can see.
- * It guarantees:
- *   1. No raw SQL leaks
- *   2. No raw dataset rows leak
- *   3. No file paths leak
- *   4. All numbers are finite and rounded
- *   5. Only validated, structured facts pass through
+ * It guarantees no raw data leaks and only validated facts pass through.
  */
 export function buildClaudeInputPack(
     question: string,
-    pack: RootCausePack
+    rootCausePack: RootCausePack,
+    executivePack: ExecutivePack
 ): ClaudeInputPack {
 
-    const validationErrors = pack.validationErrors ?? [];
+    const validationErrors = rootCausePack.validationErrors ?? [];
 
     const claudePack: ClaudeInputPack = {
         question,
-        metricName:               pack.metricName,
-        metricChange:             pack.metricChange,
+        metricName:               rootCausePack.metricName,
+        metricChange:             rootCausePack.metricChange,
 
-        topPositiveContributors:  pack.topPositiveContributors.map(sanitizeContributor),
-        topNegativeContributors:  pack.topNegativeContributors.map(sanitizeContributor),
+        executivePack,
 
-        affectedHotels:           pack.affectedHotels.map(sanitizeContributor),
-        affectedChains:           pack.affectedChains.map(sanitizeContributor),
-        affectedSuppliers:        pack.affectedSuppliers.map(sanitizeContributor),
-        affectedAPWBuckets:       pack.affectedAPWBuckets.map(sanitizeContributor),
-
-        trendSummary:             pack.trendSummary.map(t => ({
-            period: t.period,
-            value:  safeNum(t.value)
-        })),
-
-        contradictionDetected:    pack.contradictionDetected ?? false,
-        expectedDirection:        pack.expectedDirection,
+        contradictionDetected:    rootCausePack.contradictionDetected ?? false,
+        expectedDirection:        rootCausePack.expectedDirection,
 
         validationStatus:         validationErrors.length === 0 ? "PASSED" : "FAILED",
         validationErrors,
 
-        totalRows:                pack.totalRows,
-        builtAt:                  pack.builtAt
+        totalRows:                rootCausePack.totalRows,
+        builtAt:                  rootCausePack.builtAt
     };
 
     console.log(
         `[CLAUDE_CONTRACT] Pack built | metric=${claudePack.metricName} | ` +
-        `positive=${claudePack.topPositiveContributors.length} | ` +
-        `negative=${claudePack.topNegativeContributors.length} | ` +
         `contradiction=${claudePack.contradictionDetected} | ` +
         `validation=${claudePack.validationStatus}`
     );
