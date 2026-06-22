@@ -20,6 +20,10 @@ import ReportsPage from "./pages/ReportsPage";
 import ReportDetailPage from "./pages/ReportDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
+import HotelDeepDivePage from "./pages/HotelDeepDivePage";
+import SupplierDeepDivePage from "./pages/SupplierDeepDivePage";
+import ChainDeepDivePage from "./pages/ChainDeepDivePage";
+import DeepDivesIndexPage from "./pages/DeepDivesIndexPage";
 
 // ── Query Client ──
 const queryClient = new QueryClient({
@@ -55,6 +59,10 @@ function AppContent() {
                         <Route path="/datasets/upload" element={<UploadPage />} />
                         <Route path="/reports" element={<ReportsPage />} />
                         <Route path="/reports/:id" element={<ReportDetailPage />} />
+                        <Route path="/deep-dives" element={<DeepDivesIndexPage />} />
+                        <Route path="/deep-dives/hotel/:id" element={<HotelDeepDivePage />} />
+                        <Route path="/deep-dives/supplier/:id" element={<SupplierDeepDivePage />} />
+                        <Route path="/deep-dives/chain/:id" element={<ChainDeepDivePage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/profile" element={<ProfilePage />} />
 

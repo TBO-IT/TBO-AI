@@ -21,7 +21,7 @@ router.get("/", requireAuth(), async (req, res) => {
             title: r.title,
             content: r.content,
             datasetId: r.datasetId,
-            datasetName: r.dataset?.filename,
+            datasetName: (r as any).dataset?.filename,
             createdAt: r.createdAt.toISOString()
         })));
     } catch (error) {
@@ -34,7 +34,7 @@ router.get("/", requireAuth(), async (req, res) => {
 router.get("/:id", requireAuth(), async (req, res) => {
     try {
         const auth = (req as any).auth;
-        const { id } = req.params;
+        const id = req.params.id as string;
 
         const report = await prisma.report.findUnique({
             where: { id },
@@ -50,7 +50,7 @@ router.get("/:id", requireAuth(), async (req, res) => {
             title: report.title,
             content: report.content,
             datasetId: report.datasetId,
-            datasetName: report.dataset?.filename,
+            datasetName: (report as any).dataset?.filename,
             createdAt: report.createdAt.toISOString()
         });
     } catch (error) {
@@ -89,7 +89,7 @@ router.post("/", requireAuth(), async (req, res) => {
 router.delete("/:id", requireAuth(), async (req, res) => {
     try {
         const auth = (req as any).auth;
-        const { id } = req.params;
+        const id = req.params.id as string;
 
         // Ensure user owns report before deleting
         const existing = await prisma.report.findUnique({ where: { id } });

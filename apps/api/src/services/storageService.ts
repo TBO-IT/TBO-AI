@@ -8,6 +8,15 @@ import { supabase }
 export async function downloadDataset(
     storagePath: string
 ) {
+    const fileName = storagePath.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const tempPath = path.join("tmp", fileName);
+
+    try {
+        await fs.access(tempPath);
+        return tempPath;
+    } catch {
+        // File doesn't exist, proceed to download
+    }
 
     const { data, error } =
         await supabase.storage
@@ -21,12 +30,6 @@ export async function downloadDataset(
     const buffer =
         Buffer.from(
             await data.arrayBuffer()
-        );
-
-    const tempPath =
-        path.join(
-            "tmp",
-            `${crypto.randomUUID()}.csv`
         );
 
     await fs.mkdir(

@@ -36,8 +36,8 @@ export interface AnalyticsLogEntry {
  */
 export function logAnalytics(entry: AnalyticsLogEntry): void {
     const logLine: AnalyticsLogEntry = {
-        timestamp: new Date().toISOString(),
-        ...entry
+        ...entry,
+        timestamp: entry.timestamp || new Date().toISOString()
     };
     console.log(JSON.stringify(logLine));
 }

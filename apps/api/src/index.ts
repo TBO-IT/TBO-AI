@@ -13,6 +13,7 @@ import chatRoutes from "./routes/chat.js";
 import metricsRoutes from "./routes/metrics.js";
 import testRouter from "./routes/test.js";
 import reportRoutes from "./routes/reports.js";
+import deepDiveRoutes from "./routes/deep-dives.js";
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use(
         credentials: true,
     })
 );
+
 app.use(express.json());
 app.use(clerkMiddleware());
 
@@ -45,6 +47,7 @@ app.use("/api", meRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/auth", authRoutes);
 app.use("/reports", reportRoutes);
+app.use("/deep-dives", deepDiveRoutes);
 
 app.get("/", (req, res) => {
     res.json({ message: "Hello from api" })

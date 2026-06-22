@@ -18,6 +18,23 @@ interface Message {
     sections?: Record<string, string>;
 }
 
+// ── Formatted Text Renderer ──
+// Simple utility to parse **text** into bold tags
+function FormattedText({ text }: { text: string }) {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return (
+        <>
+            {parts.map((part, i) => {
+                if (part.startsWith("**") && part.endsWith("**")) {
+                    return <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>;
+                }
+                return <span key={i}>{part}</span>;
+            })}
+        </>
+    );
+}
+
 // ── Section Renderer ──
 
 const SECTION_ORDER = [
@@ -122,7 +139,7 @@ function SectionCard({ title, content, defaultOpen = false }: { title: string; c
                         className="overflow-hidden"
                     >
                         <div className="px-4 pb-4 text-[13px] leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line">
-                            {content}
+                            <FormattedText text={content} />
                         </div>
                     </motion.div>
                 )}
@@ -402,7 +419,7 @@ export default function CopilotPage() {
                                 ) : (
                                     /* Plain text fallback */
                                     <div className="rounded-2xl rounded-tl-md px-4 py-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 text-[13px] text-slate-700 dark:text-slate-300 whitespace-pre-line">
-                                        {msg.content}
+                                        <FormattedText text={msg.content} />
                                     </div>
                                 )}
                             </div>

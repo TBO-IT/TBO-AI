@@ -22,10 +22,7 @@ const NAV_ITEMS = [
     { to: "/copilot", label: "Copilot", icon: MessageSquare, description: "Ask questions" },
     { to: "/datasets", label: "Datasets", icon: Database, description: "Manage data" },
     { to: "/reports", label: "Reports", icon: FileText, description: "Saved reports" },
-];
-
-const BOTTOM_ITEMS = [
-    { to: "/settings", label: "Settings", icon: Settings },
+    { to: "/deep-dives", label: "Deep Dives", icon: SearchIcon, description: "Entity analysis" },
 ];
 
 export default function Sidebar() {
@@ -112,29 +109,46 @@ export default function Sidebar() {
                 })}
             </nav>
 
+            {/* ── Search / Command ── */}
+            <div className="px-3 pb-2 pt-2">
+                <button
+                    onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+                    className={cn(
+                        "flex items-center w-full gap-2 px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-150 cursor-pointer border",
+                        "text-slate-400 border-slate-800/60 hover:text-slate-200 hover:bg-white/[0.04]",
+                        collapsed && "justify-center px-0 border-transparent"
+                    )}
+                    title={collapsed ? "Search (⌘K)" : undefined}
+                >
+                    <SearchIcon className="h-4 w-4 flex-shrink-0" />
+                    {!collapsed && (
+                        <div className="flex items-center justify-between flex-1">
+                            <span>Search...</span>
+                            <kbd className="hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-slate-700 bg-slate-800 px-1 font-mono text-[9px] font-medium text-slate-400">
+                                <span className="text-[10px]">⌘</span>K
+                            </kbd>
+                        </div>
+                    )}
+                </button>
+            </div>
+
             {/* ── Bottom Section ── */}
-            <div className="px-2.5 pb-2 space-y-0.5">
-                {BOTTOM_ITEMS.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = location.pathname.startsWith(item.to);
-                    return (
-                        <NavLink
-                            key={item.to}
-                            to={item.to}
-                            className={cn(
-                                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150",
-                                isActive
-                                    ? "bg-white/[0.08] text-white"
-                                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]",
-                                collapsed && "justify-center px-0"
-                            )}
-                            title={collapsed ? item.label : undefined}
-                        >
-                            <Icon className="h-[18px] w-[18px] flex-shrink-0" />
-                            {!collapsed && <span className="truncate">{item.label}</span>}
-                        </NavLink>
-                    );
-                })}
+            <div className="px-2.5 pb-2 space-y-0.5 border-t border-slate-800/60 pt-2">
+                {/* Settings Toggle */}
+                <NavLink
+                    to="/settings"
+                    className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150",
+                        location.pathname.startsWith("/settings")
+                            ? "bg-white/[0.08] text-white"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]",
+                        collapsed && "justify-center px-0"
+                    )}
+                    title={collapsed ? "Settings" : undefined}
+                >
+                    <Settings className="h-[18px] w-[18px] flex-shrink-0" />
+                    {!collapsed && <span className="truncate">Settings</span>}
+                </NavLink>
 
                 {/* Theme Toggle */}
                 <button

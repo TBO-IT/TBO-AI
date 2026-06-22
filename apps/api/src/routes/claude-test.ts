@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { anthropic } from "../lib/claude.js";
+import { getAnthropicClient } from "../lib/claude.js";
 
 const router = Router();
 
@@ -8,7 +8,7 @@ router.get(
     async (req, res) => {
 
         const response =
-            await anthropic.messages.create({
+            await getAnthropicClient().messages.create({
 
                 model:
                     "claude-sonnet-4-20250514",
@@ -28,7 +28,7 @@ router.get(
 
         const text =
             response.content.find(
-                block =>
+                (block: any) =>
                     block.type === "text"
             );
 
