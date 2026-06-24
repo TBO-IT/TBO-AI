@@ -10,10 +10,23 @@ import { ActionImpact, generateActionImpacts } from "./actionImpactEngine.js";
 import { Tradeoff, detectTradeoffs } from "./tradeoffEngine.js";
 import { DependencyInsight, detectDependencies } from "./dependencyEngine.js";
 import { ConfidenceAssessment, assessConfidence } from "./confidenceEngine.js";
-import { ActionabilityTarget } from "./actionabilityEngine.js";
+import { ActionabilityTarget, TargetPolarity } from "./actionabilityEngine.js";
 import { DrilldownInsight } from "./entityDrilldownEngine.js";
 import { RecommendationTarget } from "./recommendationAttributionEngine.js";
 import { CompetitiveGap } from "../analytics/competitorStrategyEngine.js";
+
+export interface DecisionBrief {
+    targetPolarity: TargetPolarity;
+    selectedTarget: string;
+    selectionRationale: string;
+    whySelected: string;
+    alternatives: Array<{
+        name: string;
+        polarity: TargetPolarity;
+        resourceAllocationScore: number;
+        reason: string;
+    }>;
+}
 
 export interface ExecutivePack {
     headline: string;
@@ -34,6 +47,7 @@ export interface ExecutivePack {
 
     actionabilityTargets: ActionabilityTarget[];
     primaryTarget?: ActionabilityTarget;
+    decisionBrief?: DecisionBrief;
     drilldowns: DrilldownInsight[];
     recommendations: RecommendationTarget[];
     competitiveGaps?: CompetitiveGap[];
@@ -114,9 +128,22 @@ function generateFocusAreas(
 }
 
 function generateLeadershipMessage(
+    primaryTarget: ActionabilityTarget | undefined,
     topRisk: ExecutiveRisk | undefined,
     topOpportunity: ExecutiveOpportunity | undefined
 ): string {
+    if (primaryTarget) {
+        switch (primaryTarget.polarity) {
+            case TargetPolarity.RISK:
+                return `Leadership should allocate resources to de-risk ${primaryTarget.name} because ${primaryTarget.selectionRationale}`;
+            case TargetPolarity.NEGATIVE:
+                return `Leadership should allocate resources to fix ${primaryTarget.name} because ${primaryTarget.selectionRationale}`;
+            case TargetPolarity.POSITIVE:
+            default:
+                return `Leadership should allocate resources to scale ${primaryTarget.name} because ${primaryTarget.selectionRationale}`;
+        }
+    }
+
     if (topRisk && topOpportunity) {
         return `Leadership should prioritize mitigating ${topRisk.affectedEntity} deterioration while scaling successful ${topOpportunity.affectedEntity} strategies.`;
     } else if (topRisk) {
@@ -141,13 +168,29 @@ export function buildExecutivePack(
     const topDriver = pack.priorityDrivers[0];
     const topRisk = pack.risks[0];
     const topOpportunity = pack.opportunities[0];
+    const primaryTarget = pack.primaryTarget;
 
     const executiveSummary = generateExecutiveSummary(topDriver, topRisk);
     const keyTakeaway = generateKeyTakeaway(pack.metricName, pack.metricChange, topDriver, topRisk, topOpportunity);
     const recommendedFocusAreas = generateFocusAreas(pack.risks, pack.opportunities);
     const topActions = generateActions(pack.risks, pack.opportunities);
     const strategicImplications = generateStrategicImplications(pack.metricChange, pack.priorityDrivers, pack.risks, pack.opportunities);
-    const leadershipMessage = generateLeadershipMessage(topRisk, topOpportunity);
+    const leadershipMessage = generateLeadershipMessage(primaryTarget, topRisk, topOpportunity);
+
+    const decisionBrief = primaryTarget
+        ? {
+            targetPolarity: primaryTarget.polarity,
+            selectedTarget: primaryTarget.name,
+            selectionRationale: primaryTarget.selectionRationale,
+            whySelected: primaryTarget.selectionRationale,
+            alternatives: (pack.actionabilityTargets || []).slice(1, 4).map(target => ({
+                name: target.name,
+                polarity: target.polarity,
+                resourceAllocationScore: target.resourceAllocationScore,
+                reason: target.selectionRationale
+            }))
+        }
+        : undefined;
 
     const scenarios = generateScenarios(pack.metricName, pack.metricChange, pack.risks, pack.opportunities);
     const actionImpacts = generateActionImpacts(topActions, pack.risks, pack.opportunities);
@@ -172,7 +215,8 @@ export function buildExecutivePack(
         confidenceAssessment,
         leadershipMessage,
         actionabilityTargets: pack.actionabilityTargets || [],
-        primaryTarget: pack.primaryTarget,
+        primaryTarget,
+        decisionBrief,
         drilldowns: pack.drilldowns || [],
         recommendations: pack.recommendations || []
     };

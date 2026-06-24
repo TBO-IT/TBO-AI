@@ -10,6 +10,12 @@ export enum DecisionIntent {
     PROTECT = "PROTECT"
 }
 
+export enum TargetPolarity {
+    POSITIVE = "POSITIVE",
+    NEGATIVE = "NEGATIVE",
+    RISK = "RISK"
+}
+
 export interface ActionabilityTarget {
     entityType: "CHAIN" | "HOTEL" | "DESTINATION" | "SUPPLIER" | "APW" | "UNKNOWN";
     name: string;
@@ -17,7 +23,81 @@ export interface ActionabilityTarget {
     metricDelta: number;
     impactScore: number;
     actionabilityScore: number;
+    resourceAllocationScore: number;
+    polarity: TargetPolarity;
     reason: string;
+    selectionRationale: string;
+}
+
+function calculateResourceAllocationScore(
+    entry: ContributorEntry,
+    impactScore: number,
+    intent: DecisionIntent
+): number {
+    const recoverableImpact = impactScore < 0 ? Math.abs(impactScore) : 0;
+    const growthOpportunity = impactScore > 0 ? impactScore : 0;
+    const actionability = Math.abs(impactScore);
+
+    const concentrationPenalty =
+        entry.volumeSharePct >= 25 ? entry.volumeSharePct * 0.45 :
+            entry.volumeSharePct >= 15 ? entry.volumeSharePct * 0.25 :
+                entry.volumeSharePct >= 10 ? entry.volumeSharePct * 0.15 :
+                    0;
+
+    const baseScore =
+        (recoverableImpact * 0.45) +
+        (entry.volumeSharePct * 0.25) +
+        (actionability * 0.30) +
+        (growthOpportunity * 0.20) -
+        concentrationPenalty;
+
+    switch (intent) {
+        case DecisionIntent.FIX:
+        case DecisionIntent.IMPROVE:
+            return baseScore + (recoverableImpact * 0.75);
+        case DecisionIntent.EXPAND:
+            return baseScore + (growthOpportunity * 0.75);
+        case DecisionIntent.PROTECT:
+            return baseScore + concentrationPenalty + (entry.volumeSharePct * 0.20) + (recoverableImpact * 0.25);
+        case DecisionIntent.COMPETE:
+            return baseScore + (recoverableImpact * 0.35) + (growthOpportunity * 0.35);
+        case DecisionIntent.PRIORITIZE:
+        case DecisionIntent.EXPLAIN:
+        default:
+            return baseScore;
+    }
+}
+
+function derivePolarity(
+    impactScore: number,
+    intent: DecisionIntent
+): TargetPolarity {
+    if (intent === DecisionIntent.PROTECT) {
+        return TargetPolarity.RISK;
+    }
+
+    return impactScore < 0 ? TargetPolarity.NEGATIVE : TargetPolarity.POSITIVE;
+}
+
+function buildSelectionRationale(
+    entry: ContributorEntry,
+    impactScore: number,
+    resourceAllocationScore: number,
+    polarity: TargetPolarity,
+    intent: DecisionIntent
+): string {
+    const volume = `${entry.volumeSharePct.toFixed(1)}% volume`;
+    const delta = `${Math.abs(entry.metricDelta).toFixed(2)} pts`;
+
+    if (polarity === TargetPolarity.RISK) {
+        return `Selected because ${entry.name} carries the highest concentration risk for the current allocation decision. Reducing dependency here protects ${volume} and improves resilience.`;
+    }
+
+    if (polarity === TargetPolarity.NEGATIVE || intent === DecisionIntent.FIX || intent === DecisionIntent.IMPROVE) {
+        return `Selected because recovering ${delta} across ${volume} yields the strongest resource allocation score (${resourceAllocationScore.toFixed(2)}), making this the highest ROI fix among the available options.`;
+    }
+
+    return `Selected because scaling ${entry.name} converts a ${delta} advantage across ${volume} into the strongest resource allocation score (${resourceAllocationScore.toFixed(2)}), making it the highest ROI growth choice.`;
 }
 
 export function calculateActionabilityTargets(
@@ -61,6 +141,10 @@ export function calculateActionabilityTargets(
             reason = `High-growth segment to scale${contextStr} (${entry.metricDelta.toFixed(2)} pts at ${entry.volumeSharePct.toFixed(1)}% volume).`;
         }
 
+        const polarity = derivePolarity(impactScore, intent);
+        const resourceAllocationScore = calculateResourceAllocationScore(entry, impactScore, intent);
+        const selectionRationale = buildSelectionRationale(entry, impactScore, resourceAllocationScore, polarity, intent);
+
         return {
             entityType: type,
             name: entry.name,
@@ -68,7 +152,10 @@ export function calculateActionabilityTargets(
             metricDelta: entry.metricDelta,
             impactScore: impactScore,
             actionabilityScore,
+            resourceAllocationScore,
+            polarity,
             reason
+            ,selectionRationale
         };
     });
 
@@ -96,7 +183,7 @@ export function calculateActionabilityTargets(
         case DecisionIntent.PRIORITIZE:
         default:
             // Highest ROI target
-            sortedTargets = sortedTargets.sort((a, b) => b.actionabilityScore - a.actionabilityScore);
+            sortedTargets = sortedTargets.sort((a, b) => b.resourceAllocationScore - a.resourceAllocationScore);
             break;
     }
 

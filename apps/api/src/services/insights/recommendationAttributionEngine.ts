@@ -1,4 +1,4 @@
-import { ActionabilityTarget } from "./actionabilityEngine.js";
+import { ActionabilityTarget, TargetPolarity } from "./actionabilityEngine.js";
 import { DrilldownInsight } from "./entityDrilldownEngine.js";
 
 export interface RecommendationTarget {
@@ -19,15 +19,18 @@ export function generateAttributedRecommendations(
     if (!primaryTarget) return recommendations;
 
     // 1. Primary Recommendation based on the root target
-    const isNegative = primaryTarget.impactScore < 0;
+    const isNegative = primaryTarget.polarity === TargetPolarity.NEGATIVE;
+    const isRisk = primaryTarget.polarity === TargetPolarity.RISK;
     
     recommendations.push({
         targetType: primaryTarget.entityType,
         targetName: primaryTarget.name,
         reason: primaryTarget.reason,
-        expectedImpact: isNegative 
-            ? `Highest ROI recovery opportunity. Fixing this recovers up to ${Math.abs(primaryTarget.metricDelta).toFixed(2)} pts in a segment with ${primaryTarget.volumeShare.toFixed(1)}% volume.`
-            : `Highest ROI growth opportunity. Scaling this amplifies a ${primaryTarget.metricDelta.toFixed(2)} pt advantage across ${primaryTarget.volumeShare.toFixed(1)}% volume.`,
+        expectedImpact: isRisk
+            ? `Highest ROI protection opportunity. Reducing dependency here protects ${primaryTarget.volumeShare.toFixed(1)}% volume.`
+            : isNegative
+                ? `Highest ROI recovery opportunity. Fixing this recovers up to ${Math.abs(primaryTarget.metricDelta).toFixed(2)} pts in a segment with ${primaryTarget.volumeShare.toFixed(1)}% volume.`
+                : `Highest ROI growth opportunity. Scaling this amplifies a ${primaryTarget.metricDelta.toFixed(2)} pt advantage across ${primaryTarget.volumeShare.toFixed(1)}% volume.`,
         impactScore: primaryTarget.impactScore
     });
 

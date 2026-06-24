@@ -37,6 +37,7 @@ import { generateRecommendations, Recommendation } from "./recommendationGenerat
 import { detectCompetitorContext, CompetitorContext } from "./competitorDetector.js";
 import { startTimer, logCache, logRootCause, logClaude } from "./analyticsLogger.js";
 import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContradiction } from "./analyticsMetrics.js";
+import { TargetPolarity } from "./insights/actionabilityEngine.js";
 
 export class ChatOrchestrator {
     static async execute(datasetId: string, question: string): Promise<any> {
@@ -567,7 +568,10 @@ export class ChatOrchestrator {
                         metricDelta: -Math.abs(topGap.gap),
                         impactScore: -Math.abs(topGap.gap),
                         actionabilityScore: Math.abs(topGap.gap),
+                        resourceAllocationScore: Math.abs(topGap.gap),
+                        polarity: TargetPolarity.RISK,
                         reason: `Largest competitive vulnerability (Gap: ${topGap.gap.toFixed(2)} pts)`
+                        ,selectionRationale: `Selected because closing ${topGap.dimension} creates the largest competitive defense opportunity.`
                     };
 
                     drilldowns = await executeEntityDrilldown(compPrimaryTarget, parsedQuestion, semanticLayer, tempPath);
@@ -801,6 +805,7 @@ export class ChatOrchestrator {
                 } else if (routeType === "EXECUTIVE_PRIORITY" && executivePack) {
                     console.log(`[NARRATIVE_REQUEST] source=EXECUTIVE_PRIORITY | deterministic executive brief`);
                     narrative = buildExecutivePriorityNarrative(executivePack);
+                    validateExecutivePriorityNarrative(executivePack, narrative, question);
                     console.log(`[NARRATIVE_VALUE_SET] source=EXECUTIVE_PRIORITY | preview="${narrative.slice(0, 100)}"`);
                 } else {
                     console.log(`[NARRATIVE_REQUEST] source=ANALYTICS | deterministic`);
@@ -861,15 +866,16 @@ export class ChatOrchestrator {
                 // Clean up downloaded dataset (retry on Windows EBUSY)
                 const fs = await import("fs/promises");
                 for (let i = 0; i < 50; i++) {
-                try {
-                    // Temporarily disabled to prevent local Supabase credential requirements
-                    // await fs.unlink(tempPath);
-                    break;
-                } catch (err: any) {
-                    if (err.code === "EBUSY" && i < 49) {
-                        await new Promise(r => setTimeout(r, 200));
-                    } else {
-                        console.error("Failed to delete temp file:", tempPath, err);
+                    try {
+                        // Temporarily disabled to prevent local Supabase credential requirements
+                        // await fs.unlink(tempPath);
+                        break;
+                    } catch (err: any) {
+                        if (err.code === "EBUSY" && i < 49) {
+                            await new Promise(r => setTimeout(r, 200));
+                        } else {
+                            console.error("Failed to delete temp file:", tempPath, err);
+                        }
                     }
                 }
             }
@@ -963,25 +969,91 @@ function buildRecommendationNarrative(
 
 function buildExecutivePriorityNarrative(executivePack: any): string {
     const target = executivePack.primaryTarget;
+    const decisionBrief = executivePack.decisionBrief;
     const drivers = (executivePack.topDrivers ?? []).slice(0, 3).map((d: any) => d.name).join(", ");
+    const actions = (executivePack.topActions ?? []).slice(0, 3).map((action: any, index: number) => {
+        if (typeof action === "string") {
+            return `${index + 1}. ${action}`;
+        }
+        const actionText = action.action ?? action.title ?? String(action);
+        const rationaleText = action.rationale ? `\n   Why: ${action.rationale}` : "";
+        const impactText = action.expectedImpact ? `\n   Impact: ${action.expectedImpact}` : "";
+        return `${index + 1}. ${actionText}${rationaleText}${impactText}`;
+    }).join("\n");
+
+    const alternatives = (decisionBrief?.alternatives ?? []).slice(0, 3).map((alt: any) => {
+        return `- ${alt.name}: ${alt.reason} (score ${Number(alt.resourceAllocationScore).toFixed(2)})`;
+    }).join("\n");
 
     if (!target) {
         return executivePack.executiveSummary || executivePack.leadershipMessage || "Insufficient data to identify a primary focus area.";
     }
 
+    const polarityLabel = target.polarity || (target.impactScore < 0 ? TargetPolarity.NEGATIVE : TargetPolarity.POSITIVE);
+
+    const polarityAction = polarityLabel === TargetPolarity.RISK
+        ? "de-risk"
+        : polarityLabel === TargetPolarity.NEGATIVE
+            ? "recover"
+            : "scale";
+
     return [
         `## Executive Priority Brief`,
         ``,
         `**Primary Target:** ${target.name} (${target.entityType})`,
-        `**Why:** ${target.reason}`,
-        `**Business Impact:** ${target.metricDelta?.toFixed?.(1) ?? target.metricDelta} point metric delta at ${target.volumeShare?.toFixed?.(1) ?? target.volumeShare}% volume share`,
-        `**Expected ROI:** Actionability score ${target.actionabilityScore?.toFixed?.(1) ?? target.actionabilityScore} — highest leverage intervention available`,
+        `**Polarity:** ${polarityLabel}`,
+        `**Why this target?** ${target.selectionRationale || target.reason}`,
+        `**Business Impact:** ${target.metricDelta?.toFixed?.(1) ?? target.metricDelta} point metric delta at ${target.volumeShare?.toFixed?.(1) ?? target.volumeShare}% volume`,
+        `**Expected ROI:** Resource allocation score ${target.resourceAllocationScore?.toFixed?.(2) ?? target.resourceAllocationScore} — highest leverage intervention available`,
+        ``,
+        `**Why not alternatives?**`,
+        alternatives || `- See ranked alternatives in the supporting analysis.`,
         ``,
         `**Top Drivers:** ${drivers || "See supporting analysis"}`,
         ``,
         `**Recommended Actions:**`,
-        ...(executivePack.topActions ?? executivePack.recommendedFocusAreas ?? []).slice(0, 3).map((a: string) => `- ${a}`),
+        ...(actions ? actions.split("\n") : (executivePack.recommendedFocusAreas ?? []).slice(0, 3).map((a: string) => `- ${a}`)),
         ``,
-        executivePack.leadershipMessage || executivePack.keyTakeaway || ""
+        `**Leadership Message:** ${executivePack.leadershipMessage || executivePack.keyTakeaway || ""}`,
+        `**Action Verb:** ${polarityAction}`
     ].filter(Boolean).join("\n");
+}
+
+function validateExecutivePriorityNarrative(executivePack: any, narrative: string, question: string): void {
+    const target = executivePack?.primaryTarget;
+    if (!target) {
+        throw new Error("EXECUTIVE_PRIORITY_VALIDATION_FAILED");
+    }
+
+    const lower = narrative.toLowerCase();
+    const leadershipMessage = String(executivePack.leadershipMessage || "").toLowerCase();
+    if (lower.includes("[object object]")) {
+        throw new Error("EXECUTIVE_PRIORITY_VALIDATION_FAILED");
+    }
+
+    const polarity = target.polarity || (target.impactScore < 0 ? TargetPolarity.NEGATIVE : TargetPolarity.POSITIVE);
+    const positiveLanguage = /\b(scale|expand|replicate|invest|accelerate|grow|expand investment|scale up)\b/i;
+    const negativeLanguage = /\b(recover|fix|investigate|stabilize|repair|mitigate|close|de-risk)\b/i;
+    const riskLanguage = /\b(diversify|protect|de-risk|reduce dependency|defend)\b/i;
+
+    if (polarity === TargetPolarity.POSITIVE && negativeLanguage.test(leadershipMessage) && !positiveLanguage.test(leadershipMessage)) {
+        throw new Error("EXECUTIVE_PRIORITY_VALIDATION_FAILED");
+    }
+
+    if (polarity === TargetPolarity.NEGATIVE && positiveLanguage.test(leadershipMessage) && !negativeLanguage.test(leadershipMessage)) {
+        throw new Error("EXECUTIVE_PRIORITY_VALIDATION_FAILED");
+    }
+
+    if (polarity === TargetPolarity.RISK && (positiveLanguage.test(leadershipMessage) || negativeLanguage.test(leadershipMessage)) && !riskLanguage.test(leadershipMessage)) {
+        throw new Error("EXECUTIVE_PRIORITY_VALIDATION_FAILED");
+    }
+
+    const requiresRoiJustification = /allocate resources|highest roi|fastest win|what should we focus on first|where should i allocate resources/i.test(question);
+    if (requiresRoiJustification && !/(roi|resource allocation score|why this target|selected because)/i.test(lower)) {
+        throw new Error("EXECUTIVE_PRIORITY_VALIDATION_FAILED");
+    }
+
+    if (!/(why this target|why not alternatives|selected because)/i.test(lower)) {
+        throw new Error("EXECUTIVE_PRIORITY_VALIDATION_FAILED");
+    }
 }
