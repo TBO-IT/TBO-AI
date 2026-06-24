@@ -25,7 +25,8 @@ export async function executeEntityDrilldown(
     primaryTarget: ActionabilityTarget | undefined,
     baseAnalysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer,
-    csvPath: string
+    csvPath: string,
+    competitorContext?: { competitorName: string; sourceColumn: string }
 ): Promise<DrilldownInsight[]> {
     if (!primaryTarget || primaryTarget.entityType === "UNKNOWN") {
         return [];

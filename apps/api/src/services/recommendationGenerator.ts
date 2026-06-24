@@ -28,6 +28,8 @@ export interface RecommendationResult {
     recommendations: Recommendation[];
     claudeUsed: boolean;
     claudeFailed: boolean;
+    /** Raw Claude Sonnet text — use this directly as the narrative for CLAUDE_RECOMMENDATION responses */
+    rawClaudeText?: string;
 }
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
@@ -93,10 +95,21 @@ export function buildRecommendationPrompt(pack: ClaudeInputPack): string {
     const oppsText = (ep.topOpportunities ?? []).map(o => `  • ${o.title}: ${o.description}`).join("\n");
     const driversText = (ep.topDrivers ?? []).map(d => `  • ${d.dimension}: ${d.contributor} (${d.metricDelta} pts)`).join("\n");
 
+    // ── Competitor Context Section ─────────────────────────────────────────
+    const competitorSection = pack.competitorName
+        ? `\nCOMPETITOR CONTEXT:\n` +
+          `Competitor: ${pack.competitorName}\n` +
+          `All analysis below is filtered to ${pack.competitorName}-specific data.\n` +
+          `Priority: Biggest loss drivers → Highest ROI recovery targets → Destination/Chain/Hotel vulnerabilities\n` +
+          `Do NOT prioritize strongest positive performers.\n` +
+          `Do NOT give generic recommendations that apply to any competitor.\n` +
+          `Every recommendation MUST reference ${pack.competitorName} by name.\n`
+        : "";
+
     return `USER QUESTION: "${pack.question}"
 METRIC: ${pack.metricName}
 OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' points (' + pack.metricChange.direction + ')' : 'N/A'}
-
+${competitorSection}
 PRIORITY 1: PRIMARY TARGET
   • ${primaryTargetText}
 
@@ -143,14 +156,28 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
     // 2. Build prompt
     const prompt = buildRecommendationPrompt(pack);
 
-    // 3. Call Claude Sonnet
+    // 3. Build system prompt (with competitor mode if applicable)
+    let systemPrompt = SYSTEM_PROMPT;
+    if (pack.competitorName) {
+        systemPrompt += `\n\nCOMPETITOR MODE — Active\nCompetitor: ${pack.competitorName}\n\nResponse MUST begin with:\nCOMPETITIVE GAP SUMMARY\nCompetitor: ${pack.competitorName}\nPrimary Vulnerability: [entity from the data]\n\nThen follow the standard TARGET-FIRST RESPONSE FORMAT.\nEvery recommendation MUST specifically address how to win against ${pack.competitorName}.\nDo NOT produce generic recommendations that would apply to any competitor.`;
+        console.log(`[RECOMMENDATION_ENGINE] COMPETITOR_MODE active | competitor=${pack.competitorName}`);
+    }
+
+    // 4. Call Claude Sonnet
     try {
-        const result = await generateRecommendationText(prompt, SYSTEM_PROMPT);
+        const result = await generateRecommendationText(prompt, systemPrompt);
+
+        // ── CRITICAL: Log raw Sonnet text BEFORE any parsing ─────────────
+        console.log(
+            `[RECOMMENDATION_ENGINE] RAW_CLAUDE_TEXT | chars=${result.text.length} | ` +
+            `preview="${result.text.slice(0, 200)}"`
+        );
+
         const recommendations = parseClaudeRecommendations(result.text);
 
         console.log(
             `[RECOMMENDATION_ENGINE] Claude Sonnet returned ${recommendations.length} recommendations | ` +
-            `cost=$${result.estimatedCost.toFixed(4)}`
+            `rawChars=${result.text.length} | cost=$${result.estimatedCost.toFixed(4)}`
         );
 
         // If Claude returned nothing useful, fall back
@@ -162,7 +189,8 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
         return {
             recommendations,
             claudeUsed: true,
-            claudeFailed: false
+            claudeFailed: false,
+            rawClaudeText: result.text
         };
     } catch (err: any) {
         console.error(`[RECOMMENDATION_ENGINE] Claude Sonnet failed (${err.code ?? "UNKNOWN"}) — using deterministic`);

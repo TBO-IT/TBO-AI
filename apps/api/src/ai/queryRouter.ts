@@ -1,6 +1,8 @@
 import { QuestionAnalysis, QuestionIntent } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { generateTemplatedSql } from "./sqlTemplateEngine.js";
+import { extractComparisonEntities } from "../services/comparisonEngine.js";
+import { isExecutivePriorityQuestion } from "../services/claudeRequestDetector.js";
 
 // ─── Route Types ──────────────────────────────────────────────────────────────
 
@@ -8,8 +10,10 @@ export type RouteType =
     | "TEMPLATE"
     | "TREND"
     | "COMPARISON"
+    | "COMPARE_ENTITIES"
     | "CONTRIBUTION"
     | "COMPETITOR_STRATEGY"
+    | "EXECUTIVE_PRIORITY"
     | "ROOT_CAUSE"
     | "LLM";
 
@@ -17,8 +21,10 @@ export type RoutingDecision =
     | { route: "TEMPLATE";     type: "TEMPLATE";     sql: string; explanation: string }
     | { route: "TREND";        type: "TREND";        explanation: string }
     | { route: "COMPARISON";   type: "COMPARISON";   explanation: string }
+    | { route: "COMPARE_ENTITIES"; type: "COMPARE_ENTITIES"; explanation: string }
     | { route: "CONTRIBUTION"; type: "CONTRIBUTION"; explanation: string }
     | { route: "COMPETITOR_STRATEGY"; type: "COMPETITOR_STRATEGY"; explanation: string }
+    | { route: "EXECUTIVE_PRIORITY"; type: "EXECUTIVE_PRIORITY"; explanation: string }
     | { route: "ROOT_CAUSE";   type: "ROOT_CAUSE";   explanation: string }
     | { route: "LLM";          type: "LLM";          explanation: string };
 
@@ -93,12 +99,7 @@ const ROOT_CAUSE_SIGNALS: string[] = [
     "what went wrong",
     "explain the",
     "explain why",
-    "explain how",
-    "focus on",
-    "prioritize",
-    "fix",
-    "improve",
-    "action"
+    "explain how"
 ];
 
 /**
@@ -244,6 +245,16 @@ export function routeQuery(
 ): RoutingDecision {
     const { intent, originalQuestion: question } = analysis;
 
+    // ── Priority 0: EXECUTIVE_PRIORITY ───────────────────────────────────────
+    if (intent === "EXECUTIVE_PRIORITY" || isExecutivePriorityQuestion(question)) {
+        logRouterDecision(analysis, "EXECUTIVE_PRIORITY", "EXECUTIVE_PRIORITY_INTENT");
+        return {
+            route: "EXECUTIVE_PRIORITY",
+            type: "EXECUTIVE_PRIORITY",
+            explanation: "Routed to Executive Priority Engine — leadership prioritization without RCA validation."
+        };
+    }
+
     // ── Priority 1: TREND ──────────────────────────────────────────────────────
     if (isTrendQuestion(question, intent)) {
         const rule = intent === "TREND" ? "TREND_INTENT" : "TREND_KEYWORD";
@@ -255,8 +266,17 @@ export function routeQuery(
         };
     }
 
-    // ── Priority 2: COMPARISON ─────────────────────────────────────────────────
+    // ── Priority 2: COMPARISON / COMPARE_ENTITIES ──────────────────────────────
     if (isComparisonQuestion(question, intent)) {
+        const entities = extractComparisonEntities(analysis, semanticLayer);
+        if (entities) {
+            logRouterDecision(analysis, "COMPARE_ENTITIES", "COMPARE_ENTITIES_TWO_SIDES");
+            return {
+                route: "COMPARE_ENTITIES",
+                type: "COMPARE_ENTITIES",
+                explanation: "Routed to Entity Comparison Pack Builder — structured side-by-side analysis."
+            };
+        }
         const rule = intent === "COMPARISON" ? "COMPARISON_INTENT" : "COMPARISON_KEYWORD";
         logRouterDecision(analysis, "COMPARISON", rule);
         return {

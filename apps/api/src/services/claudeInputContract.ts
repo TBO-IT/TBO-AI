@@ -43,6 +43,9 @@ export interface ClaudeInputPack {
 
     /** Timestamp of pack generation */
     builtAt: string;
+
+    /** Competitor name when query is competitor-specific (e.g. "beat TripJack") */
+    competitorName?: string;
 }
 
 /**
@@ -54,7 +57,8 @@ export interface ClaudeInputPack {
 export function buildClaudeInputPack(
     question: string,
     rootCausePack: RootCausePack,
-    executivePack: ExecutivePack
+    executivePack: ExecutivePack,
+    competitorName?: string
 ): ClaudeInputPack {
 
     const validationErrors = rootCausePack.validationErrors ?? [];
@@ -73,7 +77,8 @@ export function buildClaudeInputPack(
         validationErrors,
 
         totalRows:                rootCausePack.totalRows,
-        builtAt:                  rootCausePack.builtAt
+        builtAt:                  rootCausePack.builtAt,
+        ...(competitorName ? { competitorName } : {})
     };
 
     console.log(

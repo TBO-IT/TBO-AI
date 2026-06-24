@@ -11,7 +11,8 @@ export interface RecommendationTarget {
 
 export function generateAttributedRecommendations(
     primaryTarget: ActionabilityTarget | undefined,
-    drilldowns: DrilldownInsight[]
+    drilldowns: DrilldownInsight[],
+    competitorContext?: { competitorName: string; sourceColumn: string }
 ): RecommendationTarget[] {
     const recommendations: RecommendationTarget[] = [];
 

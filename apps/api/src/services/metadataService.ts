@@ -1,10 +1,10 @@
-import { exec } from "child_process";
 import { executeQuery } from "./queryExecutionService.js";
-import { collectStainlessHelpers } from "@anthropic-ai/sdk/lib/stainless-helper-header.mjs";
 
 export interface DatasetMetadata {
     destinations: string[];
     suppliers: string[];
+    /** Distinct competitor names from the thirdparty column */
+    thirdParties: string[];
     chains: string[];
     hotels: string[];
     countries: string[];
@@ -53,6 +53,7 @@ export async function buildDatasetMetadata(
     const [
         destinations,
         suppliers,
+        thirdParties,
         chains,
         hotels,
         countries,
@@ -66,6 +67,11 @@ export async function buildDatasetMetadata(
         getDistinctValues(
             tempPath,
             "suppliername"
+        ),
+
+        getDistinctValues(
+            tempPath,
+            "thirdparty"
         ),
 
         getDistinctValues(
@@ -93,6 +99,7 @@ export async function buildDatasetMetadata(
     return {
         destinations,
         suppliers,
+        thirdParties,
         chains,
         hotels,
         countries,

@@ -104,6 +104,13 @@ export const DIMENSION_REGISTRY: Record<string, DimensionDefinition> = {
         physicalColumns: ["Competitive Status", "competitive_status"],
         validValues: ["Winning", "Losing", "Equal"],
         filterType: "exact"
+    },
+
+    thirdparty: {
+        canonicalKey: "thirdparty",
+        label: "Competitor",
+        physicalColumns: ["thirdparty", "third_party", "competitor"],
+        filterType: "exact"
     }
 };
 

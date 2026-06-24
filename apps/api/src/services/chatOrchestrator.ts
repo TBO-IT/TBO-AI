@@ -16,7 +16,7 @@ import { QuestionValidationError } from "../ai/questionTypes.js";
 import { buildDatasetMetadata } from "./metadataService.js";
 import { resolveEntities, dedupeFilters } from "../ai/entityResolver.js";
 import { generateTrendSql } from "./trendEngine.js";
-import { generateComparisonSql } from "./comparisonEngine.js";
+import { generateComparisonSql, extractComparisonEntities } from "./comparisonEngine.js";
 import { generateContributionSql } from "./contributionEngine.js";
 import { generateCompetitorStrategySql } from "./analytics/competitorStrategyEngine.js";
 import { buildRootCausePack } from "./RootCausePackBuilder.js";
@@ -24,10 +24,17 @@ import { buildExecutivePack } from "./insights/executivePackBuilder.js";
 import { executeEntityDrilldown } from "./insights/entityDrilldownEngine.js";
 import { generateAttributedRecommendations } from "./insights/recommendationAttributionEngine.js";
 import { buildClaudeInputPack } from "./claudeInputContract.js";
-import { classifyResponseSource, detectNarrativeRequest, detectRecommendationRequest, ResponseSource } from "./claudeRequestDetector.js";
+import { classifyResponseSource, detectNarrativeRequest, detectRecommendationRequest, isExecutivePriorityQuestion, ResponseSource } from "./claudeRequestDetector.js";
+import { inferDefaultMetric } from "../ai/metricInference.js";
+import { validateEntityExistence, shouldValidateEntityExistence } from "./entityExistenceValidator.js";
+import { validateRecommendationGuardrails } from "./recommendationGuardrails.js";
+import { runExecutivePriorityPipeline } from "./executivePriorityEngine.js";
+import { buildComparisonPack, formatComparisonNarrative } from "./comparisonPackBuilder.js";
+import { isNegativeIntent, isPositiveIntent } from "../ai/queryPolarity.js";
 import { routeClaude } from "./claudeRouter.js";
 import { generateNarrative } from "./narrativeGenerator.js";
 import { generateRecommendations, Recommendation } from "./recommendationGenerator.js";
+import { detectCompetitorContext, CompetitorContext } from "./competitorDetector.js";
 import { startTimer, logCache, logRootCause, logClaude } from "./analyticsLogger.js";
 import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContradiction } from "./analyticsMetrics.js";
 
@@ -37,6 +44,7 @@ export class ChatOrchestrator {
         let parsedIntent = "Unknown";
         let routeType = "";
         let tempPath = "";
+        let competitorContext: CompetitorContext | null = null;
         const pipelineTimer = startTimer();
 
         console.log(`\n[QUESTION] "${question}"`);
@@ -83,7 +91,8 @@ export class ChatOrchestrator {
 
             currentStage = "Question Analysis";
             // ── 2. Question Analysis ───────────────────────────────────────────
-            const parsedQuestion = analyzeQuestion(question);
+            let parsedQuestion = analyzeQuestion(question);
+            parsedQuestion = inferDefaultMetric(question, parsedQuestion, semanticLayer);
             parsedIntent = parsedQuestion.intent;
             
             const rawFilters = [...parsedQuestion.filters];
@@ -101,10 +110,77 @@ export class ChatOrchestrator {
             console.log("MERGED FILTERS:", parsedQuestion.filters);
             console.log(`[PRE_VALIDATION] dimensions=${parsedQuestion.dimensions.length} | rawFilters=${rawFilters.length} | resolvedFilters=${resolvedFilters.length} | mergedFilters=${mergedFilters.length}`);
 
+            // ── Competitor Detection ─────────────────────────────────────────
+            // Runs AFTER entity resolution and filter merging.
+            // If a competitor is detected, inject a supplier filter so the
+            // entire downstream pipeline (SQL, RCA, drilldowns) is scoped
+            // to that competitor's data.
+            competitorContext = detectCompetitorContext(
+                question,
+                metadata,
+                mergedFilters.map(f => ({ dimension: f.dimension, value: f.value }))
+            );
+
+            if (competitorContext) {
+                // Check if we already have a supplier filter for this competitor
+                const alreadyFiltered = mergedFilters.some(
+                    f => (f.dimension === "supplier" || f.dimension === "thirdparty") &&
+                         String(f.value).toLowerCase() === competitorContext!.competitorName.toLowerCase()
+                );
+                if (!alreadyFiltered) {
+                    const compFilter: any = {
+                        dimension: "thirdparty",
+                        operator: "=",
+                        value: competitorContext.competitorName
+                    };
+                    parsedQuestion.filters.push(compFilter);
+                    console.log(
+                        `[COMPETITOR_FILTER_CREATED]\n` +
+                        `thirdparty=${competitorContext.competitorName}`
+                    );
+                } else {
+                    console.log(
+                        `[COMPETITOR_FILTER_SKIPPED] competitor=${competitorContext.competitorName} | ` +
+                        `reason=already_present`
+                    );
+                }
+            } else if (parsedQuestion.intent === "COMPETITOR_STRATEGY") {
+                console.warn(
+                    `[COMPETITOR_FALLBACK_GLOBAL] Competitive intent detected but no thirdparty match — ` +
+                    `analytics will run on unscoped (global) data. question="${question.slice(0, 80)}"`
+                );
+            }
+
+            console.log(`[MERGED_FILTERS]\n${JSON.stringify(parsedQuestion.filters, null, 2)}`);
+
+            // ── Entity Existence Validation (recommendation-about-entity only) ─
+            if (shouldValidateEntityExistence(question)) {
+                const entityCheck = validateEntityExistence(parsedQuestion.filters, metadata);
+                if (!entityCheck.valid) {
+                    console.warn(`[ENTITY_NOT_FOUND] ${entityCheck.missingEntity}`);
+                    throw new QuestionValidationError({
+                        valid: false,
+                        errors: [entityCheck.message ?? `Entity "${entityCheck.missingEntity}" not found in dataset.`],
+                        suggestions: ["Verify the entity name matches your dataset.", "Try searching for available destinations, hotels, or suppliers."],
+                        datasetType: semanticLayer.datasetType
+                    });
+                }
+            }
+
             const validation = validateQuestion(parsedQuestion, semanticLayer);
 
             if (!validation.valid) {
                 throw new QuestionValidationError(validation);
+            }
+
+            console.log(`[VALIDATED_FILTERS]\n${JSON.stringify(parsedQuestion.filters, null, 2)}`);
+
+            if (competitorContext) {
+                const hasThirdparty = parsedQuestion.filters.some(f => f.dimension === "thirdparty");
+                if (!hasThirdparty) {
+                    throw new Error("COMPETITOR_FILTER_MISSING: Competitor analytics requested but competitor filter missing.");
+                }
+                console.log(`[RCA_FILTERS]\nthirdparty=${competitorContext.competitorName}`);
             }
 
             currentStage = "Route Decision";
@@ -132,13 +208,28 @@ export class ChatOrchestrator {
                 // Recommendation and narrative queries need a RootCausePack.
                 // If the analyzer classified this as SUMMARY/TEMPLATE/etc.,
                 // override to ROOT_CAUSE so the full analytical pipeline runs.
-                // EXCEPT COMPETITOR_STRATEGY which has its own native recommendation path.
-                if ((isRecommendation || isNarrative) && routeType !== "ROOT_CAUSE" && routeType !== "LLM" && routeType !== "COMPETITOR_STRATEGY") {
+                //
+                // V5.5: COMPETITOR_STRATEGY is NOW also overridden to ROOT_CAUSE
+                // when a competitor is detected AND the query is recommendation/narrative.
+                // This ensures competitor queries run multi-dimensional RCA instead
+                // of the simple APW-gap analysis, producing differentiated results.
+                const shouldOverrideCompetitor = competitorContext && (isRecommendation || isNarrative) && routeType === "COMPETITOR_STRATEGY";
+                const packRoutes = new Set(["ROOT_CAUSE", "EXECUTIVE_PRIORITY", "COMPARE_ENTITIES"]);
+                if ((isRecommendation || isNarrative) && !packRoutes.has(routeType) && routeType !== "LLM" && (!routeType.includes("COMPETITOR") || shouldOverrideCompetitor)) {
                     console.log(
                         `[PRE_ROUTER] ${isRecommendation ? "Recommendation" : "Narrative"} query detected — ` +
-                        `overriding route from ${routeType} to ROOT_CAUSE`
+                        `overriding route from ${routeType} to ROOT_CAUSE` +
+                        (shouldOverrideCompetitor ? ` (competitor=${competitorContext!.competitorName})` : "")
                     );
                     routeType = "ROOT_CAUSE";
+                }
+
+                // Executive priority queries always use EXECUTIVE_PRIORITY route
+                if (isExecutivePriorityQuestion(question) || parsedQuestion.intent === "EXECUTIVE_PRIORITY") {
+                    if (routeType !== "EXECUTIVE_PRIORITY") {
+                        console.log(`[PRE_ROUTER] Executive priority query — overriding route from ${routeType} to EXECUTIVE_PRIORITY`);
+                    }
+                    routeType = "EXECUTIVE_PRIORITY";
                 }
 
                 // ── TEMPLATE ───────────────────────────────────────────────────
@@ -171,6 +262,16 @@ export class ChatOrchestrator {
                         console.warn("[ORCHESTRATOR] Comparison engine returned null — falling back to LLM.");
                         routeType = "LLM";
                     }
+                }
+
+                // ── COMPARE_ENTITIES ───────────────────────────────────────────
+                else if (routeType === "COMPARE_ENTITIES") {
+                    explanation = "Entity comparison pack will be built after validation.";
+                }
+
+                // ── EXECUTIVE_PRIORITY ─────────────────────────────────────────
+                else if (routeType === "EXECUTIVE_PRIORITY") {
+                    explanation = "Executive priority pack will be built from multi-dimensional contribution analysis.";
                 }
 
                 // ── COMPETITOR STRATEGY ────────────────────────────────────────
@@ -287,12 +388,21 @@ export class ChatOrchestrator {
                 }
 
                 // Save to SQL cache (skip ROOT_CAUSE — packs are not cacheable as SQL)
-                if (sql && routeType !== "ROOT_CAUSE") {
+                if (sql && routeType !== "ROOT_CAUSE" && routeType !== "EXECUTIVE_PRIORITY" && routeType !== "COMPARE_ENTITIES") {
                     await setCachedSql(semanticLayer.datasetType, question.toLowerCase().trim(), sql);
                 }
             }
 
-            console.log("FINAL SQL:\n", sql);
+            console.log("[FINAL_SQL]\n", sql);
+
+            // ── SQL Trace Logging for Competitor Filter ────────────────────────
+            if (competitorContext) {
+                const lowerSql = sql.toLowerCase();
+                if (!lowerSql.includes("thirdparty")) {
+                    throw new Error("COMPETITOR_SQL_FILTER_MISSING");
+                }
+                console.log(`[SQL_FILTERS]\nthirdparty=${competitorContext.competitorName}`);
+            }
 
             currentStage = "SQL Execution";
             // ── 4. SQL Validation & Execution ──────────────────────────────────
@@ -311,7 +421,9 @@ export class ChatOrchestrator {
                     queryResultsList.push(res);
                 }
                 queryResults = queryResultsList.find(res => res.length > 0) || [];
-            } else {
+            } else if (routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPARE_ENTITIES") {
+                // SQL executed during pack building for these routes
+            } else if (sql) {
                 const sqlValidation = await validateSqlSyntax(sql, tempPath);
                 if (!sqlValidation.valid) {
                     throw new Error(`Generated SQL failed validation: ${sqlValidation.error}`);
@@ -319,12 +431,95 @@ export class ChatOrchestrator {
                 queryResults = await executeQuery(sql, tempPath);
             }
 
+            const totalFetchedRows = (routeType === "ROOT_CAUSE" || routeType === "EXECUTIVE_PRIORITY")
+                ? queryResultsList.reduce((acc, res) => acc + res.length, 0)
+                : queryResults.length;
+
+            console.log(`[ROW_COUNT]\nrows=${totalFetchedRows}`);
+
+            if (competitorContext && totalFetchedRows === 0) {
+                console.log(
+                    `[COMPETITOR_FILTER_EMPTY]\ncompetitor=${competitorContext.competitorName}\nsql=${sql}\nrowCount=0`
+                );
+                throw new Error("COMPETITOR_FILTER_EMPTY: Competitor query returned 0 rows. No silent fallback allowed.");
+            }
+
             currentStage = "Pack Building";
-            // ── 5. Root Cause Pack (ROOT_CAUSE route only) ─────────────────────
+            // ── 5. Pack Building ───────────────────────────────────────────────
             let rootCausePack = null;
             let executivePack = null;
-            if (routeType === "ROOT_CAUSE") {
-                rootCausePack = buildRootCausePack(question, semanticLayer, queryResultsList);
+            let comparisonPackResult = null;
+
+            if (routeType === "EXECUTIVE_PRIORITY") {
+                const priorityResult = await runExecutivePriorityPipeline(
+                    question,
+                    parsedQuestion,
+                    semanticLayer,
+                    tempPath,
+                    competitorContext || undefined
+                );
+                sql = priorityResult.sql;
+                explanation = priorityResult.explanation;
+                queryResultsList = priorityResult.queryResultsList;
+                queryResults = queryResultsList.find(r => r.length > 0) || [];
+                rootCausePack = priorityResult.rootCausePack;
+                executivePack = priorityResult.executivePack;
+                console.log("[ORCHESTRATOR] Executive priority pack built");
+            } else if (routeType === "COMPARE_ENTITIES") {
+                const entities = extractComparisonEntities(parsedQuestion, semanticLayer);
+                if (!entities) {
+                    throw new QuestionValidationError({
+                        valid: false,
+                        errors: ["Could not identify two entities to compare."],
+                        suggestions: ["Try: 'Compare TripJack and Otilla' with both names spelled as they appear in your data."],
+                        datasetType: semanticLayer.datasetType
+                    });
+                }
+                comparisonPackResult = await buildComparisonPack(
+                    entities.left,
+                    entities.right,
+                    entities.dimension,
+                    entities.physicalCol,
+                    semanticLayer,
+                    tempPath
+                );
+                rootCausePack = {
+                    metricName: comparisonPackResult.metricName,
+                    metricChange: null,
+                    topPositiveContributors: [],
+                    topNegativeContributors: [],
+                    priorityDrivers: [],
+                    risks: [],
+                    opportunities: [],
+                    affectedHotels: [],
+                    affectedChains: [],
+                    affectedSuppliers: [],
+                    affectedAPWBuckets: [],
+                    trendSummary: [],
+                    totalRows: comparisonPackResult.entities.reduce((s, e) => s + e.volume, 0),
+                    builtAt: new Date().toISOString()
+                } as any;
+                executivePack = {
+                    headline: `Comparison: ${entities.left} vs ${entities.right}`,
+                    executiveSummary: formatComparisonNarrative(comparisonPackResult),
+                    keyTakeaway: comparisonPackResult.recommendedAction,
+                    topDrivers: [],
+                    topRisks: [],
+                    topOpportunities: [],
+                    recommendedFocusAreas: comparisonPackResult.focusAreas,
+                    topActions: [comparisonPackResult.recommendedAction],
+                    strategicImplications: [],
+                    scenarios: [],
+                    actionImpacts: [],
+                    tradeoffs: [],
+                    dependencies: [],
+                    confidenceAssessment: { rationale: "Based on side-by-side entity comparison.", confidence: "HIGH" },
+                    leadershipMessage: `Winner: ${comparisonPackResult.winner}. Focus on ${comparisonPackResult.loser}.`,
+                    comparisonPack: comparisonPackResult
+                } as any;
+                console.log("[ORCHESTRATOR] Comparison pack built");
+            } else if (routeType === "ROOT_CAUSE") {
+                rootCausePack = buildRootCausePack(question, semanticLayer, queryResultsList, competitorContext || undefined);
                 console.log("[ORCHESTRATOR] Root cause pack built");
 
                 const { executeEntityDrilldown } = await import("./insights/entityDrilldownEngine.js");
@@ -334,15 +529,17 @@ export class ChatOrchestrator {
                     rootCausePack.primaryTarget,
                     parsedQuestion,
                     semanticLayer,
-                    tempPath
+                    tempPath,
+                    competitorContext || undefined
                 );
                 rootCausePack.drilldowns = drilldowns;
                 rootCausePack.recommendations = generateAttributedRecommendations(
                     rootCausePack.primaryTarget,
-                    drilldowns
+                    drilldowns,
+                    competitorContext || undefined
                 );
 
-                executivePack = buildExecutivePack(rootCausePack);
+                executivePack = buildExecutivePack(rootCausePack, competitorContext || undefined);
                 console.log("[EXECUTIVE_PACK]", JSON.stringify(executivePack, null, 2));
             } else if (routeType === "COMPETITOR_STRATEGY") {
                 // Map the competitor SQL output to CompetitiveGap objects
@@ -423,51 +620,42 @@ export class ChatOrchestrator {
                     });
                 }
             }
-            if (isRecommendation && routeType !== "COMPETITOR_STRATEGY") {
-                if (!executivePack?.primaryTarget) {
-                    console.error("[MISSING_PRIMARY_TARGET] route=RECOMMENDATION but primaryTarget is undefined.");
+            if (isRecommendation && routeType === "ROOT_CAUSE") {
+                const guardrail = validateRecommendationGuardrails(executivePack, {
+                    requirePrimaryTarget: true,
+                    requireRecommendations: false
+                });
+
+                if (!guardrail.allowed) {
+                    console.warn(`[RECOMMENDATION_GUARDRAIL] blocked: ${guardrail.reason}`);
                     throw new QuestionValidationError({
                         valid: false,
-                        errors: ["No valid primary target could be identified to generate recommendations."],
-                        suggestions: ["Try querying a different metric or segment.", "Ensure there is enough data volume in the selected timeframe."],
+                        errors: [guardrail.safeExplanation ?? "Insufficient signal for recommendations."],
+                        suggestions: ["Try a more specific question with a clear metric or segment."],
                         datasetType: semanticLayer.datasetType
                     });
                 }
 
-                // Ranking intent validation
-                const qLower = parsedQuestion.originalQuestion.toLowerCase();
-                const isWorst = qLower.includes("worst") || qLower.includes("lowest") || qLower.includes("bottom");
-                const isBest = qLower.includes("best") || qLower.includes("highest") || qLower.includes("top performing");
-                const isFix = qLower.includes("fix") || qLower.includes("improve") || qLower.includes("win against") || qLower.includes("beat");
+                if (executivePack?.primaryTarget) {
+                    if (isNegativeIntent(question) && executivePack.primaryTarget.impactScore > 0) {
+                        console.error("[ASSERT_FAILED] Negative intent but selected target has positive impact.");
+                        throw new QuestionValidationError({
+                            valid: false,
+                            errors: ["Could not identify a negative performer matching your criteria."],
+                            suggestions: ["Try looking at a different dimension."],
+                            datasetType: semanticLayer.datasetType
+                        });
+                    }
 
-                if ((isWorst || isFix) && executivePack.primaryTarget.impactScore > 0) {
-                    console.error("[ASSERT_FAILED] Intent was WORST/FIX/COMPETE, but selected target has positive impact.");
-                    throw new QuestionValidationError({
-                        valid: false,
-                        errors: ["Could not identify a negative performer matching your criteria."],
-                        suggestions: ["Try looking at a different dimension."],
-                        datasetType: semanticLayer.datasetType
-                    });
-                }
-
-                if (isBest && executivePack.primaryTarget.impactScore <= 0) {
-                    console.error("[ASSERT_FAILED] Intent was BEST, but selected target has negative impact.");
-                    throw new QuestionValidationError({
-                        valid: false,
-                        errors: ["Could not identify a positive performer matching your criteria."],
-                        suggestions: ["Try looking at a different dimension."],
-                        datasetType: semanticLayer.datasetType
-                    });
-                }
-
-                if (!executivePack?.recommendations || executivePack.recommendations.length === 0) {
-                    console.error("[ASSERT_FAILED] route=RECOMMENDATION but recommendationTargets is empty.");
-                    throw new QuestionValidationError({
-                        valid: false,
-                        errors: ["No actionable targets could be identified from the current data to form a strategic recommendation."],
-                        suggestions: ["Try querying a metric with more volatility.", "Ask about a broader dimension to allow for more data points."],
-                        datasetType: semanticLayer.datasetType
-                    });
+                    if (isPositiveIntent(question) && executivePack.primaryTarget.impactScore <= 0) {
+                        console.error("[ASSERT_FAILED] Positive intent but selected target has negative impact.");
+                        throw new QuestionValidationError({
+                            valid: false,
+                            errors: ["Could not identify a positive performer matching your criteria."],
+                            suggestions: ["Try looking at a different dimension."],
+                            datasetType: semanticLayer.datasetType
+                        });
+                    }
                 }
             }
 
@@ -477,9 +665,22 @@ export class ChatOrchestrator {
             let claudeInputPack = null;
             let recommendations = null;
 
-            if ((routeType === "ROOT_CAUSE" || routeType === "COMPETITOR_STRATEGY") && rootCausePack && executivePack) {
+            if ((routeType === "ROOT_CAUSE" || routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPETITOR_STRATEGY") && rootCausePack && executivePack) {
                 responseSource = classifyResponseSource(question);
-                claudeInputPack = buildClaudeInputPack(question, rootCausePack, executivePack);
+                claudeInputPack = buildClaudeInputPack(
+                    question,
+                    rootCausePack,
+                    executivePack,
+                    competitorContext?.competitorName
+                );
+                if (competitorContext) {
+                    console.log(
+                        `[COMPETITOR_RCA] competitor=${competitorContext.competitorName} | ` +
+                        `primaryTarget=${executivePack.primaryTarget?.name ?? "none"} | ` +
+                        `drilldowns=${executivePack.drilldowns?.length ?? 0} | ` +
+                        `recommendations=${executivePack.recommendations?.length ?? 0}`
+                    );
+                }
             }
 
             console.log(`[CLASSIFIER] responseSource=${responseSource} | isRecommendation=${isRecommendation} | isNarrative=${isNarrative}`);
@@ -526,14 +727,23 @@ export class ChatOrchestrator {
                         console.log(`[ROUTE_CLAUDE_OUTPUT] tier=${routerDecision.tier} | operation=${routerDecision.operation} | shouldCallClaude=${routerDecision.shouldCallClaude}`);
                         recommendations = recResult.recommendations;
 
-                        console.log(`[CLAUDE_RESPONSE] recommendations=${recommendations.length} | claudeUsed=${recResult.claudeUsed} | claudeFailed=${recResult.claudeFailed}`);
+                        console.log(`[CLAUDE_RESPONSE] recommendations=${recommendations.length} | claudeUsed=${recResult.claudeUsed} | claudeFailed=${recResult.claudeFailed} | rawClaudeChars=${recResult.rawClaudeText?.length ?? 0}`);
 
-                        // Build narrative from recommendation results.
-                        // DO NOT call generateNarrative() here — it uses HAIKU,
-                        // which would override the SONNET tier and produce a
-                        // narrative-style response instead of recommendations.
-                        narrative = buildRecommendationNarrative(recommendations, claudeInputPack);
-                        console.log(`[NARRATIVE_VALUE_SET] source=CLAUDE_RECOMMENDATION | generator=generateRecommendations | preview="${narrative.slice(0, 100)}"`);
+                        // ── CRITICAL FIX: Return raw Sonnet output directly ──────
+                        // When Claude Sonnet was used successfully, return its raw
+                        // Decision Intelligence Brief as-is. Do NOT rebuild from
+                        // parsed Recommendation[] objects — the parser uses
+                        // ACTION:/RATIONALE:/EVIDENCE:/IMPACT: delimiters that don't
+                        // match Sonnet's TARGET-FIRST format, causing truncation
+                        // from ~4672 chars to ~340 chars.
+                        if (recResult.claudeUsed && recResult.rawClaudeText) {
+                            narrative = recResult.rawClaudeText;
+                            console.log(`[NARRATIVE_VALUE_SET] source=CLAUDE_RECOMMENDATION | generator=RAW_SONNET_TEXT | chars=${narrative.length} | preview="${narrative.slice(0, 120)}"`);
+                        } else {
+                            // Deterministic fallback: rebuild from structured objects
+                            narrative = buildRecommendationNarrative(recommendations, claudeInputPack);
+                            console.log(`[NARRATIVE_VALUE_SET] source=CLAUDE_RECOMMENDATION | generator=buildRecommendationNarrative (deterministic) | chars=${narrative.length} | preview="${narrative.slice(0, 120)}"`);
+                        }
 
                         // Phase 8: Response Validation
                         const textLower = narrative.toLowerCase();
@@ -584,6 +794,14 @@ export class ChatOrchestrator {
                     }
 
                 // ── ANALYTICS: deterministic narrative (no Claude) ─────────────
+                } else if (routeType === "COMPARE_ENTITIES" && comparisonPackResult) {
+                    console.log(`[NARRATIVE_REQUEST] source=COMPARE_ENTITIES | deterministic comparison`);
+                    narrative = formatComparisonNarrative(comparisonPackResult);
+                    console.log(`[NARRATIVE_VALUE_SET] source=COMPARE_ENTITIES | preview="${narrative.slice(0, 100)}"`);
+                } else if (routeType === "EXECUTIVE_PRIORITY" && executivePack) {
+                    console.log(`[NARRATIVE_REQUEST] source=EXECUTIVE_PRIORITY | deterministic executive brief`);
+                    narrative = buildExecutivePriorityNarrative(executivePack);
+                    console.log(`[NARRATIVE_VALUE_SET] source=EXECUTIVE_PRIORITY | preview="${narrative.slice(0, 100)}"`);
                 } else {
                     console.log(`[NARRATIVE_REQUEST] source=ANALYTICS | deterministic`);
                     narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
@@ -600,7 +818,8 @@ export class ChatOrchestrator {
             console.log(
                 `[PIPELINE_COMPLETE] route=${routeType} | responseSource=${responseSource} | ` +
                 `latency=${totalLatency}ms | narrativeChars=${narrative.length} | ` +
-                `recommendations=${recommendations?.length ?? 0}`
+                `recommendations=${recommendations?.length ?? 0}` +
+                (competitorContext ? ` | competitor=${competitorContext.competitorName}` : "")
             );
 
             console.log(
@@ -622,6 +841,7 @@ export class ChatOrchestrator {
                 routeType,
                 latencyMs: totalLatency,
                 datasetType: semanticLayer.datasetType,
+                ...(competitorContext ? { competitorName: competitorContext.competitorName } : {}),
                 parsedQuestion: {
                     intent: parsedQuestion.intent,
                     metrics: parsedQuestion.metrics,
@@ -655,7 +875,6 @@ export class ChatOrchestrator {
             }
         }
     }
-}
 }
 
 // ─── Deterministic narrative builder ─────────────────────────────────────────
@@ -740,4 +959,29 @@ function buildRecommendationNarrative(
     }
 
     return narrative.trim();
+}
+
+function buildExecutivePriorityNarrative(executivePack: any): string {
+    const target = executivePack.primaryTarget;
+    const drivers = (executivePack.topDrivers ?? []).slice(0, 3).map((d: any) => d.name).join(", ");
+
+    if (!target) {
+        return executivePack.executiveSummary || executivePack.leadershipMessage || "Insufficient data to identify a primary focus area.";
+    }
+
+    return [
+        `## Executive Priority Brief`,
+        ``,
+        `**Primary Target:** ${target.name} (${target.entityType})`,
+        `**Why:** ${target.reason}`,
+        `**Business Impact:** ${target.metricDelta?.toFixed?.(1) ?? target.metricDelta} point metric delta at ${target.volumeShare?.toFixed?.(1) ?? target.volumeShare}% volume share`,
+        `**Expected ROI:** Actionability score ${target.actionabilityScore?.toFixed?.(1) ?? target.actionabilityScore} — highest leverage intervention available`,
+        ``,
+        `**Top Drivers:** ${drivers || "See supporting analysis"}`,
+        ``,
+        `**Recommended Actions:**`,
+        ...(executivePack.topActions ?? executivePack.recommendedFocusAreas ?? []).slice(0, 3).map((a: string) => `- ${a}`),
+        ``,
+        executivePack.leadershipMessage || executivePack.keyTakeaway || ""
+    ].filter(Boolean).join("\n");
 }

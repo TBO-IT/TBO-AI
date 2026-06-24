@@ -22,7 +22,8 @@ export interface ActionabilityTarget {
 
 export function calculateActionabilityTargets(
     allContributors: { entry: ContributorEntry; type: ActionabilityTarget["entityType"] }[],
-    intent: DecisionIntent = DecisionIntent.EXPLAIN
+    intent: DecisionIntent = DecisionIntent.EXPLAIN,
+    competitorContext?: { competitorName: string; sourceColumn: string }
 ): ActionabilityTarget[] {
     
     if (!allContributors?.length) {
@@ -52,10 +53,12 @@ export function calculateActionabilityTargets(
         }
 
         let reason = "";
+        const contextStr = competitorContext ? ` vs ${competitorContext.competitorName}` : "";
+
         if (impactScore < 0) {
-            reason = `Largest negative contributor (${entry.metricDelta.toFixed(2)} pts at ${entry.volumeSharePct.toFixed(1)}% volume).`;
+            reason = `Largest negative contributor${contextStr} (${entry.metricDelta.toFixed(2)} pts at ${entry.volumeSharePct.toFixed(1)}% volume).`;
         } else {
-            reason = `High-growth segment to scale (${entry.metricDelta.toFixed(2)} pts at ${entry.volumeSharePct.toFixed(1)}% volume).`;
+            reason = `High-growth segment to scale${contextStr} (${entry.metricDelta.toFixed(2)} pts at ${entry.volumeSharePct.toFixed(1)}% volume).`;
         }
 
         return {

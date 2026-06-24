@@ -131,7 +131,7 @@ const STOP_WORDS = new Set([
     "show", "compare", "what", "why", "how", "which", "who", "when", "where",
     "between", "across", "over", "under", "above", "below", "during",
     "top", "bottom", "best", "worst", "high", "low", "last", "this", "next",
-    "give", "list", "tell", "find", "get"
+    "give", "list", "tell", "find", "get", "if", "roi", "apw"
 ]);
 
 const TIME_COMPARISON_TERMS = new Set([
@@ -184,8 +184,13 @@ function extractNamedEntityFilters(originalQuestion: string): QuestionFilter[] {
 
         const isCapitalized = /^[A-Z][a-z]/.test(clean);
         const isAcronym = /^[A-Z]{2,}$/.test(clean);
+        const skipAcronyms = new Set(["ROI", "APW", "CEO", "CRO", "SQL", "TBO"]);
 
         if (isCapitalized || isAcronym) {
+            if (skipAcronyms.has(clean)) {
+                flush();
+                continue;
+            }
             currentChunk.push(clean);
         } else {
             flush();
@@ -304,6 +309,13 @@ function detectIntent(normalizedQuestion: string): QuestionIntent {
         return "TREND";
     }
 
+    // ── 1.5 EXECUTIVE_PRIORITY ────────────────────────────────────────────────
+    // Leadership prioritization queries — must fire before ROOT_CAUSE/COMPARISON
+    if (hasPartial(INTENT_SIGNALS.EXECUTIVE_PRIORITY) || isExecutivePriorityQuestion(normalizedQuestion)) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: EXECUTIVE_PRIORITY\n  INTENT:       EXECUTIVE_PRIORITY`);
+        return "EXECUTIVE_PRIORITY";
+    }
+
     // ── 1.5 COMPETITOR_STRATEGY ───────────────────────────────────────────────
     if (hasPartial(INTENT_SIGNALS.COMPETITOR_STRATEGY)) {
         console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: COMPETITOR_KEYWORD\n  INTENT:       COMPETITOR_STRATEGY`);
@@ -339,7 +351,7 @@ function detectIntent(normalizedQuestion: string): QuestionIntent {
     }
 
     // ── 5. RANKING ────────────────────────────────────────────────────────────
-    if (hasPhrase(INTENT_SIGNALS.RANKING)) {
+    if (hasPhrase(INTENT_SIGNALS.RANKING) || /\bwhich\s+(hotel|supplier|destination|chain|city|apw)\b/.test(q)) {
         console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: RANKING_KEYWORD\n  INTENT:       RANKING`);
         return "RANKING";
     }
@@ -369,7 +381,8 @@ function detectIntent(normalizedQuestion: string): QuestionIntent {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-import { isExecutiveQuestion } from "../services/claudeRequestDetector.js";
+import { isExecutiveQuestion, isExecutivePriorityQuestion } from "../services/claudeRequestDetector.js";
+import { inferDefaultMetric } from "./metricInference.js";
 
 /**
  * Parses a natural language question into a structured QuestionAnalysis.

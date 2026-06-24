@@ -62,6 +62,10 @@ export interface RootCausePack {
     trendSummary: TrendPoint[];
     totalRows: number;
     builtAt: string;
+    competitorContext?: {
+        competitorName: string;
+        sourceColumn: string;
+    };
 }
 
 // ─── Column name helpers ──────────────────────────────────────────────────────
@@ -289,7 +293,8 @@ function detectDimensionCategory(
 export function buildRootCausePack(
     question: string,
     semanticLayer: EnrichedSemanticLayer,
-    queryResultsList: Record<string, unknown>[][]
+    queryResultsList: Record<string, unknown>[][],
+    competitorContext?: { competitorName: string; sourceColumn: string }
 ): RootCausePack {
 
     const metricName = semanticLayer.metrics[0]?.name ?? "Metric";
@@ -376,8 +381,28 @@ export function buildRootCausePack(
         affectedAPWBuckets,
         trendSummary: [], // Trend usually disabled during multi-dimension RCA to save time
         totalRows,
-        builtAt: new Date().toISOString()
+        builtAt: new Date().toISOString(),
+        competitorContext
     };
+
+    if (competitorContext) {
+        // Collect sample rows from the first queryResult that has data
+        let sampleRows: Record<string, unknown>[] = [];
+        for (const res of queryResultsList) {
+            if (res.length > 0) {
+                sampleRows = res.slice(0, 2);
+                break;
+            }
+        }
+
+        console.log(
+            `[RCA_CONTEXT]\n` +
+            `competitor=${competitorContext.competitorName}\n` +
+            `rowCount=${totalRows}\n` +
+            `sampleRows=${JSON.stringify(sampleRows, null, 2)}\n` +
+            `filters=[\n  thirdparty=${competitorContext.competitorName}\n]`
+        );
+    }
 
     // Calculate actionability
     const allContributorsWithType = [
@@ -392,11 +417,20 @@ export function buildRootCausePack(
     
     if (qLower.includes("win against") || qLower.includes("beat") || qLower.includes("outperform") || qLower.includes("competitor")) {
         intent = DecisionIntent.COMPETE;
-    } else if (qLower.includes("fix") || qLower.includes("worst") || qLower.includes("lowest") || qLower.includes("bottom")) {
+    } else if (
+        qLower.includes("fix") || qLower.includes("worst") || qLower.includes("lowest") ||
+        qLower.includes("bottom") || qLower.includes("hurting") || qLower.includes("drag") ||
+        qLower.includes("underperforming") || qLower.includes("declining") || qLower.includes("problem") ||
+        qLower.includes("risk") || qLower.includes("weakness")
+    ) {
         intent = DecisionIntent.FIX;
     } else if (qLower.includes("improve")) {
         intent = DecisionIntent.IMPROVE;
-    } else if (qLower.includes("focus on") || qLower.includes("prioritize")) {
+    } else if (
+        qLower.includes("focus on") || qLower.includes("prioritize") ||
+        qLower.includes("highest roi") || qLower.includes("fastest win") ||
+        qLower.includes("allocate resources") || qLower.includes("only fix one")
+    ) {
         intent = DecisionIntent.PRIORITIZE;
     } else if (qLower.includes("expand") || qLower.includes("scale") || qLower.includes("best") || qLower.includes("highest")) {
         intent = DecisionIntent.EXPAND;
@@ -404,7 +438,7 @@ export function buildRootCausePack(
         intent = DecisionIntent.PROTECT;
     }
 
-    pack.actionabilityTargets = calculateActionabilityTargets(allContributorsWithType, intent);
+    pack.actionabilityTargets = calculateActionabilityTargets(allContributorsWithType, intent, competitorContext);
     pack.primaryTarget = pack.actionabilityTargets.length > 0 ? pack.actionabilityTargets[0] : undefined;
 
     // Validate the pack to catch any lingering attribution bugs

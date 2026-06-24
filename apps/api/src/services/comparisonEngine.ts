@@ -29,6 +29,7 @@ const TIME_DIMS = new Set(["quarter", "month", "year", "time"]);
 
 /** Canonical dimensions eligible for entity comparison, in priority order. */
 const ENTITY_DIMS = [
+    "thirdparty",
     "destination",
     "supplier",
     "hotel",

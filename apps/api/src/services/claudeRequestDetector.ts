@@ -127,6 +127,33 @@ export function isExecutiveQuestion(question: string): boolean {
 }
 
 /**
+ * Detects executive prioritization queries that should bypass RCA validation.
+ */
+export function isExecutivePriorityQuestion(question: string): boolean {
+    const q = question.toLowerCase();
+    const patterns: RegExp[] = [
+        /focus\s+on/i,
+        /highest\s+roi/i,
+        /fastest\s+win/i,
+        /hurting\s+us(\s+most)?/i,
+        /single\s+most\s+important/i,
+        /only\s+fix\s+one\s+thing/i,
+        /allocate\s+resources/i,
+        /leadership\s+should\s+know/i,
+        /biggest\s+opportunity/i,
+        /highest\s+leverage/i,
+        /what\s+should\s+(we|leadership|i)\s+focus/i,
+        /where\s+should\s+(we|i)\s+allocate/i,
+        /what\s+is\s+hurting/i,
+        /if\s+we\s+only\s+fix/i,
+        /what\s+should\s+leadership\s+know/i
+    ];
+    const match = patterns.some(p => p.test(q));
+    console.log(`[EXECUTIVE_PRIORITY_DETECT] match=${match}`);
+    return match;
+}
+
+/**
  * Determines the response source for a ROOT_CAUSE query.
  *
  * Priority: RECOMMENDATION > NARRATIVE > ANALYTICS

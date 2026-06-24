@@ -90,7 +90,8 @@ const DIMENSION_MATCHERS: DimensionMatcher[] = [
     {
         canonicalKey: "apw",
         matches: ["apw_bucket", "apw_bucket_new", "apw", "advanced purchase window", "purchase window", "lead time bucket"]
-    }
+    },
+    { canonicalKey: "thirdparty", matches: ["thirdparty", "third_party", "competitor"] }
 ];
 
 function mapDimensions(schema: DatasetColumn[]): {

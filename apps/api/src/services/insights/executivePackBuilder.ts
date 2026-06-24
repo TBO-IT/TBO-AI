@@ -37,6 +37,11 @@ export interface ExecutivePack {
     drilldowns: DrilldownInsight[];
     recommendations: RecommendationTarget[];
     competitiveGaps?: CompetitiveGap[];
+    competitorContext?: {
+        competitorName: string;
+        rowCount: number;
+        volume?: number;
+    };
 }
 
 function generateHeadline(metricName: string, metricChange: MetricChange | null): string {
@@ -123,7 +128,10 @@ function generateLeadershipMessage(
     }
 }
 
-export function buildExecutivePack(pack: RootCausePack): ExecutivePack {
+export function buildExecutivePack(
+    pack: RootCausePack,
+    competitorContext?: { competitorName: string; sourceColumn: string }
+): ExecutivePack {
     const topDrivers = pack.priorityDrivers.slice(0, 5);
     const topRisks = pack.risks.slice(0, 5);
     const topOpportunities = pack.opportunities.slice(0, 5);
@@ -147,7 +155,7 @@ export function buildExecutivePack(pack: RootCausePack): ExecutivePack {
     const dependencies = detectDependencies(pack.priorityDrivers);
     const confidenceAssessment = assessConfidence(pack.priorityDrivers, pack.totalRows);
 
-    return {
+    const result: ExecutivePack = {
         headline,
         executiveSummary,
         keyTakeaway,
@@ -168,4 +176,18 @@ export function buildExecutivePack(pack: RootCausePack): ExecutivePack {
         drilldowns: pack.drilldowns || [],
         recommendations: pack.recommendations || []
     };
+
+    if (competitorContext) {
+        result.competitorContext = {
+            competitorName: competitorContext.competitorName,
+            rowCount: pack.totalRows
+        };
+        console.log(
+            `[COMPETITOR_EXEC_PACK]\n` +
+            `competitor=${competitorContext.competitorName}\n` +
+            `rows=${pack.totalRows}`
+        );
+    }
+
+    return result;
 }

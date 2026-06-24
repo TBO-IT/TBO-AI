@@ -1,6 +1,7 @@
 import { QuestionAnalysis, QuestionFilter } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { buildWhereClause, buildFilterCondition } from "./filterBuilder.js";
+import { detectSortDirection as polaritySortDirection } from "./queryPolarity.js";
 
 /**
  * Resolves a canonical dimension key (e.g. "apw") to the physical column name
@@ -16,14 +17,11 @@ function getPhysicalColumnName(canonicalKey: string, semanticLayer: EnrichedSema
 }
 
 /**
- * Determines sort direction from the original question text.
- * "worst", "lowest", "bottom", "least" → ASC  (worst performers first)
- * Default                               → DESC (best/highest first)
+ * Determines sort direction from question polarity.
+ * NEGATIVE → ASC (worst first), POSITIVE → DESC (best first)
  */
 function detectSortDirection(question: string): "ASC" | "DESC" {
-    const lower = question.toLowerCase();
-    if (/\b(worst|lowest|bottom|least|minimum|min)\b/.test(lower)) return "ASC";
-    return "DESC";
+    return polaritySortDirection(question);
 }
 
 /**

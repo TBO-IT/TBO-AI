@@ -6,13 +6,15 @@ export type QuestionIntent =
     | "ROOT_CAUSE"
     | "TREND"
     | "COMPARISON"
+    | "COMPARE_ENTITIES"
     | "CONTRIBUTION"
     | "RANKING"
     | "SUMMARY"
     | "BREAKDOWN"
     | "CORRELATION"
     | "ANOMALY"
-    | "COMPETITOR_STRATEGY";
+    | "COMPETITOR_STRATEGY"
+    | "EXECUTIVE_PRIORITY";
 
 // ─── Component Extraction Types ───────────────────────────────────────────────
 

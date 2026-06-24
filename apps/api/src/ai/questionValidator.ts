@@ -107,8 +107,11 @@ export function validateQuestion(
     }
 
     // ─── Check 6: Root Cause Requirements ─────────────────────────────────────
+    // EXECUTIVE_PRIORITY bypasses RCA validation entirely.
 
-    if (parsedQuestion.intent === "ROOT_CAUSE") {
+    if (parsedQuestion.intent === "EXECUTIVE_PRIORITY") {
+        console.log(`[EXECUTIVE_PRIORITY_VALIDATION] skipped — no metric/dimension/filter required`);
+    } else if (parsedQuestion.intent === "ROOT_CAUSE") {
         let missingRootCauseReqs = false;
 
         if (parsedQuestion.metrics.length === 0) {

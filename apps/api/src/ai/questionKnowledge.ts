@@ -221,12 +221,7 @@ export const INTENT_SIGNALS = {
         "what went wrong",
         "explain the",
         "explain why",
-        "explain how",
-        "focus on",
-        "prioritize",
-        "fix",
-        "improve",
-        "action"
+        "explain how"
     ],
 
     TREND: [
@@ -285,6 +280,27 @@ export const INTENT_SIGNALS = {
         "competitor strategy",
         "versus competitor",
         "vs competitor"
+    ],
+
+    EXECUTIVE_PRIORITY: [
+        "focus on first",
+        "focus on",
+        "highest roi",
+        "fastest win",
+        "hurting us most",
+        "hurting us",
+        "single most important",
+        "only fix one thing",
+        "allocate resources",
+        "leadership should know",
+        "biggest opportunity",
+        "highest leverage",
+        "what should we focus",
+        "what should leadership",
+        "where should i allocate",
+        "where should we allocate",
+        "what is hurting",
+        "if we only fix"
     ]
 };
 

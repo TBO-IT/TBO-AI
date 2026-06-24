@@ -47,6 +47,17 @@ export function resolveEntities(
         }
     }
 
+    // ── Third-party competitors ───────────────────────────────────────────────
+    for (const thirdParty of metadata.thirdParties ?? []) {
+        if (lower.includes(thirdParty.toLowerCase())) {
+            rawFilters.push({
+                dimension: "thirdparty",
+                operator: "=",
+                value: thirdParty
+            });
+        }
+    }
+
     // ── Suppliers ─────────────────────────────────────────────────────────────
     // NOTE: iterated INDEPENDENTLY, not inside the destination loop.
     for (const supplier of metadata.suppliers) {

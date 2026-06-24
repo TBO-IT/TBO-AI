@@ -88,6 +88,12 @@ export function buildFilterCondition(
         return `${col} IN (${values})`;
     }
 
+    if (operator === "=") {
+        if (filter.dimension === "thirdparty" || filter.dimension === "supplier") {
+            return `LOWER(TRIM(${col})) = LOWER(TRIM('${safe}'))`;
+        }
+    }
+
     // = > < >= <=
     return `${col} ${operator} '${safe}'`;
 }
