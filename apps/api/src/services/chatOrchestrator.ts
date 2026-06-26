@@ -40,7 +40,7 @@ import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContra
 import { TargetPolarity } from "./insights/actionabilityEngine.js";
 
 export class ChatOrchestrator {
-    static async execute(datasetId: string, question: string): Promise<any> {
+    static async execute(datasetId: string, userId : string , question: string): Promise<any> {
         let currentStage = "Init";
         let parsedIntent = "Unknown";
         let routeType = "";
@@ -62,7 +62,7 @@ export class ChatOrchestrator {
 
             currentStage = "Dataset Fetch";
             // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
-            const dataset = await getDataset(datasetId);
+            const dataset = await getDataset(datasetId , userId);
             if (!dataset || !dataset.storagePath) {
                 throw new Error("Dataset not found or does not have a storage path.");
             }

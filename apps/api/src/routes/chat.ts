@@ -1,11 +1,12 @@
-import { Router } from "express";
+import { Router, Request } from "express";
 import { ChatOrchestrator } from "../services/chatOrchestrator.js";
 import { QuestionValidationError } from "../ai/questionTypes.js";
-
+import { currentUser } from "../middleware/currentUser.js";
+import {getDataset} from "../services/datasetService.js";
 const router = Router();
 
-router.post("/", async (req, res) => {
-    const { datasetId, message } = req.body;
+router.post("/", currentUser , async (req: Request & { user?: { id: string } }, res) => {
+    const { datasetId, message } = req.body as { datasetId?: string; message?: string };
 
     if (!datasetId || !message) {
         return res.status(400).json({
@@ -14,7 +15,16 @@ router.post("/", async (req, res) => {
     }
 
     try {
-        const response = await ChatOrchestrator.execute(datasetId, message);
+
+        const dataset =await getDataset(datasetId , req.user!.id);
+        
+        if (!dataset) {
+            return res.status(404).json({
+                error: "Dataset not found or you do not have access to it."
+            });
+        }
+
+        const response = await ChatOrchestrator.execute(datasetId , req.user!.id , message );
         return res.json(response);
     } catch (error: any) {
         if (error instanceof QuestionValidationError) {

@@ -49,7 +49,7 @@ const ALLOWED_MIME_TYPES = new Set([
 const upload = multer({
     dest: "uploads/",
     limits : {
-        fileSize: 10 * 1024 * 1024, // 10 MB
+        fileSize: 20 * 1024 * 1024, // 20 MB
     },
 
    fileFilter(req, file, cb) {

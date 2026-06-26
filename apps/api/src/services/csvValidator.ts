@@ -16,7 +16,7 @@ export interface CsvValidationMetadata {
     rowEstimate: number;
     columnCount: number;
     headers: string[];
-    encoding: "utf-8";
+    encoding: "utf-8" | "windows-1252" | "latin1";
 }
 
 export class CsvValidationError extends Error {
@@ -54,19 +54,31 @@ function isLikelyBinary(buffer: Buffer): boolean {
     return suspicious / sample.length > 0.05;
 }
 
-function decodeUtf8(buffer: Buffer): string {
+function decodeWithFallback(buffer: Buffer): { text: string; encoding: CsvValidationMetadata["encoding"] } {
     if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-        throw new CsvValidationError("Unsupported encoding.");
+        const text = new TextDecoder("utf-16le", { fatal: true }).decode(buffer.subarray(2));
+        return { text, encoding: "utf-8" };
     }
     if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
-        throw new CsvValidationError("Unsupported encoding.");
+        const text = new TextDecoder("utf-16be", { fatal: true }).decode(buffer.subarray(2));
+        return { text, encoding: "utf-8" };
     }
 
-    try {
-        return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-    } catch {
-        throw new CsvValidationError("Unsupported encoding.");
+    const decoders: Array<{ encoding: CsvValidationMetadata["encoding"]; decoder: TextDecoder }> = [
+        { encoding: "utf-8", decoder: new TextDecoder("utf-8", { fatal: true }) },
+        { encoding: "windows-1252", decoder: new TextDecoder("windows-1252", { fatal: true }) },
+        { encoding: "latin1", decoder: new TextDecoder("latin1", { fatal: true }) },
+    ];
+
+    for (const candidate of decoders) {
+        try {
+            return { text: candidate.decoder.decode(buffer), encoding: candidate.encoding };
+        } catch {
+            continue;
+        }
     }
+
+    throw new CsvValidationError("Unsupported encoding.");
 }
 
 function isValidNumeric(value: string): boolean {
@@ -150,7 +162,8 @@ export async function validateCsv(filePath: string): Promise<CsvValidationMetada
         throw new CsvValidationError("Binary file detected. CSV required.");
     }
 
-    const decoded = decodeUtf8(rawBuffer);
+    const decodedResult = decodeWithFallback(rawBuffer);
+    const decoded = decodedResult.text;
     if (!decoded.trim()) {
         throw new CsvValidationError("CSV is empty.");
     }
@@ -264,6 +277,6 @@ export async function validateCsv(filePath: string): Promise<CsvValidationMetada
         rowEstimate: Math.max(0, rows.length - 1),
         columnCount: headers.length,
         headers,
-        encoding: "utf-8",
+        encoding: decodedResult.encoding,
     };
 }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "@clerk/express";
+import { currentUser } from "../middleware/currentUser.js";
 import { getDataset } from "../services/datasetService.js";
 import { executeQuery } from "../services/queryExecutionService.js";
 import { downloadDataset } from "../services/storageService.js";
@@ -7,7 +8,7 @@ import { downloadDataset } from "../services/storageService.js";
 const router = Router();
 
 // GET /deep-dives/hotel/:id
-router.get("/hotel/:id", requireAuth(), async (req, res) => {
+router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
     try {
         const { id } = req.params;
         const { datasetId } = req.query;
@@ -18,7 +19,7 @@ router.get("/hotel/:id", requireAuth(), async (req, res) => {
 
         let dataset: any = null;
         if (datasetId !== "demo") {
-            dataset = await getDataset(datasetId as string);
+            dataset = await getDataset(datasetId as string, req.user.id);
             if (!dataset) {
                 return res.status(404).json({ error: "Dataset not found" });
             }
@@ -108,7 +109,7 @@ router.get("/hotel/:id", requireAuth(), async (req, res) => {
 });
 
 // GET /deep-dives/supplier/:id
-router.get("/supplier/:id", requireAuth(), async (req, res) => {
+router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) => {
     try {
         const { id } = req.params;
         const { datasetId } = req.query;
@@ -119,7 +120,7 @@ router.get("/supplier/:id", requireAuth(), async (req, res) => {
 
         let dataset: any = null;
         if (datasetId !== "demo") {
-            dataset = await getDataset(datasetId as string);
+            dataset = await getDataset(datasetId as string, req.user.id);
             if (!dataset) {
                 return res.status(404).json({ error: "Dataset not found" });
             }
@@ -210,7 +211,7 @@ router.get("/supplier/:id", requireAuth(), async (req, res) => {
 });
 
 // GET /deep-dives/chain/:id
-router.get("/chain/:id", requireAuth(), async (req, res) => {
+router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
     try {
         const { id } = req.params;
         const { datasetId } = req.query;
@@ -221,7 +222,7 @@ router.get("/chain/:id", requireAuth(), async (req, res) => {
 
         let dataset: any = null;
         if (datasetId !== "demo") {
-            dataset = await getDataset(datasetId as string);
+            dataset = await getDataset(datasetId as string, req.user.id);
             if (!dataset) {
                 return res.status(404).json({ error: "Dataset not found" });
             }
@@ -257,7 +258,7 @@ router.get("/chain/:id", requireAuth(), async (req, res) => {
                     AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
                     AVG(CAST(price_diff_perc AS DOUBLE)) as priceComp
                 FROM data_table
-                WHERE tbo_hotelname ILIKE '%${chainName.replace(/'/g, "''")}%'
+                WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'
             `;
             const metricsRes = await executeQuery<{ totalQueries: number, winRate: number, priceComp: number }>(sql, localPath);
             const m = metricsRes[0];
@@ -276,7 +277,7 @@ router.get("/chain/:id", requireAuth(), async (req, res) => {
                     COUNT(*) as volume,
                     AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate
                 FROM data_table
-                WHERE tbo_hotelname ILIKE '%${chainName.replace(/'/g, "''")}%'
+                WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'
                 GROUP BY tbo_hotelname
                 ORDER BY volume DESC
                 LIMIT 5
