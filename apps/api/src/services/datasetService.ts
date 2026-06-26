@@ -64,25 +64,19 @@ export async function markFailed(
 }
 
 export async function getDataset(
-    datasetId: string
+    datasetId: string,
+    userId : string
 ) {
-    return prisma.dataset.findUnique({
+    return prisma.dataset.findFirst({
         where: {
             id: datasetId,
+            userId
         },
-        include: {
-            user: {
-                select: {
-                    id: true,
-                    email: true,
-                    fullName: true,
-                },
-            },
-        },
+        
     });
 }
 
-export async function getDatasets() {
+export async function getDatasets(id: any) {
     return prisma.dataset.findMany({
         orderBy: {
             uploadedAt: "desc",

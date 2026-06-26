@@ -222,3 +222,7 @@ export async function analyzeCsv(filePath: string): Promise<DatasetSummary> {
         db.close();
     }
 }
+
+export const duckdbAnalytics = {
+    analyzeCsv,
+};

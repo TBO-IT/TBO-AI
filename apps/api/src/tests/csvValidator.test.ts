@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { validateCsv, CsvValidationError } from "../services/csvValidator.js";
-import * as duckdbService from "../services/duckdbService.js";
+import { duckdbAnalytics } from "../services/duckdbService.js";
 
 async function writeTempFile(name: string, content: Buffer | string): Promise<string> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "csv-validator-"));
@@ -167,7 +167,7 @@ describe("upload gate", () => {
             ].join("\n")
         );
 
-        const analyzeSpy = mock.method(duckdbService, "analyzeCsv", async () => {
+        const analyzeSpy = mock.method(duckdbAnalytics, "analyzeCsv", async () => {
             throw new Error("DuckDB should not be reached");
         });
 
