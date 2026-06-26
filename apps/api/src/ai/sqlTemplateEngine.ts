@@ -2,6 +2,7 @@ import { QuestionAnalysis, QuestionFilter } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { buildWhereClause, buildFilterCondition } from "./filterBuilder.js";
 import { detectSortDirection as polaritySortDirection } from "./queryPolarity.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * Resolves a canonical dimension key (e.g. "apw") to the physical column name
@@ -74,7 +75,7 @@ export function generateTemplatedSql(
         const primaryMetricKey = semanticLayer.metricKeys[0];
         if (primaryMetricKey) {
             metrics = [primaryMetricKey];
-            console.log(`[TemplateEngine] Inferred primary metric: ${primaryMetricKey}`);
+            logger.info({ primaryMetricKey }, "Template engine inferred primary metric");
         } else {
             return null;
         }
@@ -89,7 +90,7 @@ export function generateTemplatedSql(
     );
 
     if (!metric) {
-        console.warn(`[TemplateEngine] Metric '${metricKey}' not found in semantic layer.`);
+        logger.warn({ metricKey }, "Template engine metric not found in semantic layer");
         return null;
     }
 
@@ -115,7 +116,7 @@ export function generateTemplatedSql(
 
     // Log filter propagation
     if (filters.length > 0) {
-        console.log(`[TemplateEngine] SQL_FILTERS: ${whereClause || "(none resolved)"}`);
+        logger.info({ whereClause: whereClause || "(none resolved)" }, "Template engine SQL filters");
     }
 
     // ── 3. SELECT / GROUP BY (dimensions + optional time bucketing) ───────────
@@ -124,7 +125,7 @@ export function generateTemplatedSql(
 
     if (dimensions.length > 0) {
         const dimCols = dimensions.map(d => getPhysicalColumnName(d, semanticLayer));
-        console.log(`[TemplateEngine] Dim columns: ${JSON.stringify(Object.fromEntries(dimensions.map((d, i) => [d, dimCols[i]])))}`);
+        logger.info({ dimensions, dimCols }, "Template engine dimension columns");
         selectDims = dimCols.map(c => `"${c}"`).join(", ") + ", ";
         groupBy = `GROUP BY ${dimCols.map(c => `"${c}"`).join(", ")}`;
     }

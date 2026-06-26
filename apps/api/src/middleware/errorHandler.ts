@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../errors/AppError.js";
+import { logger } from "../lib/logger.js";
 
 export function errorHandler(
     err: Error,
@@ -80,14 +81,14 @@ export function errorHandler(
     // Unknown Errors
     // ==============================
 
-    console.error("UNHANDLED ERROR");
-    console.error({
-        method: req.method,
-        url: req.originalUrl,
-        ip: req.ip,
-        user: (req as any).user?.id ?? "anonymous",
-        error: err,
-    });
+   logger.error({
+    requestId: (req as any).id,
+    userId: (req as any).user?.id ?? "anonymous",
+    method: req.method,
+    url: req.originalUrl,
+    ip: req.ip,
+    err,
+}, "Unhandled exception");
 
     return res.status(500).json({
         success: false,

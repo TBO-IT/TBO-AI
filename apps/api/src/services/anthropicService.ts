@@ -1,6 +1,7 @@
 import { getAnthropicClient } from "../lib/claude.js";
 import { MODELS } from "../config/models.js";
 import { recordUsage } from "./tokenUsageService.js";
+import { logger } from "../lib/logger.js";
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
@@ -68,12 +69,12 @@ export async function callClaudeWithStructuredOutput<T>(
             
             if (isRetryable && attempt < MAX_RETRIES) {
                 const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-                console.warn(`[AnthropicService] API Error (${status}). Retrying in ${delay}ms... (Attempt ${attempt}/${MAX_RETRIES})`);
+                logger.warn({ status, delay, attempt, maxRetries: MAX_RETRIES }, "Anthropic API error; retrying");
                 await sleep(delay);
                 continue;
             }
 
-            console.error(`[AnthropicService] Fatal error after ${attempt} attempts:`, error);
+            logger.error({ err: error, status, attempt }, "Anthropic API fatal error");
             throw new AnthropicAPIError(error.message, status);
         }
     }

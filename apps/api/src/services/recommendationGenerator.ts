@@ -14,6 +14,7 @@
 
 import { ClaudeInputPack, assertClaudeInputSafe } from "./claudeInputContract.js";
 import { generateRecommendationText, AnthropicClientError } from "./anthropicClient.js";
+import { logger } from "../lib/logger.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
     try {
         assertClaudeInputSafe(pack);
     } catch (err) {
-        console.error("[RECOMMENDATION_ENGINE] Safety gate blocked:", err);
+        logger.error({ err }, "Recommendation engine safety gate blocked");
         return buildDeterministicRecommendations(pack);
     }
 
@@ -160,7 +161,7 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
     let systemPrompt = SYSTEM_PROMPT;
     if (pack.competitorName) {
         systemPrompt += `\n\nCOMPETITOR MODE — Active\nCompetitor: ${pack.competitorName}\n\nResponse MUST begin with:\nCOMPETITIVE GAP SUMMARY\nCompetitor: ${pack.competitorName}\nPrimary Vulnerability: [entity from the data]\n\nThen follow the standard TARGET-FIRST RESPONSE FORMAT.\nEvery recommendation MUST specifically address how to win against ${pack.competitorName}.\nDo NOT produce generic recommendations that would apply to any competitor.`;
-        console.log(`[RECOMMENDATION_ENGINE] COMPETITOR_MODE active | competitor=${pack.competitorName}`);
+        logger.info({ competitor: pack.competitorName }, "Recommendation engine competitor mode active");
     }
 
     // 4. Call Claude Sonnet
@@ -168,21 +169,15 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
         const result = await generateRecommendationText(prompt, systemPrompt);
 
         // ── CRITICAL: Log raw Sonnet text BEFORE any parsing ─────────────
-        console.log(
-            `[RECOMMENDATION_ENGINE] RAW_CLAUDE_TEXT | chars=${result.text.length} | ` +
-            `preview="${result.text.slice(0, 200)}"`
-        );
+        logger.info({ chars: result.text.length, preview: result.text.slice(0, 200) }, "Recommendation engine raw Claude text");
 
         const recommendations = parseClaudeRecommendations(result.text);
 
-        console.log(
-            `[RECOMMENDATION_ENGINE] Claude Sonnet returned ${recommendations.length} recommendations | ` +
-            `rawChars=${result.text.length} | cost=$${result.estimatedCost.toFixed(4)}`
-        );
+        logger.info({ recommendations: recommendations.length, rawChars: result.text.length, cost: result.estimatedCost }, "Recommendation engine Claude returned");
 
         // If Claude returned nothing useful, fall back
         if (recommendations.length === 0) {
-            console.warn("[RECOMMENDATION_ENGINE] Claude returned 0 recommendations — using deterministic");
+            logger.warn({}, "Recommendation engine Claude returned 0 recommendations; using deterministic");
             return buildDeterministicRecommendations(pack);
         }
 
@@ -193,7 +188,7 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
             rawClaudeText: result.text
         };
     } catch (err: any) {
-        console.error(`[RECOMMENDATION_ENGINE] Claude Sonnet failed (${err.code ?? "UNKNOWN"}) — using deterministic`);
+        logger.error({ err, code: err.code ?? "UNKNOWN" }, "Recommendation engine Claude failed; using deterministic");
         return buildDeterministicRecommendations(pack);
     }
 }

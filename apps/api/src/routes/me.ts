@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { currentUser } from "../middleware/currentUser.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -15,7 +16,7 @@ router.get(
                 role: req.user.role.roleName,
             });
         } catch (error) {
-            console.error("GET /me error:", error);
+            logger.error({ err: error }, "GET /me error");
 
             return res.status(500).json({
                 error: "Internal server error",
@@ -44,7 +45,7 @@ router.get(
                 queriesRun: 0,
             });
         } catch (error) {
-            console.error("GET /profile error:", error);
+            logger.error({ err: error }, "GET /profile error");
 
             return res.status(500).json({
                 error: "Internal server error",
@@ -53,4 +54,4 @@ router.get(
     }
 );
 
-export default router;
+export default router;

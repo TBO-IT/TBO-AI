@@ -1,6 +1,7 @@
 import { redis } from "../lib/redis.js";
 import crypto from "crypto";
 import { METRIC_REGISTRY } from "../ai/metricRegistry.js";
+import { logger } from "../lib/logger.js";
 /*
 manual updation during major changes to the app :
 Template Engine
@@ -45,13 +46,13 @@ export async function getCachedSql(datasetType: string, normalizedQuestion: stri
     try {
         const cached = await redis.get<string>(key);
         if (cached) {
-            console.log(`[QueryCache] HIT: ${key}`);
+            logger.info({ key }, "QueryCache hit");
             return cached;
         }
-        console.log(`[QueryCache] MISS: ${key}`);
+        logger.info({ key }, "QueryCache miss");
         return null;
     } catch (error) {
-        console.error("[QueryCache] Error reading from cache:", error);
+        logger.error({ err: error }, "QueryCache error reading from cache");
         return null;
     }
 }
@@ -62,7 +63,7 @@ export async function setCachedSql(datasetType: string, normalizedQuestion: stri
     try {
         await redis.setex(key, CACHE_TTL, sql);
     } catch (error) {
-        console.error("[QueryCache] Error writing to cache:", error);
+        logger.error({ err: error }, "QueryCache error writing to cache");
     }
 }
 
@@ -70,8 +71,8 @@ export async function deleteCachedSql(datasetType: string, normalizedQuestion: s
     const key = `sql_cache:v${METRIC_VERSION}:${datasetType}:${normalizedQuestion}`;
     try {
         await redis.del(key);
-        console.log(`[QueryCache] Deleted key: ${key}`);
+        logger.info({ key }, "QueryCache deleted key");
     } catch (error) {
-        console.error("[QueryCache] Error deleting cache key:", error);
+        logger.error({ err: error, key }, "QueryCache error deleting cache key");
     }
 }

@@ -1,5 +1,6 @@
 import { DatasetMetadata } from "../services/metadataService.js";
 import { QuestionFilter } from "./questionTypes.js";
+import { logger } from "../lib/logger.js";
 
 // ─── Canonical dimension names ────────────────────────────────────────────────
 //
@@ -117,10 +118,7 @@ export function resolveEntities(
     // ── Deduplicate ───────────────────────────────────────────────────────────
     const deduped = dedupeFilters(rawFilters);
 
-    console.log(
-        `[EntityResolver] Resolved ${deduped.length} unique filters ` +
-        `(${rawFilters.length} raw) from question: "${question.slice(0, 60)}"`
-    );
+    logger.info({ uniqueFilters: deduped.length, rawFilters: rawFilters.length, question: question.slice(0, 60) }, "Entity resolver completed");
 
     return deduped;
 }

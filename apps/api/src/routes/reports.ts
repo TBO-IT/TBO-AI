@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "@clerk/express";
 import { PrismaClient } from "@prisma/client";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -25,7 +26,7 @@ router.get("/", requireAuth(), async (req, res) => {
             createdAt: r.createdAt.toISOString()
         })));
     } catch (error) {
-        console.error("Failed to fetch reports:", error);
+        logger.error({ err: error }, "Failed to fetch reports");
         return res.status(500).json({ error: "Failed to fetch reports" });
     }
 });
@@ -54,7 +55,7 @@ router.get("/:id", requireAuth(), async (req, res) => {
             createdAt: report.createdAt.toISOString()
         });
     } catch (error) {
-        console.error("Failed to fetch report:", error);
+        logger.error({ err: error }, "Failed to fetch report");
         return res.status(500).json({ error: "Failed to fetch report" });
     }
 });
@@ -80,7 +81,7 @@ router.post("/", requireAuth(), async (req, res) => {
 
         return res.json(newReport);
     } catch (error) {
-        console.error("Failed to create report:", error);
+        logger.error({ err: error }, "Failed to create report");
         return res.status(500).json({ error: "Failed to create report" });
     }
 });
@@ -102,7 +103,7 @@ router.delete("/:id", requireAuth(), async (req, res) => {
 
         return res.status(204).send();
     } catch (error) {
-        console.error("Failed to delete report:", error);
+        logger.error({ err: error }, "Failed to delete report");
         return res.status(500).json({ error: "Failed to delete report" });
     }
 });

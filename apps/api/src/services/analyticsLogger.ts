@@ -1,8 +1,10 @@
 // ─── Analytics Logger ─────────────────────────────────────────────────────────
 //
 // Structured JSON logging for the entire analytics pipeline.
-// Replaces ad-hoc console.log with consistent, parseable log entries.
+// Replaces ad-hoc log output with consistent, parseable log entries.
 // ───────────────────────────────────────────────────────────────────────────────
+
+import { logger } from "../lib/logger.js";
 
 export type LogStage =
     | "ANALYZER"
@@ -39,7 +41,7 @@ export function logAnalytics(entry: AnalyticsLogEntry): void {
         ...entry,
         timestamp: entry.timestamp || new Date().toISOString()
     };
-    console.log(JSON.stringify(logLine));
+    logger.info(logLine);
 }
 
 /**

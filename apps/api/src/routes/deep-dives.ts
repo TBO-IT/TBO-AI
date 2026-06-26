@@ -4,6 +4,7 @@ import { currentUser } from "../middleware/currentUser.js";
 import { getDataset } from "../services/datasetService.js";
 import { executeQuery } from "../services/queryExecutionService.js";
 import { downloadDataset } from "../services/storageService.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -103,7 +104,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
             }
         });
     } catch (error) {
-        console.error("Failed to fetch hotel deep dive:", error);
+        logger.error({ err: error }, "Failed to fetch hotel deep dive");
         return res.status(500).json({ error: "Failed to fetch deep dive data" });
     }
 });
@@ -205,7 +206,7 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
             }
         });
     } catch (error) {
-        console.error("Failed to fetch supplier deep dive:", error);
+        logger.error({ err: error }, "Failed to fetch supplier deep dive");
         return res.status(500).json({ error: "Failed to fetch deep dive data" });
     }
 });
@@ -308,7 +309,7 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
             }
         });
     } catch (error) {
-        console.error("Failed to fetch chain deep dive:", error);
+        logger.error({ err: error }, "Failed to fetch chain deep dive");
         return res.status(500).json({ error: "Failed to fetch deep dive data" });
     }
 });

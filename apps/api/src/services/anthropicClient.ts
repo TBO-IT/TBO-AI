@@ -20,6 +20,7 @@ import { MODELS } from "../config/models.js";
 import { recordUsage } from "./tokenUsageService.js";
 import { trackClaudeUsage } from "./claudeCostTracker.js";
 import { logClaude } from "./analyticsLogger.js";
+import { logger } from "../lib/logger.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -116,15 +117,12 @@ export async function generateText(
     const model = getModel(tier);
     const start = performance.now();
 
-    console.log(
-        `[CLAUDE_INPUT] tier=${tier} | model=${model} | ` +
-        `maxTokens=${maxTokens} | promptChars=${prompt.length}`
-    );
+    logger.info({ tier, model, maxTokens, promptChars: prompt.length }, "Claude input");
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            console.log("\n[CLAUDE_SYSTEM_PROMPT]\n" + systemPrompt);
-            console.log("\n[CLAUDE_USER_PROMPT]\n" + prompt);
+            logger.debug({ systemPrompt }, "Claude system prompt");
+            logger.debug({ prompt }, "Claude user prompt");
 
             const client = getClient();
             const response = await client.messages.create({
@@ -145,7 +143,7 @@ export async function generateText(
                 throw new AnthropicClientError("Claude returned no text.", "INVALID_RESPONSE");
             }
 
-            console.log("\n[CLAUDE_RESPONSE]\n" + textBlock.text);
+            logger.debug({ responseText: textBlock.text }, "Claude response");
 
             logClaude(`Claude API Call: ${model}`, latencyMs, {
                 tier,
@@ -156,24 +154,9 @@ export async function generateText(
             });
 
             // Log usage
-            console.log(
-                `[CLAUDE_USAGE] model=${model} | in=${inputTokens} | out=${outputTokens} | ` +
-                `cost=$${estimatedCost.toFixed(4)} | latency=${latencyMs}ms`
-            );
+            logger.info({ model, inputTokens, outputTokens, estimatedCost, latencyMs }, "Claude usage");
 
-            console.log(
-                `\n` +
-                `┌─────────────────────────────────────────────────\n` +
-                `│ [TOKEN_COST] Claude API Call Summary\n` +
-                `│  Model:         ${model}\n` +
-                `│  Tier:          ${tier}\n` +
-                `│  Input Tokens:  ${inputTokens.toLocaleString()}\n` +
-                `│  Output Tokens: ${outputTokens.toLocaleString()}\n` +
-                `│  Total Tokens:  ${(inputTokens + outputTokens).toLocaleString()}\n` +
-                `│  Cost:          $${estimatedCost.toFixed(6)}\n` +
-                `│  Latency:       ${latencyMs}ms\n` +
-                `└─────────────────────────────────────────────────`
-            );
+            logger.info({ model, tier, inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, estimatedCost, latencyMs }, "Claude API call summary");
 
             // Track in cost tracker for aggregation & dashboards
             trackClaudeUsage(model, "CLAUDE_CALL", inputTokens, outputTokens, latencyMs);
@@ -181,9 +164,7 @@ export async function generateText(
             // Persist to DB
             await recordUsage(model, "NARRATIVE_GENERATION", inputTokens, outputTokens).catch(() => {});
 
-            console.log(
-                `[CLAUDE_OUTPUT] model=${model} | responseChars=${textBlock.text.length} | latency=${latencyMs}ms`
-            );
+            logger.info({ model, responseChars: textBlock.text.length, latencyMs }, "Claude output");
 
             return {
                 text: textBlock.text,
@@ -201,7 +182,7 @@ export async function generateText(
 
             if (retryable && attempt < MAX_RETRIES) {
                 const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-                console.warn(`[CLAUDE_RETRY] attempt=${attempt}/${MAX_RETRIES} | status=${status} | delay=${delay}ms`);
+                logger.warn({ attempt, maxRetries: MAX_RETRIES, status, delay }, "Claude retry");
                 await sleep(delay);
                 continue;
             }

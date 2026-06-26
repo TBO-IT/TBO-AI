@@ -21,6 +21,7 @@
 
 import { ClaudeInputPack, assertClaudeInputSafe } from "./claudeInputContract.js";
 import { generateNarrativeText, AnthropicClientError } from "./anthropicClient.js";
+import { logger } from "../lib/logger.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -184,36 +185,32 @@ Use ONLY the facts above. Do NOT invent data.`;
  * Calls Claude Haiku. Falls back to deterministic if Claude fails.
  */
 export async function generateNarrative(pack: ClaudeInputPack): Promise<NarrativeResult> {
-    console.log(`[NARRATIVE_GENERATOR] ENTERED | question="${pack.question.slice(0, 80)}" | metric=${pack.metricName}`);
+    logger.info({ question: pack.question.slice(0, 80), metricName: pack.metricName }, "Narrative generator entered");
 
     // 1. Safety gate
     try {
         assertClaudeInputSafe(pack);
-        console.log(`[NARRATIVE_GENERATOR] Safety gate PASSED`);
+        logger.info({ metricName: pack.metricName }, "Narrative generator safety gate passed");
     } catch (err) {
-        console.error("[NARRATIVE_GENERATOR] Safety gate BLOCKED:", err);
+        logger.error({ err, metricName: pack.metricName }, "Narrative generator safety gate blocked");
         return buildDeterministicNarrative(pack);
     }
 
     // 2. Build prompt
     const prompt = buildNarrativePrompt(pack);
-    console.log(`[NARRATIVE_GENERATOR] Prompt built | chars=${prompt.length}`);
+    logger.info({ chars: prompt.length }, "Narrative generator prompt built");
 
     // 3. Call Claude
-    console.log(`[NARRATIVE_GENERATOR] CALLING_CLAUDE_HAIKU...`);
+    logger.info({}, "Narrative generator calling Claude Haiku");
     try {
         const result = await generateNarrativeText(prompt, SYSTEM_PROMPT);
         const parsed = parseClaudeNarrative(result.text, pack);
 
-        console.log(
-            `[NARRATIVE_GENERATOR] CLAUDE_RETURNED | ` +
-            `chars=${result.text.length} | cost=$${result.estimatedCost.toFixed(4)} | ` +
-            `rawPreview="${result.text.slice(0, 120)}"`
-        );
+        logger.info({ chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) }, "Narrative generator Claude returned");
 
         return parsed;
     } catch (err: any) {
-        console.error(`[NARRATIVE_GENERATOR] CLAUDE_FAILED (${err.code ?? "UNKNOWN"}) — using deterministic fallback`);
+        logger.error({ err, code: err.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
         const fallback = buildDeterministicNarrative(pack);
         fallback.claudeFailed = true;
         return fallback;

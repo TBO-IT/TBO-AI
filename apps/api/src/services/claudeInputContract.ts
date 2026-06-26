@@ -1,5 +1,6 @@
 import { RootCausePack, MetricChange } from "./RootCausePackBuilder.js";
 import { ExecutivePack } from "./insights/executivePackBuilder.js";
+import { logger } from "../lib/logger.js";
 
 // ─── Claude Input Contract ────────────────────────────────────────────────────
 //
@@ -81,27 +82,22 @@ export function buildClaudeInputPack(
         ...(competitorName ? { competitorName } : {})
     };
 
-    console.log(
-        `[CLAUDE_CONTRACT] Pack built | metric=${claudePack.metricName} | ` +
-        `contradiction=${claudePack.contradictionDetected} | ` +
-        `validation=${claudePack.validationStatus}`
-    );
+    logger.info({ metricName: claudePack.metricName, contradictionDetected: claudePack.contradictionDetected, validationStatus: claudePack.validationStatus }, "Claude contract pack built");
 
     if (!executivePack.primaryTarget) {
-        console.warn(`[CLAUDE_CONTRACT_WARN] actionabilityTargets (primaryTarget) is empty`);
+        logger.warn({ metricName: claudePack.metricName }, "Claude contract primaryTarget is empty");
     }
     if (!executivePack.recommendations?.length) {
-        console.warn(`[CLAUDE_CONTRACT_WARN] recommendationTargets is empty`);
+        logger.warn({ metricName: claudePack.metricName }, "Claude contract recommendationTargets is empty");
     }
     if (!executivePack.drilldowns?.length) {
-        console.warn(`[CLAUDE_CONTRACT_WARN] drilldownInsights is empty`);
+        logger.warn({ metricName: claudePack.metricName }, "Claude contract drilldownInsights is empty");
     }
     if (!executivePack.competitiveGaps?.length && claudePack.question.toLowerCase().includes("beat")) {
-        console.warn(`[CLAUDE_CONTRACT_WARN] competitiveGaps is empty for a competitor query`);
+        logger.warn({ metricName: claudePack.metricName }, "Claude contract competitiveGaps is empty for competitor query");
     }
 
-    console.log("[CLAUDE_INPUT_PACK_DUMP]");
-    console.log(JSON.stringify(claudePack, null, 2));
+    logger.debug({ claudePack }, "Claude input pack dump");
 
     return claudePack;
 }

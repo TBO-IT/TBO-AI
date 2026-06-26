@@ -1,4 +1,5 @@
 import duckdb from "duckdb";
+import { logger } from "../lib/logger.js";
 
 export async function runQuery<T>(
     sql: string
@@ -104,7 +105,7 @@ async function getDestinationColumn(csvPath: string): Promise<string | null> {
         );
         return destCol ? destCol.column_name : null;
     } catch (e) {
-        console.error("Error describing schema for destination detection:", e);
+        logger.error({ err: e }, "Error describing schema for destination detection");
         return null;
     }
 }
@@ -303,9 +304,7 @@ export async function getHighestVolumeChains(
 export async function getOverallWinRate(
     csvPath: string
 ): Promise<number> {
-    console.log(
-        "GET OVERALL WIN RATE CALLED"
-    );
+    logger.info({}, "Get overall win rate called");
 
     const normalizedPath = csvPath.replace(/\\/g, "/");
     const sql = `

@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { logger } from "../lib/logger.js";
 
 // Claude 3.5 Sonnet token costs per 1k (as of early 2024/2025)
 // Assuming prompt: $3 / 1M, output: $15 / 1M
@@ -27,8 +28,8 @@ export async function recordUsage(
                 estimatedCost
             }
         });
-        console.log(`[TokenTracker] Recorded ${inputTokens} in / ${outputTokens} out for ${requestType} ($${estimatedCost.toFixed(4)})`);
+        logger.info({ model, requestType, inputTokens, outputTokens, estimatedCost }, "Token usage recorded");
     } catch (error) {
-        console.error("[TokenTracker] Failed to record usage:", error);
+        logger.error({ err: error, model, requestType }, "Token usage record failed");
     }
 }

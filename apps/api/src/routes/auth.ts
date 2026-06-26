@@ -5,6 +5,7 @@ import { requireAuth, getAuth } from "@clerk/express";
 import { clerkClient } from "@clerk/express";
 
 import { prisma } from "../lib/prisma.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -66,7 +67,7 @@ router.post("/sync-user", requireAuth(), async (req, res) => {
 
         return res.json(user);
     } catch (error) {
-        console.error(error);
+        logger.error({ err: error }, "sync-user failed");
 
         return res.status(500).json({
             error: "Internal server error",

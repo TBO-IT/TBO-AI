@@ -3,6 +3,7 @@ import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { generateTemplatedSql } from "./sqlTemplateEngine.js";
 import { extractComparisonEntities } from "../services/comparisonEngine.js";
 import { isExecutivePriorityQuestion } from "../services/claudeRequestDetector.js";
+import { logger } from "../lib/logger.js";
 
 // ─── Route Types ──────────────────────────────────────────────────────────────
 
@@ -196,16 +197,15 @@ function logRouterDecision(
         .map(f => `${f.dimension}${f.operator}${f.value}`)
         .join(", ") || "(none)";
 
-    console.log([
-        `[ROUTER]`,
-        `  QUESTION:      ${analysis.originalQuestion}`,
-        `  INTENT:        ${analysis.intent}`,
-        `  METRICS:       [${analysis.metrics.join(", ") || "none"}]`,
-        `  DIMENSIONS:    [${analysis.dimensions.join(", ") || "none"}]`,
-        `  FILTERS:       [${filterStr}]`,
-        `  MATCHED_RULE:  ${matchedRule}`,
-        `  SELECTED_ROUTE: ${route}`
-    ].join("\n"));
+    logger.info({
+        question: analysis.originalQuestion,
+        intent: analysis.intent,
+        metrics: analysis.metrics,
+        dimensions: analysis.dimensions,
+        filters: filterStr,
+        matchedRule,
+        route
+    }, "Router decision");
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -335,10 +335,7 @@ export function routeQuery(
             };
         }
 
-        console.warn(
-            `[ROUTER] Template engine returned null for intent=${intent}. ` +
-            `Falling back to LLM. Question: "${question.slice(0, 60)}"`
-        );
+        logger.warn({ intent, question: question.slice(0, 60) }, "Template engine returned null; falling back to LLM");
     }
 
     // ── Priority 6: LLM (final fallback) ──────────────────────────────────────

@@ -1,9 +1,11 @@
 import pino from "pino";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment =
+    process.env.NODE_ENV !== "production";
 
 export const logger = pino({
-    level: process.env.LOG_LEVEL || "info",
+    level:
+        process.env.LOG_LEVEL ?? "info",
 
     transport: isDevelopment
         ? {
@@ -17,8 +19,21 @@ export const logger = pino({
         : undefined,
 
     base: {
-        service: "decision-intelligence-api",
+        service:
+            "decision-intelligence-api",
     },
 
-    timestamp: pino.stdTimeFunctions.isoTime,
+    timestamp:
+        pino.stdTimeFunctions.isoTime,
+
+    redact: {
+        paths: [
+            "req.headers.authorization",
+            "authorization",
+            "password",
+            "token",
+            "apiKey",
+        ],
+        censor: "***",
+    },
 });

@@ -38,9 +38,12 @@ import { detectCompetitorContext, CompetitorContext } from "./competitorDetector
 import { startTimer, logCache, logRootCause, logClaude } from "./analyticsLogger.js";
 import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContradiction } from "./analyticsMetrics.js";
 import { TargetPolarity } from "./insights/actionabilityEngine.js";
+import { PerformanceTimer } from "../lib/performanceTimer.js";
+import { logger } from "../lib/logger.js";
 
 export class ChatOrchestrator {
     static async execute(datasetId: string, userId : string , question: string): Promise<any> {
+        const timer = new PerformanceTimer("Chat Query");
         let currentStage = "Init";
         let parsedIntent = "Unknown";
         let routeType = "";
@@ -84,6 +87,7 @@ export class ChatOrchestrator {
             );
 
             const semanticLayer = buildSemanticLayer(schema);
+            timer.checkpoint("Dataset + schema");
             console.log(
                 `[SEMANTIC_LAYER] type=${semanticLayer.datasetType} | ` +
                 `dims=[${semanticLayer.dimensions.join(", ")}] | ` +
@@ -162,8 +166,7 @@ export class ChatOrchestrator {
                     throw new QuestionValidationError({
                         valid: false,
                         errors: [entityCheck.message ?? `Entity "${entityCheck.missingEntity}" not found in dataset.`],
-                        suggestions: ["Verify the entity name matches your dataset.", "Try searching for available destinations, hotels, or suppliers."],
-                        datasetType: semanticLayer.datasetType
+                        suggestions: ["Verify the entity name matches your dataset.", "Try searching for available destinations, hotels, or suppliers."]
                     });
                 }
             }
@@ -175,7 +178,7 @@ export class ChatOrchestrator {
             }
 
             console.log(`[VALIDATED_FILTERS]\n${JSON.stringify(parsedQuestion.filters, null, 2)}`);
-
+            timer.checkpoint("Question analysis + validation");
             if (competitorContext) {
                 const hasThirdparty = parsedQuestion.filters.some(f => f.dimension === "thirdparty");
                 if (!hasThirdparty) {
@@ -393,7 +396,7 @@ export class ChatOrchestrator {
                     await setCachedSql(semanticLayer.datasetType, question.toLowerCase().trim(), sql);
                 }
             }
-
+            timer.checkpoint("Routing + SQL generation");
             console.log("[FINAL_SQL]\n", sql);
 
             // ── SQL Trace Logging for Competitor Filter ────────────────────────
@@ -412,15 +415,25 @@ export class ChatOrchestrator {
             
             if (routeType === "ROOT_CAUSE") {
                 const sqlStatements = sql.split("\n---\n");
-                for (const statement of sqlStatements) {
-                    const sqlValidation = await validateSqlSyntax(statement, tempPath);
-                    if (!sqlValidation.valid) {
-                        console.warn(`[ORCHESTRATOR] SQL failed validation in ROOT_CAUSE: ${sqlValidation.error}`);
-                        continue;
-                    }
-                    const res = await executeQuery(statement, tempPath);
-                    queryResultsList.push(res);
-                }
+                const queryPromises = sqlStatements.map (async (statement) => {
+
+        queryResultsList = await Promise.all(
+    sqlStatements.map(async (statement) => {
+        try {
+            return await executeQuery(statement, tempPath);
+        } catch (err) {
+            console.warn("[ROOT_CAUSE_QUERY_FAILED]", err);
+            return [];
+        }
+    })
+)});
+
+queryResults =
+    queryResultsList.find(res => res.length > 0) ?? [];
+
+
+queryResults =
+    queryResultsList.find(r => r.length > 0) || [];
                 queryResults = queryResultsList.find(res => res.length > 0) || [];
             } else if (routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPARE_ENTITIES") {
                 // SQL executed during pack building for these routes
@@ -437,7 +450,7 @@ export class ChatOrchestrator {
                 : queryResults.length;
 
             console.log(`[ROW_COUNT]\nrows=${totalFetchedRows}`);
-
+            timer.checkpoint("DuckDB execution");
             if (competitorContext && totalFetchedRows === 0) {
                 console.log(
                     `[COMPETITOR_FILTER_EMPTY]\ncompetitor=${competitorContext.competitorName}\nsql=${sql}\nrowCount=0`
@@ -472,8 +485,7 @@ export class ChatOrchestrator {
                     throw new QuestionValidationError({
                         valid: false,
                         errors: ["Could not identify two entities to compare."],
-                        suggestions: ["Try: 'Compare TripJack and Otilla' with both names spelled as they appear in your data."],
-                        datasetType: semanticLayer.datasetType
+                        suggestions: ["Try: 'Compare TripJack and Otilla' with both names spelled as they appear in your data."]
                     });
                 }
                 comparisonPackResult = await buildComparisonPack(
@@ -619,8 +631,7 @@ export class ChatOrchestrator {
                     throw new QuestionValidationError({
                         valid: false,
                         errors: ["No competitive gaps could be identified. The specified competitor may not have overlapping segments with your baseline data."],
-                        suggestions: ["Try comparing against a different competitor.", "Check if the competitor name is spelled correctly."],
-                        datasetType: semanticLayer.datasetType
+                        suggestions: ["Try comparing against a different competitor.", "Check if the competitor name is spelled correctly."]
                     });
                 }
             }
@@ -635,8 +646,7 @@ export class ChatOrchestrator {
                     throw new QuestionValidationError({
                         valid: false,
                         errors: [guardrail.safeExplanation ?? "Insufficient signal for recommendations."],
-                        suggestions: ["Try a more specific question with a clear metric or segment."],
-                        datasetType: semanticLayer.datasetType
+                        suggestions: ["Try a more specific question with a clear metric or segment."]
                     });
                 }
 
@@ -646,8 +656,7 @@ export class ChatOrchestrator {
                         throw new QuestionValidationError({
                             valid: false,
                             errors: ["Could not identify a negative performer matching your criteria."],
-                            suggestions: ["Try looking at a different dimension."],
-                            datasetType: semanticLayer.datasetType
+                            suggestions: ["Try looking at a different dimension."]
                         });
                     }
 
@@ -656,13 +665,12 @@ export class ChatOrchestrator {
                         throw new QuestionValidationError({
                             valid: false,
                             errors: ["Could not identify a positive performer matching your criteria."],
-                            suggestions: ["Try looking at a different dimension."],
-                            datasetType: semanticLayer.datasetType
+                            suggestions: ["Try looking at a different dimension."]
                         });
                     }
                 }
             }
-
+            timer.checkpoint("Executive Pack");
             currentStage = "Claude Input Pack";
             // ── 6. Classify response source ───────────────────────────────
             let responseSource: ResponseSource = "ANALYTICS";
@@ -690,7 +698,7 @@ export class ChatOrchestrator {
             console.log(`[CLASSIFIER] responseSource=${responseSource} | isRecommendation=${isRecommendation} | isNarrative=${isNarrative}`);
 
             console.log(`[ROUTE_DECISION] routeType=${routeType} | responseSource=${responseSource} | hasRootCausePack=${!!rootCausePack} | hasClaudeInputPack=${!!claudeInputPack}`);
-
+            timer.checkpoint("Prompt Assembly");
             if (rootCausePack?.contradictionDetected) {
                 recordContradiction();
             }
@@ -726,7 +734,11 @@ export class ChatOrchestrator {
                         console.log(`🔥 CALLING_SONNET`);
                         console.log(`[ROUTE_CLAUDE_INPUT] analyticsRoute=ROOT_CAUSE | operation=RECOMMENDATIONS | hasValidPack=true`);
                         console.log(`[CLAUDE_CALL] operation=RECOMMENDATIONS | tier=SONNET`);
+                        const claudeStart = performance.now();
                         const recResult = await generateRecommendations(claudeInputPack);
+                        logger.info({
+    durationMs: Math.round(performance.now() - claudeStart)
+}, "Claude Recommendation");
                         console.log(`🔥 SONNET_RETURNED`);
                         console.log(`[ROUTE_CLAUDE_OUTPUT] tier=${routerDecision.tier} | operation=${routerDecision.operation} | shouldCallClaude=${routerDecision.shouldCallClaude}`);
                         recommendations = recResult.recommendations;
@@ -755,8 +767,8 @@ export class ChatOrchestrator {
                         const hasLegacyEntities = legacyEntities.some(e => textLower.includes(e));
 
                         const validTargets = [
-                            ...(executivePack.recommendations || []).map(r => r.targetName.toLowerCase()),
-                            ...(executivePack.competitiveGaps || []).map(g => g.dimension.toLowerCase()),
+                            ...(executivePack.recommendations || []).map((r: { targetName: string }) => r.targetName.toLowerCase()),
+                            ...(executivePack.competitiveGaps || []).map((g: { dimension: string }) => g.dimension.toLowerCase()),
                             executivePack.primaryTarget?.name.toLowerCase()
                         ].filter(Boolean) as string[];
 
@@ -783,7 +795,11 @@ export class ChatOrchestrator {
                     try {
                         console.log(`[ROUTE_CLAUDE_INPUT] analyticsRoute=ROOT_CAUSE | operation=NARRATIVE_GENERATION | hasValidPack=true`);
                         console.log(`[CLAUDE_CALL] operation=NARRATIVE_GENERATION | tier=HAIKU`);
+                        const claudeStart = performance.now();
                         const narResult = await generateNarrative(claudeInputPack);
+                        logger.info({
+                        durationMs: Math.round(performance.now() - claudeStart)
+                        }, "Claude Narrative");
                         narrative = narResult.rawNarrative;
                         responseSource = narResult.claudeUsed ? "CLAUDE_NARRATIVE" : "ANALYTICS";
 
@@ -812,7 +828,7 @@ export class ChatOrchestrator {
                     narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
                     console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS | preview="${narrative.slice(0, 100)}"`);
                 }
-
+                timer.checkpoint("Narrative Generation");
                 await setCachedNarrative(datasetId, question.toLowerCase().trim(), sql, narrative, responseSource);
             }
 
@@ -834,6 +850,7 @@ export class ChatOrchestrator {
             );
 
             // ── 9. Return payload ──────────────────────────────────────────────
+            timer.finish();
             return {
                 answer: narrative,
                 sql,
@@ -856,10 +873,14 @@ export class ChatOrchestrator {
             };
 
         } catch (err: any) {
-            if (err instanceof QuestionValidationError) throw err;
+            if (err instanceof QuestionValidationError) {
+                timer.finish();
+                throw err;
+            }
             console.error(`[PIPELINE_FATAL] question="${question}" | intent=${parsedIntent} | route=${routeType || "Unknown"} | stage=${currentStage} | error=${err.message}`);
             console.error(err.stack);
             err.message = `[Stage: ${currentStage}] ` + err.message;
+            timer.finish();
             throw err;
         } finally {
             if (tempPath) {

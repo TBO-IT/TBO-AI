@@ -1,5 +1,6 @@
 import { QuestionAnalysis } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
+import { logger } from "../lib/logger.js";
 
 const PERFORMANCE_KEYWORDS = [
     "losing", "underperforming", "declining", "worst", "improve",
@@ -30,7 +31,7 @@ export function inferDefaultMetric(
 
     if (!defaultMetric) return analysis;
 
-    console.log(`[METRIC_INFERENCE] Auto-injected metric=${defaultMetric} for: "${question.slice(0, 60)}"`);
+    logger.info({ defaultMetric, question: question.slice(0, 60) }, "Metric inference auto-injected metric");
 
     return {
         ...analysis,

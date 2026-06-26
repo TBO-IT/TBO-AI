@@ -8,9 +8,11 @@ import multer from "multer";
 import { supabase } from "../lib/supabase.js";
 import fs from "fs/promises";
 import path from "path";
+import crypto from "crypto";
 import { validateCsv } from "../services/csvValidator.js";
 import { ValidationError } from "../errors/ValidationError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -29,7 +31,7 @@ async function safeUnlink(filePath?: string) {
                 await new Promise(r => setTimeout(r, 200));
             } else {
                 // Log but don't throw — the upload already succeeded
-                console.warn(`[upload] Could not delete temp file ${filePath}:`, err.message);
+                logger.warn({ filePath, err }, "Could not delete temp file");
                 return;
             }
         }
@@ -37,9 +39,7 @@ async function safeUnlink(filePath?: string) {
 }
 
 function logUploadValidationFailure(params: { filename: string; userId: string; timestamp: string; failure: string }) {
-    console.warn(
-        `[upload] validation failed | filename=${params.filename} | userId=${params.userId} | timestamp=${params.timestamp} | failure=${params.failure}`
-    );
+    logger.warn(params, "Upload validation failed");
 }
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -90,7 +90,7 @@ router.post(
 
             storagePath = `${crypto.randomUUID()}-${req.file.originalname}`;
 
-            console.log(storagePath);
+            logger.info({ storagePath }, "Upload storage path generated");
 
             const dataset = await createDataset(
                 req.user.id,

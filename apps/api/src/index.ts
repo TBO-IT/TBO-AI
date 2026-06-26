@@ -17,6 +17,8 @@ import deepDiveRoutes from "./routes/deep-dives.js";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { requestLogger } from "./middleware/requestLogger.js";
+import { logger } from "./lib/logger.js";
 
 dotenv.config();
 
@@ -70,6 +72,7 @@ app.use(
 app.use(express.json({
     limit : "1mb"
 }));
+app.use(requestLogger);
 app.use(clerkMiddleware());
 
 // DuckDB returns BigInt for COUNT(*) and integer aggregations.
@@ -103,5 +106,5 @@ app.get("/api/protected", requireAuth(), (req, res) => {
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`)
+    logger.info({ port: PORT }, "Server is running");
 })
