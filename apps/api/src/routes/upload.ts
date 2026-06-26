@@ -7,6 +7,8 @@ import { markCompleted } from "../services/datasetService.js";
 import multer from "multer";
 import { supabase } from "../lib/supabase.js";
 import fs from "fs/promises";
+import path from "path";
+import { CsvValidationError, validateCsv } from "../services/csvValidator.js";
 
 const router = Router();
 
@@ -28,16 +30,40 @@ async function safeUnlink(filePath: string) {
     }
 }
 
+function logUploadValidationFailure(params: { filename: string; userId: string; timestamp: string; failure: string }) {
+    console.warn(
+        `[upload] validation failed | filename=${params.filename} | userId=${params.userId} | timestamp=${params.timestamp} | failure=${params.failure}`
+    );
+}
+
+const ALLOWED_EXTENSIONS = new Set([
+    ".csv",
+]);
+
+const ALLOWED_MIME_TYPES = new Set([
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+]);
 
 const upload = multer({
     dest: "uploads/",
+    limits : {
+        fileSize: 10 * 1024 * 1024, // 10 MB
+    },
 
-    fileFilter(req, file, cb) {
-        if (!file.originalname.endsWith(".csv")) {
-            return cb(new Error("Only CSV files allowed"));
-        }
+   fileFilter(req, file, cb) {
+    const extension = path.extname(file.originalname).toLowerCase();
 
-        cb(null, true);
+    if (!ALLOWED_EXTENSIONS.has(extension)) {
+        return cb(new Error("Invalid file extension. Only CSV files are allowed."));
+    }
+
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+        return cb(new Error("Invalid file type. Only CSV files are allowed."));
+    }
+
+    cb(null, true);
     },
 });
 
@@ -53,6 +79,22 @@ router.post(
                 });
             }
 
+            try {
+                await validateCsv(req.file.path);
+            } catch (error) {
+                const message = error instanceof CsvValidationError
+                    ? error.message
+                    : "CSV validation failed.";
+                logUploadValidationFailure({
+                    filename: req.file.originalname,
+                    userId: req.user.id,
+                    timestamp: new Date().toISOString(),
+                    failure: message,
+                });
+                await safeUnlink(req.file.path);
+                return res.status(400).json({ error: message });
+            }
+
             const storagePath =
                 `${crypto.randomUUID()}-${req.file.originalname}`;
 
@@ -63,7 +105,6 @@ router.post(
                 req.file.originalname,
                 storagePath
             );
-
 
 
             const fileBuffer =
@@ -112,6 +153,10 @@ router.post(
 
         } catch (error) {
             console.error(error);
+
+            if (req?.file?.path) {
+                await safeUnlink(req.file.path);
+            }
 
             return res.status(500).json({
                 error: "Upload failed",

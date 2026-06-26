@@ -1,6 +1,7 @@
 import duckdb from "duckdb";
 import { classifySchema } from "../ai/schemaClassifier.js";
 import { DatasetType } from "../ai/datasetTypes.js";
+import { COMPETITIVENESS_COLUMNS, CONVERSION_COLUMNS } from "../config/datasetSchema.js";
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -58,21 +59,21 @@ async function analyzeCompetitiveness(
     const overviewSql = `
         SELECT
             COUNT(*) as rowCount,
-            AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
+            AVG(CASE WHEN "${COMPETITIVENESS_COLUMNS.STATUS}" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
             MEDIAN(CAST(price_diff_perc AS DOUBLE)) as medianPriceDiff
         FROM ${src}
     `;
 
     const apwSql = `
         SELECT apw_bucket_new as name, COUNT(*) as volume,
-            AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate
+            AVG(CASE WHEN "${COMPETITIVENESS_COLUMNS.STATUS}" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate
         FROM ${src}
         GROUP BY apw_bucket_new ORDER BY volume DESC
     `;
 
     const chainSql = `
         SELECT tbo_chainname as name, COUNT(*) as volume,
-            AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate
+            AVG(CASE WHEN "${COMPETITIVENESS_COLUMNS.STATUS}" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate
         FROM ${src}
         WHERE tbo_chainname IS NOT NULL AND TRIM(tbo_chainname) <> ''
         GROUP BY tbo_chainname HAVING COUNT(*) > 10
@@ -81,7 +82,7 @@ async function analyzeCompetitiveness(
 
     const supplierSql = `
         SELECT suppliername as name, COUNT(*) as volume,
-            AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate
+            AVG(CASE WHEN "${COMPETITIVENESS_COLUMNS.STATUS}" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate
         FROM ${src}
         WHERE suppliername IS NOT NULL AND TRIM(suppliername) <> ''
         GROUP BY suppliername ORDER BY volume DESC
@@ -111,9 +112,9 @@ async function analyzeConversion(
 ): Promise<Partial<DatasetSummary>> {
     // Searches and Bookings may be comma-formatted strings (e.g. '79,737')
     // L2B% may be a percent-suffixed string (e.g. '0.00%') — strip both before casting
-    const searches = `CAST(REPLACE(CAST(Searches AS VARCHAR), ',', '') AS BIGINT)`;
-    const bookings = `CAST(REPLACE(CAST(Bookings AS VARCHAR), ',', '') AS BIGINT)`;
-    const l2b      = `CAST(REPLACE(CAST("L2B%" AS VARCHAR), '%', '') AS DOUBLE)`;
+    const searches = `CAST(REPLACE(CAST(${CONVERSION_COLUMNS.SEARCHES} AS VARCHAR), ',', '') AS BIGINT)`;
+    const bookings = `CAST(REPLACE(CAST(${CONVERSION_COLUMNS.BOOKINGS} AS VARCHAR), ',', '') AS BIGINT)`;
+    const l2b      = `CAST(REPLACE(CAST("${CONVERSION_COLUMNS.L2B}" AS VARCHAR), '%', '') AS DOUBLE)`;
 
     const overviewSql = `
         SELECT
@@ -138,12 +139,12 @@ async function analyzeConversion(
 
     const hotelSql = `
         SELECT
-            "Hotel name" as name,
+            "${CONVERSION_COLUMNS.HOTEL_NAME}" as name,
             SUM(${bookings}) as bookings,
             AVG(${l2b})      as l2bRate
         FROM ${src}
-        WHERE "Hotel name" IS NOT NULL AND TRIM("Hotel name") <> ''
-        GROUP BY "Hotel name"
+        WHERE "${CONVERSION_COLUMNS.HOTEL_NAME}" IS NOT NULL AND TRIM("${CONVERSION_COLUMNS.HOTEL_NAME}") <> ''
+        GROUP BY "${CONVERSION_COLUMNS.HOTEL_NAME}"
         ORDER BY bookings DESC
         LIMIT 10
     `;

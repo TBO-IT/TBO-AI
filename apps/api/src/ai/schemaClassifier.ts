@@ -1,26 +1,11 @@
 import { DatasetType } from "./datasetTypes.js";
+import { DATASET_SCHEMAS } from "../config/datasetSchema.js";
 
 export function classifySchema(columns: string[]): DatasetType {
     const normalizedCols = columns.map(c => c.toLowerCase().trim());
 
-    // Keywords mapping
-    const competitivenessKeywords = [
-        "competitive status",
-        "price_diff_perc",
-        "thirdparty_price",
-        "tbo_price"
-    ];
-
-    const conversionKeywords = [
-        "searches",
-        "bookings",
-        "l2b%",
-        "l2v%",
-        "vouchered bookings",
-        "cancelled bookings",
-        "total sales",
-        "vouchered sales"
-    ];
+    const competitivenessKeywords = DATASET_SCHEMAS[DatasetType.COMPETITIVENESS].CLASSIFICATION_KEYWORDS;
+    const conversionKeywords = DATASET_SCHEMAS[DatasetType.CONVERSION].CLASSIFICATION_KEYWORDS;
 
     let compCount = 0;
     let convCount = 0;

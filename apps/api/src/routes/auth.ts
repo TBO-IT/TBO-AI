@@ -2,6 +2,8 @@ import { Router } from "express";
 
 import { requireAuth, getAuth } from "@clerk/express";
 
+import { clerkClient } from "@clerk/express";
+
 import { prisma } from "../lib/prisma.js";
 
 const router = Router();
@@ -49,11 +51,15 @@ router.post("/sync-user", requireAuth(), async (req, res) => {
             });
         }
 
+        const clerkUser = await clerkClient.users.getUser(clerkUserId);
+        const email = clerkUser.emailAddresses[0]?.emailAddress;
+        const fullName = `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim();
+
         const user = await prisma.user.create({
             data: {
                 clerkUserId,
-                email: req.body.email,
-                fullName: req.body.fullName,
+                email,
+                fullName,
                 roleId: viewerRole.id,
             },
         });

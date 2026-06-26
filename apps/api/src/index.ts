@@ -14,20 +14,61 @@ import metricsRoutes from "./routes/metrics.js";
 import testRouter from "./routes/test.js";
 import reportRoutes from "./routes/reports.js";
 import deepDiveRoutes from "./routes/deep-dives.js";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
 const app = express();
+app.disable("x-powered-by");
+app.set("trust proxy", 1); // trust first proxy
+app.use(helmet());
 const PORT = process.env.PORT || 3000;
+
+// Authentication endpoints
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        error: "Too many authentication attempts. Please try again later.",
+    },
+});
+
+// File uploads
+const uploadLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        error: "Upload limit exceeded. Please try again later.",
+    },
+});
+
+// AI chat / analytics
+const chatLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        error: "Too many chat requests. Please slow down.",
+    },
+});
+
 
 app.use(
     cors({
-        origin: "http://localhost:5173",
+        origin: process.env.FRONTEND_URL,
         credentials: true,
     })
 );
 
-app.use(express.json());
+app.use(express.json({
+    limit : "1mb"
+}));
 app.use(clerkMiddleware());
 
 // DuckDB returns BigInt for COUNT(*) and integer aggregations.
@@ -37,15 +78,15 @@ app.set('json replacer', (_key: string, value: unknown) =>
 );
 
 
-app.use("/chat", chatRoutes);
+app.use("/chat", chatLimiter, chatRoutes);
 app.use("/test-analysis", testAnalysisRoutes);
-app.use("/upload", uploadRoutes);
+app.use("/upload", uploadLimiter, uploadRoutes);
 app.use("/dataset", datasetRoutes);
 app.use("/admin", adminRoutes);
 app.use("/test", testRouter);
 app.use("/api", meRoutes);
 app.use("/api/metrics", metricsRoutes);
-app.use("/auth", authRoutes);
+app.use("/auth", authLimiter, authRoutes);
 app.use("/reports", reportRoutes);
 app.use("/deep-dives", deepDiveRoutes);
 
