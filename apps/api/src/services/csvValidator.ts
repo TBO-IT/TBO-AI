@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { parse } from "csv-parse/sync";
+import { ValidationError } from "../errors/ValidationError.js";
 import {
     getBestMatchingSchema,
     getDisplayHeaderName,
@@ -19,13 +20,10 @@ export interface CsvValidationMetadata {
     encoding: "utf-8" | "windows-1252" | "latin1";
 }
 
-export class CsvValidationError extends Error {
-    readonly statusCode: number;
-
-    constructor(message: string, statusCode = 400) {
+export class CsvValidationError extends ValidationError {
+    constructor(message: string) {
         super(message);
         this.name = "CsvValidationError";
-        this.statusCode = statusCode;
     }
 }
 

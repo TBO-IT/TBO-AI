@@ -8,12 +8,18 @@ import multer from "multer";
 import { supabase } from "../lib/supabase.js";
 import fs from "fs/promises";
 import path from "path";
-import { CsvValidationError, validateCsv } from "../services/csvValidator.js";
+import { validateCsv } from "../services/csvValidator.js";
+import { ValidationError } from "../errors/ValidationError.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 const router = Router();
 
 // Retry unlink because DuckDB may hold a Windows file lock briefly after closing
-async function safeUnlink(filePath: string) {
+async function safeUnlink(filePath?: string) {
+    if (!filePath) {
+        return;
+    }
+
     for (let i = 0; i < 15; i++) {
         try {
             await fs.unlink(filePath);
@@ -71,32 +77,18 @@ router.post(
     "/",
     upload.single("file"),
     currentUser,
-    async (req: any, res) => {
+    asyncHandler(async (req: any, res) => {
+        if (!req.file) {
+            throw new ValidationError("File required");
+        }
+
+        const filePath = req.file.path;
+        let storagePath: string | undefined;
+
         try {
-            if (!req.file) {
-                return res.status(400).json({
-                    error: "File required",
-                });
-            }
+            await validateCsv(filePath);
 
-            try {
-                await validateCsv(req.file.path);
-            } catch (error) {
-                const message = error instanceof CsvValidationError
-                    ? error.message
-                    : "CSV validation failed.";
-                logUploadValidationFailure({
-                    filename: req.file.originalname,
-                    userId: req.user.id,
-                    timestamp: new Date().toISOString(),
-                    failure: message,
-                });
-                await safeUnlink(req.file.path);
-                return res.status(400).json({ error: message });
-            }
-
-            const storagePath =
-                `${crypto.randomUUID()}-${req.file.originalname}`;
+            storagePath = `${crypto.randomUUID()}-${req.file.originalname}`;
 
             console.log(storagePath);
 
@@ -109,7 +101,7 @@ router.post(
 
             const fileBuffer =
                 await fs.readFile(
-                    req.file.path
+                    filePath
                 );
 
             const { error: uploadError } =
@@ -129,7 +121,7 @@ router.post(
             }
 
             const summary = await analyzeCsv(
-                req.file.path
+                filePath
             );
 
             const redisKey = `dataset:${dataset.id}`;
@@ -145,24 +137,13 @@ router.post(
                 redisKey
             );
 
-            await safeUnlink(req.file.path);
-
             return res.json({
                 datasetId: dataset.id,
             });
-
-        } catch (error) {
-            console.error(error);
-
-            if (req?.file?.path) {
-                await safeUnlink(req.file.path);
-            }
-
-            return res.status(500).json({
-                error: "Upload failed",
-            });
+        } finally {
+            await safeUnlink(filePath);
         }
     }
-);
+));
 
 export default router;

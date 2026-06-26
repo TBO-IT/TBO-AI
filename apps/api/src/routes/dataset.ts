@@ -2,23 +2,18 @@ import { Router, Request } from "express";
 import { redis } from "../lib/redis.js";
 import { getDataset, getDatasets } from "../services/datasetService.js";
 import {currentUser} from "../middleware/currentUser.js";
+import {asyncHandler} from "../utils/asyncHandler.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
 
 const router = Router();
 
 router.get(
     "/",
     currentUser,
-    async (req: Request & { user?: { id: string } }, res) => {
-        try {
-            const datasets = await getDatasets(req.user!.id);
-            return res.json(datasets);
-        } catch (error) {
-            console.error("GET DATASETS ERROR:", error);
-            return res.status(500).json({
-                error: "Failed to retrieve datasets",
-            });
-        }
-    }
+    asyncHandler(async (req: Request & { user?: { id: string } }, res) => {
+        const datasets = await getDatasets(req.user!.id);
+        return res.json(datasets);
+    })
 );
 
 router.get(
@@ -29,10 +24,10 @@ router.get(
         const dataset = await getDataset(datasetId , req.user!.id);
 
     if (!dataset) {
-        return res.status(404).json({
-            error: "Dataset not found",
-        });
-    }
+    throw new NotFoundError(
+        "Dataset not found."
+    );
+}
 
     if (!dataset.redisKey) {
         return res.status(404).json({

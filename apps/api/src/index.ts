@@ -16,6 +16,7 @@ import reportRoutes from "./routes/reports.js";
 import deepDiveRoutes from "./routes/deep-dives.js";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { errorHandler } from "./middleware/errorHandler.js";
 
 dotenv.config();
 
@@ -98,6 +99,8 @@ app.get("/api/protected", requireAuth(), (req, res) => {
     const auth = (req as any).auth;
     res.json({ message: "Hello from protected API endpoint!", userId: auth.userId })
 })
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`)
