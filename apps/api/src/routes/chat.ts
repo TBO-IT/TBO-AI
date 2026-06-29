@@ -4,6 +4,8 @@ import { currentUser } from "../middleware/currentUser.js";
 import { getDataset } from "../services/datasetService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import { getRequestContext } from "../lib/requestContext.js";
+import { logAnalytics } from "../services/analyticsLogger.js";
 const router = Router();
 
 function sseSend(res: any, event: string, data: any) {
@@ -44,6 +46,16 @@ router.post(
             abortController.abort();
         };
 
+        // Streaming audit
+        const sseStartAt = performance.now();
+        let firstTokenAt: number | null = null;
+        let lastTokenAt: number | null = null;
+        let tokenCount = 0;
+        let streamedChars = 0;
+
+        const ctx = getRequestContext();
+        const requestId = ctx?.requestId;
+
         req.on("close", onClientClose);
 
         try {
@@ -53,6 +65,13 @@ router.post(
             const onToken = (textChunk: string) => {
                 // Avoid sending empty chunks
                 if (!textChunk) return;
+
+                const now = performance.now();
+                if (firstTokenAt === null) firstTokenAt = now;
+                lastTokenAt = now;
+
+                tokenCount += 1;
+                streamedChars += textChunk.length;
 
                 lastChunkAt = Date.now();
                 sseSend(res, "token", { text: textChunk });
@@ -81,6 +100,22 @@ router.post(
                     abortSignal: abortController.signal
                 }
             );
+
+            const sseEndAt = performance.now();
+
+            logAnalytics({
+                stage: "ORCHESTRATOR",
+                message: "SSE streaming audit",
+                timestamp: "",
+                metadata: {
+                    requestId,
+                    firstTokenMs: firstTokenAt === null ? null : Math.round(firstTokenAt - sseStartAt),
+                    streamingDurationMs: lastTokenAt === null ? null : Math.round(sseEndAt - (lastTokenAt ?? sseStartAt)),
+                    sseTotalMs: Math.round(sseEndAt - sseStartAt),
+                    tokenCount,
+                    streamedChars,
+                }
+            });
 
             clearInterval(heartbeat);
 

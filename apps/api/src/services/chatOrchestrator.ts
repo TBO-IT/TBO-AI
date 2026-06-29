@@ -686,7 +686,7 @@ export class ChatOrchestrator {
                     question,
                     rootCausePack,
                     executivePack,
-                    competitorContext?.competitorName
+                    competitorContext ? competitorContext.competitorName : undefined
                 );
                 if (competitorContext) {
                     console.log(
