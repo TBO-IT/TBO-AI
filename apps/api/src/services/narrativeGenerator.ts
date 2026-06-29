@@ -1,26 +1,18 @@
 // ─── Narrative Generator ──────────────────────────────────────────────────────
 //
-// Transforms a ClaudeInputPack into an executive narrative using Claude Haiku.
+// Transforms a ClaudeInputPack into an executive response using Claude Haiku.
 //
 // Exported functions:
 //   buildNarrativePrompt(pack) → string
 //   generateNarrative(pack)    → NarrativeResult
 //
-// Prompt rules:
-//   1. Use ONLY facts provided in the pack.
-//   2. Never invent numbers.
-//   3. Never invent entities.
-//   4. Never fabricate recommendations (that's recommendationGenerator's job).
-//   5. If contradictionDetected=true: explain contradiction FIRST.
-//   6. Executive business tone.
-//
 // Failover:
-//   If Claude fails → return deterministic narrative.
+//   If Claude fails → return deterministic dashboard narrative.
 //   The user's request NEVER fails.
 // ───────────────────────────────────────────────────────────────────────────────
 
 import { ClaudeInputPack, assertClaudeInputSafe } from "./claudeInputContract.js";
-import { generateNarrativeText, generateNarrativeTextStream, AnthropicClientError } from "./anthropicClient.js";
+import { generateNarrativeText, generateNarrativeTextStream } from "./anthropicClient.js";
 import { logger } from "../lib/logger.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,20 +33,20 @@ const SYSTEM_PROMPT =
 DESIGN PRINCIPLE: Information Density > Word Count
 Every line should communicate new information.
 If a sentence repeats something already stated elsewhere: Delete it.
-Every metric, recommendation, and conclusion should appear exactly once. No repetition.
+Every metric/value and every target should appear exactly once. No repetition.
 
 RULES:
 1. Use ONLY the facts provided in the user message.
-2. NEVER invent numbers that are not in the data.
-3. NEVER invent entity names that are not in the data.
-4. NEVER fabricate recommendations — use the exact attributed targets provided.
-5. If a contradiction is noted, explain it FIRST before any other analysis.
-6. Use concise, direct, action-oriented business language. No fluff. Write for business executives, not analysts. Never assume readers understand statistical terminology.
-7. NEVER use abbreviations "pt", "pts", or "pp". ALWAYS use "percentage points" explicitly or describe the metric change clearly (e.g., "Win Rate decreased by 9.73 percentage points").
-8. Avoid words like "drag", "delta", "structural deterioration", "leveraging", "material downside", "optimization opportunity".
-9. For flat metrics (0.00 change), DO NOT write "0.00 pts" or "0.00 percentage points". Instead write "Overall [Metric Name] appears unchanged" or "[Metric Name] remained stable."
-10. Replace paragraphs with markdown tables where instructed.
-11. Keep the total response dense, concise, and structured like a BI dashboard.`;
+2. NEVER invent numbers or entity names.
+3. NEVER fabricate recommendations; use only the provided attributed targets.
+4. If a contradiction is noted, explain it FIRST before any other analysis.
+5. Dashboard-only writing: tables and bullets only (no paragraphs).
+6. Every section answers exactly ONE business question.
+7. No repeated metrics.
+8. Never use abbreviations "pt", "pts", or "pp". Always use "percentage points" explicitly.
+9. For flat metrics (0.00 change), write "[Metric Name] remained stable".
+10. Enforce the EXACT response structure below. Do not add extra headings or change their order.
+11. Reduce output tokens by increasing information density.`;
 
 // ─── Public: buildNarrativePrompt ─────────────────────────────────────────────
 
@@ -64,20 +56,6 @@ RULES:
  */
 export function buildNarrativePrompt(pack: ClaudeInputPack): string {
     const ep = pack.executivePack;
-
-    // Formatting rules to enforce Actionability
-    const rules = [
-        "Write an action-oriented briefing for the CEO / CRO.",
-        "You are the Revenue Operator.",
-        "Rule 1: Always use the exact markdown structure provided.",
-        "Rule 2: Never produce long paragraphs. Use short sentences, active voice, and strong verbs.",
-        "Rule 3: Answer 'What should leadership know?' in the Executive Decision Brief in 1-2 sentences.",
-        "Rule 4: Focus on business impact and actionable next steps.",
-        "Rule 5: Never invent data or targets.",
-        "Rule 6: Never use 'pt', 'pts', or 'pp'. Write 'percentage points' and always name the metric.",
-        "Rule 7: Write for business executives. Avoid analyst shorthand.",
-        "Rule 8: Reduce output tokens by increasing information density. Never repeat numerical values."
-    ].join("\n");
 
     const risksText = ep.topRisks.slice(0, 3)
         .map(r => `  • [${r.severity}] ${r.title}: ${r.explanation}`)
@@ -91,19 +69,7 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
         .map(a => `  • [${a.priority}] ${a.action}: ${a.rationale}`)
         .join("\n");
 
-    const implicationsText = ep.strategicImplications.slice(0, 3)
-        .map(i => `  • [${i.severity}] ${i.implication}`)
-        .join("\n");
-
-    const tradeoffsText = ep.tradeoffs.slice(0, 3)
-        .map(t => `  • ${t.title}: ${t.explanation}`)
-        .join("\n");
-
-    const scenariosText = ep.scenarios
-        .map(s => `  • [${s.type}]: ${s.description}`)
-        .join("\n");
-
-    const primaryTargetText = ep.primaryTarget 
+    const primaryTargetText = ep.primaryTarget
         ? `${ep.primaryTarget.name} (${ep.primaryTarget.entityType}): ${ep.primaryTarget.reason}`
         : "None identified.";
 
@@ -115,26 +81,23 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
         .map(r => `  • ${r.targetName}: ${r.expectedImpact}`)
         .join("\n");
 
-    const warnings = pack.validationErrors.length > 0 
-        ? `\nDATA QUALITY WARNINGS:\n${pack.validationErrors.map(e => `  ⚠ ${e}`).join("\n")}\n` 
+    const warnings = pack.validationErrors.length > 0
+        ? `\nDATA QUALITY WARNINGS:\n${pack.validationErrors.map(e => `  ⚠ ${e}`).join("\n")}\n`
         : "";
 
     return `USER QUESTION: "${pack.question}"
 METRIC: ${pack.metricName}
 VALIDATION: ${pack.validationStatus}
 
-OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' percentage points (' + pack.metricChange.direction + ')' : 'N/A'}
-PERIOD: Prior → Current
+OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + " percentage points (" + pack.metricChange.direction + ")" : "N/A"}
 
 HEADLINE: ${ep.headline}
-EXECUTIVE SUMMARY: ${ep.executiveSummary}
+EXECUTIVE SUMMARY (legacy text): ${ep.executiveSummary}
 KEY TAKEAWAY: ${ep.keyTakeaway}
+LEADERSHIP MESSAGE (legacy): ${ep.leadershipMessage}
 
 PRIMARY TARGET:
   • ${primaryTargetText}
-
-SUPPORTING TARGETS:
-${supportingTargetsText || "  • None identified."}
 
 TOP RISKS:
 ${risksText || "  • None identified."}
@@ -142,67 +105,80 @@ ${risksText || "  • None identified."}
 TOP OPPORTUNITIES:
 ${oppsText || "  • None identified."}
 
-RECOMMENDED ACTIONS:
+TOP DRIVERS (for Key Drivers table):
+${ep.topDrivers.slice(0, 3).map(d => `  • ${d.name} | ${d.metricDelta} percentage points | vol=${d.volumeShare} | ${d.priority}`).join("\n")}
+
+RECOMMENDED ACTIONS (for Recommended Actions table):
+${actionsText || "  • None identified."}
+
+RECOMMENDATION TARGETS (for linkage):
 ${newActionsText || "  • None identified."}
 
-SCENARIO OUTLOOK:
-${scenariosText || "  • None identified."}
+SUPPORTING TARGETS (for Key Drivers rows):
+${supportingTargetsText || "  • None identified."}
 
-STRATEGIC IMPLICATIONS:
-${implicationsText || "  • None identified."}
-
-CONFIDENCE ASSESSMENT:
-${ep.confidenceAssessment.rationale}
-
-LEADERSHIP MESSAGE: ${ep.leadershipMessage}
 TOTAL DATA POINTS: ${pack.totalRows}
 ${warnings}
-Write the executive briefing following these rules:
-${rules}
 
-Structure the output EXACTLY like this:
-━━━━━━━━━━━━━━━━━━━━━━
-# Executive Decision Brief
-[1-2 sentences immediately answering "What should leadership know?"]
+WRITE the executive response following these rules:
+- Output must match the EXACT structure and heading order below.
+- Executive Decision: compact table with maximum 5 rows and no paragraphs.
+- Recommended Actions: maximum 3 rows; table columns must be Priority | Action | Why | Expected Outcome.
+- Key Drivers: markdown table with columns Driver | Impact | Volume | Priority.
+- Key Risks: markdown table with columns Severity | Risk | Business Impact; maximum 3 rows.
+- Leadership Notes: exactly three bullets; each bullet one sentence.
+- No metric/value repetition across sections.
+- Always name the metric explicitly and use "percentage points" (never "pt", "pts", or "pp").
+- No extra headings and no narrative outside tables/bullets.
 
+STRUCTURE (EXACT):
 ━━━━━━━━━━━━━━━━━━━━━━
-# Primary Target
-| Metric | Value |
+## Executive Decision
+| Decision | Value |
+| ------------------ | ------------------------------- |
+| Overall Status | [text] |
+| Highest Priority | [entity/target] |
+| Business Impact | [metric change in words] |
+| Volume | [volume share in percent] |
+| Recommended Action | [short directive] |
+
+## Primary Target
+| Target | Value |
 |---|---|
-| Target | [Target Name] |
-| Business Metric | [Metric Name] |
-| Business Impact | [Metric Change] |
-| Volume | [Volume/Share] |
-| Expected ROI | [Expected Impact] |
+| Metric | ${pack.metricName} |
+| Target Name | [primary target name] |
+| Business Impact | [business impact text] |
+| Volume Share | [volume share] |
+| Recommended Direction | [recover / de-risk / protect / scale text] |
 
-━━━━━━━━━━━━━━━━━━━━━━
-# Recommended Actions
-[Max 3 actions. Format as:]
-**[Title]**
-*Why:* [Reason]
-*Expected Outcome:* [Expected outcome]
+## Recommended Actions
+| Priority | Action | Why | Expected Outcome |
+|---|---|---|---|
+| P0 | [action] | [reason] | [outcome] |
+| P1 | [action] | [reason] | [outcome] |
+| P2 | [action] | [reason] | [outcome] |
 
-━━━━━━━━━━━━━━━━━━━━━━
-# Key Drivers
+## Key Drivers
 | Driver | Impact | Volume | Priority |
 |---|---|---|---|
-[Populate with supporting targets and opportunities. No narrative paragraph.]
+| [driver] | [impact in words/percentage points] | [volume] | [priority] |
 
-━━━━━━━━━━━━━━━━━━━━━━
-# Key Risks
-[Max 3 bullets. One sentence each.]
+## Key Risks
+| Severity | Risk | Business Impact |
+|---|---|---|
+| [severity] | [risk] | [impact in words] |
 
-━━━━━━━━━━━━━━━━━━━━━━
-# Executive Summary
-[Max 60-80 words. Summarize what happened, why, and what leadership should do next.]
-ONLY the facts above. Do NOT invent data.`;
+## Leadership Notes
+• [one sentence]
+• [one sentence]
+• [one sentence]
+━━━━━━━━━━━━━━━━━━━━━━`;
 }
 
 // ─── Public: generateNarrative ────────────────────────────────────────────────
 
 /**
- * Generates an executive narrative from a validated ClaudeInputPack.
- *
+ * Generates an executive dashboard narrative from a validated ClaudeInputPack.
  * Calls Claude Haiku. Falls back to deterministic if Claude fails.
  */
 export async function generateNarrative(pack: ClaudeInputPack): Promise<NarrativeResult> {
@@ -226,12 +202,13 @@ export async function generateNarrative(pack: ClaudeInputPack): Promise<Narrativ
     try {
         const result = await generateNarrativeText(prompt, SYSTEM_PROMPT);
         const parsed = parseClaudeNarrative(result.text, pack);
-
-        logger.info({ chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) }, "Narrative generator Claude returned");
-
+        logger.info(
+            { chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) },
+            "Narrative generator Claude returned"
+        );
         return parsed;
     } catch (err: any) {
-        logger.error({ err, code: err.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
+        logger.error({ err, code: err?.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
         const fallback = buildDeterministicNarrative(pack);
         fallback.claudeFailed = true;
         return fallback;
@@ -240,9 +217,8 @@ export async function generateNarrative(pack: ClaudeInputPack): Promise<Narrativ
 
 /**
  * Streaming variant of generateNarrative.
- * - Streams natural text chunks to `onToken`
- * - Still accumulates the full text and parses it using the existing parser
- *   to preserve identical analytical output.
+ * - Streams tokens via `onToken`
+ * - Still parses the final text for identical analytical output.
  */
 export async function generateNarrativeStream(
     pack: ClaudeInputPack,
@@ -278,15 +254,13 @@ export async function generateNarrativeStream(
         );
 
         const parsed = parseClaudeNarrative(result.text, pack);
-
         logger.info(
             { chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) },
             "Narrative generator Claude returned (stream accumulated)"
         );
-
         return parsed;
     } catch (err: any) {
-        logger.error({ err, code: err.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
+        logger.error({ err, code: err?.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
         const fallback = buildDeterministicNarrative(pack);
         fallback.claudeFailed = true;
         return fallback;
@@ -298,36 +272,112 @@ export async function generateNarrativeStream(
 export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeResult {
     const ep = pack.executivePack;
 
-    const risks = ep.topRisks.map(r => `  • [${r.severity}] ${r.title}`).join("\n");
-    const opps = ep.topOpportunities.map(o => `  • [${o.severity}] ${o.title}`).join("\n");
-    const actions = ep.topActions.map(a => `  • [${a.priority}] ${a.action}`).join("\n");
-    const implications = ep.strategicImplications.map(i => `  • [${i.severity}] ${i.implication}`).join("\n");
-    const tradeoffs = ep.tradeoffs.map(t => `  • ${t.title}`).join("\n");
-    const scenarios = ep.scenarios.map(s => `  • [${s.type}] ${s.description}`).join("\n");
-    const impacts = ep.actionImpacts.map(i => `  • ${i.action}: ${i.expectedImpact}`).join("\n");
+    const primary = ep.primaryTarget;
 
-    const primaryTarget = ep.primaryTarget ? `  • ${ep.primaryTarget.name} (${ep.primaryTarget.entityType}): ${ep.primaryTarget.reason}` : "  • None identified";
-    const supportingTargets = ep.drilldowns.map(d => `  • ${d.name} (${d.entityType}): ${d.reason}`).join("\n");
-    const newActions = ep.recommendations.map(r => `  • ${r.targetName}: ${r.expectedImpact}`).join("\n");
+    const overallStatus = ep.topRisks.length > 0 ? "⚠ Hidden deterioration" : "✅ Stable performance";
+    const highestPriority = primary?.name ?? (ep.topRisks[0]?.title ?? ep.topOpportunities[0]?.title ?? "N/A");
 
-    let raw = `PRIMARY TARGET\n${primaryTarget}\n\n`;
-    raw += `SUPPORTING TARGETS\n${supportingTargets || "  • None identified"}\n\n`;
-    raw += `RECOMMENDED ACTIONS\n${newActions || "  • None identified"}\n\n`;
-    raw += `EXECUTIVE SUMMARY\n${ep.headline} ${ep.executiveSummary}\n\n`;
-    raw += `KEY TAKEAWAY\n${ep.keyTakeaway}\n\n`;
-    raw += `TOP RISKS\n${risks || "  • None identified"}\n\n`;
-    raw += `TOP OPPORTUNITIES\n${opps || "  • None identified"}\n\n`;
-    raw += `SCENARIO OUTLOOK\n${scenarios || "  • None identified"}\n`;
+    const impactText = pack.metricChange
+        ? `${pack.metricName} ${pack.metricChange.direction === "increase" ? "increased" : "decreased"} by ${Math.abs(pack.metricChange.absoluteChange).toFixed(2)} percentage points`
+        : `${pack.metricName} remained stable`;
+
+
+    const volumeText = primary?.volumeShare != null
+        ? `${(primary.volumeShare * 100).toFixed(1)}%`
+        : "N/A";
+
+
+    const recommendedAction = ep.topActions[0]?.action
+        ? ep.topActions[0].action
+        : (ep.topRisks[0] ? `Mitigate ${ep.topRisks[0].affectedEntity} deterioration` : "Maintain current strategy");
+
+    const decisionTable = [
+        ["Overall Status", overallStatus],
+        ["Highest Priority", highestPriority],
+        ["Business Impact", impactText],
+        ["Volume", volumeText],
+        ["Recommended Action", recommendedAction]
+    ];
+
+    const primaryTargetTable = [
+        ["Metric", pack.metricName],
+        ["Target Name", primary?.name ?? "None identified"],
+        ["Business Impact", primary?.reason ?? ep.keyTakeaway],
+        ["Volume Share", primary?.volumeShare != null ? `${(primary.volumeShare * 100).toFixed(1)}%` : "N/A"],
+        ["Recommended Direction", primary?.polarity === 1 ? "recover" : primary?.polarity === 0 ? "de-risk" : "scale"]
+    ];
+
+    const recRows = (ep.topActions ?? []).slice(0, 3);
+    const recActionsTable = recRows.length
+        ? recRows.map((a: any) => [a.priority, a.action, a.rationale, "Execute the linked action to improve the business outcome"])
+        : [["P0", "No action found", "Insufficient data", "Maintain current performance"]];
+
+
+    const driverRows = (ep.topDrivers ?? []).slice(0, 3);
+
+    const keyDriversTable = driverRows.map((d: any) => [
+        d.name,
+        `${d.metricDelta >= 0 ? "Increase" : "Decrease"} by ${Math.abs(d.metricDelta).toFixed(2)} percentage points`,
+        d.volumeShare != null ? `${(d.volumeShare * 100).toFixed(1)}%` : "N/A",
+        d.priority ?? "—"
+    ]);
+
+    const riskRows = (ep.topRisks ?? []).slice(0, 3);
+    const keyRisksTable = riskRows.map((r: any) => [
+        r.severity,
+        r.title,
+        r.explanation
+    ]);
+
+    const leadershipNotes = [
+        ep.topActions[0]?.action ? `Execute: ${ep.topActions[0].action}.` : `Focus: ${ep.keyTakeaway}.`,
+        ep.topRisks[0] ? `Address risk: ${ep.topRisks[0].title}.` : `Protect upside by monitoring top opportunities weekly.`,
+        ep.topOpportunities[0] ? `Pursue opportunity: ${ep.topOpportunities[0].title}.` : `Maintain discipline on the primary target.`,
+    ];
+
+    const raw = [
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        "## Executive Decision",
+        "| Decision | Value |",
+        "| ------------------ | ------------------------------- |",
+        ...decisionTable.map(([k, v]) => `| ${k} | ${v} |`),
+        "",
+        "## Primary Target",
+        "| Target | Value |",
+        "|---|---|",
+        ...primaryTargetTable.map(([k, v]) => `| ${k} | ${v} |`),
+        "",
+        "## Recommended Actions",
+        "| Priority | Action | Why | Expected Outcome |",
+        "|---|---|---|---|",
+        ...recActionsTable.map(([p, act, why, out]) => `| ${p} | ${act} | ${why} | ${out} |`).slice(0, 3),
+        "",
+        "## Key Drivers",
+        "| Driver | Impact | Volume | Priority |",
+        "|---|---|---|---|",
+        ...keyDriversTable.map((row) => `| ${row[0]} | ${row[1]} | ${row[2]} | ${row[3]} |`),
+        "",
+        "## Key Risks",
+        "| Severity | Risk | Business Impact |",
+        "|---|---|---|",
+        ...keyRisksTable.map((row) => `| ${row[0]} | ${row[1]} | ${row[2]} |`).slice(0, 3),
+        "",
+        "## Leadership Notes",
+        `• ${leadershipNotes[0]}`,
+        `• ${leadershipNotes[1]}`,
+        `• ${leadershipNotes[2]}`,
+        "━━━━━━━━━━━━━━━━━━━━━━"
+    ].join("\n");
 
     return {
         executiveSummary: ep.executiveSummary,
-        keyDrivers: ep.topDrivers.map(d => d.name),
-        risks: ep.topRisks.map(r => r.title),
+        keyDrivers: (ep.topDrivers ?? []).slice(0, 3).map((d: any) => d.name),
+        risks: (ep.topRisks ?? []).slice(0, 3).map((r: any) => r.title),
         rawNarrative: raw,
         claudeUsed: false,
         claudeFailed: true,
         contradictionNote: pack.contradictionDetected
-            ? "Note: The user's expected direction contradicts the actual data."
+            ? `Expected: ${pack.expectedDirection}. Actual: ${pack.metricChange?.direction}.`
             : undefined
     };
 }
@@ -335,13 +385,11 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
 // ─── Claude Response Parser ───────────────────────────────────────────────────
 
 function parseClaudeNarrative(text: string, pack: ClaudeInputPack): NarrativeResult {
-    // Extract key drivers from text (lines after "Key Drivers" heading)
-    const keyDrivers = extractSection(text, /key\s*drivers?/i);
-    const risks = extractSection(text, /risks?/i);
+    const keyDrivers = extractSection(text, /##\s*Key Drivers/i);
+    const risks = extractSection(text, /##\s*Key Risks/i);
 
-    // The full text IS the executive summary from Claude
-    const execSummaryMatch = text.match(/executive\s*summary[:\s]*([\s\S]*?)(?=\n\s*(?:key|risk|\n\n|$))/i);
-    const executiveSummary = execSummaryMatch?.[1]?.trim() ?? text.split("\n\n")[0] ?? text;
+    // Keep executiveSummary field as the raw text for UI/search (original behavior)
+    const executiveSummary = text.split("\n")[0]?.trim() ? text : epSafeExecutiveSummary(pack);
 
     return {
         executiveSummary,
@@ -356,6 +404,14 @@ function parseClaudeNarrative(text: string, pack: ClaudeInputPack): NarrativeRes
     };
 }
 
+function epSafeExecutiveSummary(pack: ClaudeInputPack): string {
+    try {
+        return pack.executivePack?.executiveSummary ?? "";
+    } catch {
+        return "";
+    }
+}
+
 function extractSection(text: string, headerPattern: RegExp): string[] {
     const lines = text.split("\n");
     const items: string[] = [];
@@ -368,15 +424,24 @@ function extractSection(text: string, headerPattern: RegExp): string[] {
         }
         if (capturing) {
             const trimmed = line.trim();
-            if (trimmed === "" || /^(executive|summary|recommendation|conclusion)/i.test(trimmed)) {
-                if (items.length > 0) break;
+            if (trimmed === "") continue;
+            if (/^##\s*/i.test(trimmed)) break;
+
+            // For markdown tables, extract the first column value (best-effort)
+            if (trimmed.startsWith("|")) {
+                const cells = trimmed.split("|").map(c => c.trim()).filter(Boolean);
+                if (cells.length >= 2) {
+                    items.push(cells[0]);
+                }
                 continue;
             }
-            const cleaned = trimmed.replace(/^[-•*]\s*/, "").replace(/^\d+\.\s*/, "");
-            if (cleaned.length > 5) {
-                items.push(cleaned);
+
+            if (!/^(Driver|Severity|Risk|Priority|---)/i.test(trimmed) && trimmed.length > 3) {
+                items.push(trimmed.replace(/^[-•*]\s*/, ""));
             }
         }
     }
-    return items;
+
+    return items.slice(0, 5);
 }
+
