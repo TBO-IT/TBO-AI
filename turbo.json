@@ -7,7 +7,7 @@
         "UPSTASH_REDIS_REST_URL",
         "UPSTASH_REDIS_REST_TOKEN",
         "JWT_SECRET",
-        "CLAUDE_API_KEY",
+        "ANTHROPIC_API_KEY",
         "VITE_CLERK_PUBLISHABLE_KEY"
     ],
     "tasks": {
