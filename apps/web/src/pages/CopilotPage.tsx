@@ -6,7 +6,8 @@ import type { Dataset } from "../types/dataset";
 import { saveReport } from "../api/reportApi";
 import { cn } from "../lib/utils";
 import { useAuth } from "@clerk/clerk-react";
-import { FormattedText, SimpleMarkdown } from "./ChatPage";
+import { SimpleMarkdown } from "./ChatPage";
+import { ExecutiveKPICard, RecommendationCard } from "../components/ExecutiveCards";
 
 // ── Types ──
 
@@ -26,18 +27,18 @@ interface Message {
 // ── Section Renderer ──
 
 const SECTION_ORDER = [
-    "PRIMARY TARGET",
-    "SUPPORTING TARGETS",
-    "RECOMMENDED ACTIONS",
     "EXECUTIVE SUMMARY",
+    "PRIMARY TARGET",
+    "RECOMMENDED ACTIONS",
+    "EXPECTED IMPACT",
     "KEY TAKEAWAY",
+    "LEADERSHIP MESSAGE",
+    "SUPPORTING TARGETS",
     "TOP RISKS",
     "TOP OPPORTUNITIES",
     "KEY TRADEOFFS",
-    "EXPECTED IMPACT",
     "SCENARIO OUTLOOK",
     "CONFIDENCE ASSESSMENT",
-    "LEADERSHIP MESSAGE",
 ];
 
 const SECTION_ICONS: Record<string, string> = {
@@ -90,37 +91,105 @@ function parseExecutiveResponse(raw: string): Record<string, string> | null {
     return Object.keys(sections).length >= 3 ? sections : null;
 }
 
+function parseKPITable(text: string) {
+    if (!text.includes("| Metric | Value |")) return null;
+    const lines = text.split("\n");
+    const data: Record<string, string> = {};
+    for (const line of lines) {
+        if (!line.includes("|") || line.includes("---|---")) continue;
+        const [k, v] = line.split("|").map(s => s.trim()).filter(Boolean);
+        if (k && v && k !== "Metric") {
+            data[k] = v;
+        }
+    }
+    return Object.keys(data).length > 0 ? data : null;
+}
+
+function parseRecommendations(text: string) {
+    const lines = text.split("\n");
+    const recs: { title: string; why: string; outcome: string }[] = [];
+    let currentRec: any = null;
+    for (const line of lines) {
+        const titleMatch = line.match(/^\*\*(.*?)\*\*/);
+        if (titleMatch) {
+            if (currentRec) recs.push(currentRec);
+            currentRec = { title: titleMatch[1], why: "", outcome: "" };
+        } else if (currentRec) {
+            const whyMatch = line.match(/^\*Why:\*\s*(.*)/i);
+            const outcomeMatch = line.match(/^\*Expected Outcome:\*\s*(.*)/i);
+            if (whyMatch) {
+                currentRec.why = whyMatch[1];
+            } else if (outcomeMatch) {
+                currentRec.outcome = outcomeMatch[1];
+            }
+        }
+    }
+    if (currentRec) recs.push(currentRec);
+    return recs.length > 0 ? recs : null;
+}
+
 function SectionCard({ title, content, defaultOpen = false }: { title: string; content: string; defaultOpen?: boolean }) {
     const [open, setOpen] = useState(defaultOpen);
     const icon = SECTION_ICONS[title] || "📌";
-    const alwaysOpen = title === "PRIMARY TARGET" || title === "EXECUTIVE SUMMARY" || title === "KEY TAKEAWAY" || title === "LEADERSHIP MESSAGE";
+    
+    // Always open key sections
+    const alwaysOpen = title === "PRIMARY TARGET" || title === "EXECUTIVE SUMMARY" || title === "RECOMMENDED ACTIONS" || title === "LEADERSHIP MESSAGE";
+    
+    // Attempt parsing structured data
+    let renderedContent: React.ReactNode = null;
+    if (title === "PRIMARY TARGET") {
+        const kpiData = parseKPITable(content);
+        if (kpiData) {
+            renderedContent = <ExecutiveKPICard data={kpiData} />;
+        }
+    } else if (title === "RECOMMENDED ACTIONS") {
+        const recData = parseRecommendations(content);
+        if (recData) {
+            renderedContent = (
+                <div className="space-y-0">
+                    {recData.map((rec, idx) => (
+                        <RecommendationCard key={idx} index={idx + 1} title={rec.title} why={rec.why} outcome={rec.outcome} />
+                    ))}
+                </div>
+            );
+        }
+    }
+
+    if (!renderedContent) {
+        renderedContent = <SimpleMarkdown text={content} />;
+    }
 
     return (
         <div className={cn(
-            "border rounded-[10px] transition-colors",
-            "border-slate-200 dark:border-slate-800/80",
-            "bg-white dark:bg-slate-900/50"
+            "rounded-xl transition-colors mb-4",
+            !alwaysOpen && "border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/40 shadow-sm"
         )}>
-            <button
-                onClick={() => !alwaysOpen && setOpen(!open)}
-                className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 text-left",
-                    !alwaysOpen && "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40",
-                    alwaysOpen && "cursor-default",
-                    "rounded-[10px] transition-colors"
-                )}
-            >
-                <span className="text-sm">{icon}</span>
-                <span className="text-[12px] font-semibold tracking-wide uppercase text-slate-500 dark:text-slate-400 flex-1">
-                    {title}
-                </span>
-                {!alwaysOpen && (
+            {!alwaysOpen && (
+                <button
+                    onClick={() => setOpen(!open)}
+                    className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 rounded-xl transition-colors"
+                    )}
+                >
+                    <span className="text-sm">{icon}</span>
+                    <span className="text-[12px] font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-300 flex-1">
+                        {title}
+                    </span>
                     <ChevronDown className={cn(
-                        "h-3.5 w-3.5 text-slate-400 transition-transform duration-200",
+                        "h-4 w-4 text-slate-400 transition-transform duration-200",
                         open && "rotate-180"
                     )} />
-                )}
-            </button>
+                </button>
+            )}
+            
+            {alwaysOpen && (
+                <div className="flex items-center gap-2 mb-3 px-1">
+                    <span className="text-[12px] font-bold tracking-wider uppercase text-slate-800 dark:text-slate-200">
+                        {icon} {title}
+                    </span>
+                </div>
+            )}
+
             <AnimatePresence initial={false}>
                 {(open || alwaysOpen) && (
                     <motion.div
@@ -130,8 +199,11 @@ function SectionCard({ title, content, defaultOpen = false }: { title: string; c
                         transition={{ duration: 0.2, ease: "easeOut" }}
                         className="overflow-hidden"
                     >
-                        <div className="px-4 pb-4 text-[13px] leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line">
-                            <FormattedText text={content} />
+                        <div className={cn(
+                            "text-[13px] leading-relaxed text-slate-700 dark:text-slate-300",
+                            !alwaysOpen ? "px-4 pb-4 pt-1" : "px-0"
+                        )}>
+                            {renderedContent}
                         </div>
                     </motion.div>
                 )}
