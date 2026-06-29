@@ -28,7 +28,8 @@ async function runTests() {
             console.log(`TEST ${i + 1}: ${question}`);
             console.log(`==================================================\n`);
 
-            const result = await ChatOrchestrator.execute(datasetId, question);
+            // ChatOrchestrator requires datasetId, userId, question
+            const result = await ChatOrchestrator.execute(datasetId, dataset.userId, question);
 
             console.log("\n[TEST RESULT] Route Type:", result.routeType);
             console.log("\n[TEST RESULT] SQL:\n", result.sql);

@@ -214,6 +214,74 @@ export async function generateNarrativeText(
     return generateText(prompt, systemPrompt, "HAIKU", 1200, 0.1);
 }
 
+/**
+ * Stream a narrative from Claude Haiku using Anthropic streaming APIs.
+ * - `onToken` is invoked with natural text chunks as they arrive.
+ * - The final returned `text` is accumulated and must match the non-stream response text.
+ * - Does not change business logic; purely delivery mechanism.
+ */
+export async function generateNarrativeTextStream(
+    prompt: string,
+    systemPrompt: string,
+    onToken: (chunk: string) => void,
+    abortSignal?: AbortSignal,
+    maxTokens: number = 1200,
+    temperature: number = 0.1
+): Promise<GenerateTextResult> {
+    validatePrompt(prompt);
+
+    const model = getModel("HAIKU");
+    const start = performance.now();
+
+    logger.info({ tier: "HAIKU", model, maxTokens, promptChars: prompt.length }, "Claude input (stream)");
+
+    const client = getClient();
+
+    let accumulated = "";
+
+    // NOTE: Anthropic SDK streaming yields events; we append delta text
+    // and forward chunks to caller.
+    const response = await client.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        system: systemPrompt,
+        messages: [{ role: "user", content: prompt }],
+        signal: abortSignal
+    });
+
+    for await (const event of response) {
+        // Expected event shapes include delta with text (SDK version dependent).
+        const anyEvent: any = event;
+
+        const deltaText: unknown = anyEvent?.delta?.text;
+        if (typeof deltaText === "string" && deltaText.length > 0) {
+            accumulated += deltaText;
+            onToken(deltaText);
+        }
+    }
+
+    const latencyMs = Math.round(performance.now() - start);
+
+    // We don't always get usage from streaming; preserve fields as best-effort.
+    const inputTokens = 0;
+    const outputTokens = accumulated.length > 0 ? accumulated.length : 0;
+    const estimatedCost = estimateCost(model, inputTokens, outputTokens);
+
+    logger.info({ model, latencyMs, responseChars: accumulated.length }, "Claude stream output (accumulated)");
+
+    await recordUsage(model, "NARRATIVE_GENERATION", inputTokens, outputTokens).catch(() => {});
+
+    return {
+        text: accumulated,
+        inputTokens,
+        outputTokens,
+        model,
+        latencyMs,
+        estimatedCost
+    };
+}
+
 // ─── Convenience: generateRecommendations() ───────────────────────────────────
 
 /**

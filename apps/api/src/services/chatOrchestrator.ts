@@ -32,7 +32,7 @@ import { runExecutivePriorityPipeline } from "./executivePriorityEngine.js";
 import { buildComparisonPack, formatComparisonNarrative } from "./comparisonPackBuilder.js";
 import { isNegativeIntent, isPositiveIntent } from "../ai/queryPolarity.js";
 import { routeClaude } from "./claudeRouter.js";
-import { generateNarrative } from "./narrativeGenerator.js";
+import { generateNarrative, generateNarrativeStream } from "./narrativeGenerator.js";
 import { generateRecommendations, Recommendation } from "./recommendationGenerator.js";
 import { detectCompetitorContext, CompetitorContext } from "./competitorDetector.js";
 import { startTimer, logCache, logRootCause, logClaude } from "./analyticsLogger.js";
@@ -42,7 +42,15 @@ import { PerformanceTimer } from "../lib/performanceTimer.js";
 import { logger } from "../lib/logger.js";
 
 export class ChatOrchestrator {
-    static async execute(datasetId: string, userId : string , question: string): Promise<any> {
+    static async execute(
+        datasetId: string,
+        userId: string,
+        question: string,
+        opts?: {
+            onClaudeToken?: (chunk: string) => void;
+            abortSignal?: AbortSignal;
+        }
+    ): Promise<any> {
         const timer = new PerformanceTimer("Chat Query");
         let currentStage = "Init";
         let parsedIntent = "Unknown";
@@ -415,25 +423,19 @@ export class ChatOrchestrator {
             
             if (routeType === "ROOT_CAUSE") {
                 const sqlStatements = sql.split("\n---\n");
-                const queryPromises = sqlStatements.map (async (statement) => {
 
-        queryResultsList = await Promise.all(
-    sqlStatements.map(async (statement) => {
-        try {
-            return await executeQuery(statement, tempPath);
-        } catch (err) {
-            console.warn("[ROOT_CAUSE_QUERY_FAILED]", err);
-            return [];
-        }
-    })
-)});
+                queryResultsList = await Promise.all(
+                    sqlStatements.map(async (statement) => {
+                        try {
+                            return await executeQuery(statement, tempPath);
+                        } catch (err) {
+                            console.warn("[ROOT_CAUSE_QUERY_FAILED]", err);
+                            return [];
+                        }
+                    })
+                );
 
-queryResults =
-    queryResultsList.find(res => res.length > 0) ?? [];
-
-
-queryResults =
-    queryResultsList.find(r => r.length > 0) || [];
+                // Deterministic: pick the first non-empty dimension result set for downstream insights
                 queryResults = queryResultsList.find(res => res.length > 0) || [];
             } else if (routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPARE_ENTITIES") {
                 // SQL executed during pack building for these routes
@@ -582,12 +584,13 @@ queryResults =
                         actionabilityScore: Math.abs(topGap.gap),
                         resourceAllocationScore: Math.abs(topGap.gap),
                         polarity: TargetPolarity.RISK,
-                        reason: `Largest competitive vulnerability (Gap: ${topGap.gap.toFixed(2)} pts)`
+                        reason: `Largest competitive vulnerability (Gap: ${topGap.gap.toFixed(2)} percentage points)`
                         ,selectionRationale: `Selected because closing ${topGap.dimension} creates the largest competitive defense opportunity.`
                     };
 
-                    drilldowns = await executeEntityDrilldown(compPrimaryTarget, parsedQuestion, semanticLayer, tempPath);
-                    recommendations = generateAttributedRecommendations(compPrimaryTarget, drilldowns);
+                    const metricName = semanticLayer.metrics[0]?.name || "Win Rate";
+                    drilldowns = await executeEntityDrilldown(compPrimaryTarget, parsedQuestion, semanticLayer, tempPath, metricName);
+                    recommendations = generateAttributedRecommendations(compPrimaryTarget, drilldowns, undefined, metricName);
                 }
 
                 executivePack = {
@@ -796,7 +799,13 @@ queryResults =
                         console.log(`[ROUTE_CLAUDE_INPUT] analyticsRoute=ROOT_CAUSE | operation=NARRATIVE_GENERATION | hasValidPack=true`);
                         console.log(`[CLAUDE_CALL] operation=NARRATIVE_GENERATION | tier=HAIKU`);
                         const claudeStart = performance.now();
-                        const narResult = await generateNarrative(claudeInputPack);
+                        const narResult = await (opts?.onClaudeToken
+                            ? generateNarrativeStream(claudeInputPack, {
+                                onToken: opts.onClaudeToken,
+                                abortSignal: opts.abortSignal
+                            })
+                            : generateNarrative(claudeInputPack)
+                        );
                         logger.info({
                         durationMs: Math.round(performance.now() - claudeStart)
                         }, "Claude Narrative");

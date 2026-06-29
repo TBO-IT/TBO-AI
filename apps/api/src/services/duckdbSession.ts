@@ -57,12 +57,18 @@ export class DuckDBSession {
 
     async close() {
 
-        await new Promise<void>(resolve =>
-            this.conn.close(resolve)
+        await new Promise<void>((resolve, reject) =>
+            this.conn.close((err: any) => {
+                if (err) reject(err);
+                else resolve();
+            })
         );
 
-        await new Promise<void>(resolve =>
-            this.db.close(resolve)
+        await new Promise<void>((resolve, reject) =>
+            this.db.close((err: any) => {
+                if (err) reject(err);
+                else resolve();
+            })
         );
 
     }

@@ -12,7 +12,8 @@ export interface RecommendationTarget {
 export function generateAttributedRecommendations(
     primaryTarget: ActionabilityTarget | undefined,
     drilldowns: DrilldownInsight[],
-    competitorContext?: { competitorName: string; sourceColumn: string }
+    competitorContext?: { competitorName: string; sourceColumn: string },
+    metricName: string = "performance metric"
 ): RecommendationTarget[] {
     const recommendations: RecommendationTarget[] = [];
 
@@ -29,8 +30,8 @@ export function generateAttributedRecommendations(
         expectedImpact: isRisk
             ? `Highest ROI protection opportunity. Reducing dependency here protects ${primaryTarget.volumeShare.toFixed(1)}% volume.`
             : isNegative
-                ? `Highest ROI recovery opportunity. Fixing this recovers up to ${Math.abs(primaryTarget.metricDelta).toFixed(2)} pts in a segment with ${primaryTarget.volumeShare.toFixed(1)}% volume.`
-                : `Highest ROI growth opportunity. Scaling this amplifies a ${primaryTarget.metricDelta.toFixed(2)} pt advantage across ${primaryTarget.volumeShare.toFixed(1)}% volume.`,
+                ? `Highest ROI recovery opportunity. Fixing this recovers up to ${Math.abs(primaryTarget.metricDelta).toFixed(2)} percentage points of ${metricName} in a segment with ${primaryTarget.volumeShare.toFixed(1)}% volume.`
+                : `Highest ROI growth opportunity. Scaling this amplifies a ${primaryTarget.metricDelta.toFixed(2)} percentage point advantage in ${metricName} across ${primaryTarget.volumeShare.toFixed(1)}% volume.`,
         impactScore: primaryTarget.impactScore
     });
 

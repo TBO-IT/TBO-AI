@@ -20,7 +20,7 @@
 // ───────────────────────────────────────────────────────────────────────────────
 
 import { ClaudeInputPack, assertClaudeInputSafe } from "./claudeInputContract.js";
-import { generateNarrativeText, AnthropicClientError } from "./anthropicClient.js";
+import { generateNarrativeText, generateNarrativeTextStream, AnthropicClientError } from "./anthropicClient.js";
 import { logger } from "../lib/logger.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -44,9 +44,12 @@ RULES:
 3. NEVER invent entity names that are not in the data.
 4. NEVER fabricate recommendations — use the exact attributed targets provided.
 5. If a contradiction is noted, explain it FIRST before any other analysis.
-6. Use concise, direct, action-oriented business language. No fluff.
-7. Structure: PRIMARY TARGET -> SUPPORTING TARGETS -> RECOMMENDED ACTIONS -> EXECUTIVE SUMMARY -> KEY TAKEAWAY -> TOP RISKS -> TOP OPPORTUNITIES -> SCENARIO OUTLOOK.
-8. Keep the total response under 800 words.`;
+6. Use concise, direct, action-oriented business language. No fluff. Write for business executives, not analysts. Never assume readers understand statistical terminology.
+7. NEVER use abbreviations "pt", "pts", or "pp". ALWAYS use "percentage points" explicitly or describe the metric change clearly (e.g., "Win Rate decreased by 9.73 percentage points").
+8. Every numeric change must clearly state: the metric that changed, the magnitude, the direction, and the business meaning.
+9. For flat metrics (0.00 change), DO NOT write "0.00 pts" or "0.00 percentage points". Instead write "Overall [Metric Name] appears unchanged" or "[Metric Name] remained stable."
+10. Structure: PRIMARY TARGET -> SUPPORTING TARGETS -> RECOMMENDED ACTIONS -> EXECUTIVE SUMMARY -> KEY TAKEAWAY -> TOP RISKS -> TOP OPPORTUNITIES -> SCENARIO OUTLOOK.
+11. Keep the total response under 800 words.`;
 
 // ─── Public: buildNarrativePrompt ─────────────────────────────────────────────
 
@@ -65,7 +68,9 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
         "Rule 2: List the RECOMMENDED ACTIONS immediately after the targets.",
         "Rule 3: Answer 'What happened?' in the EXECUTIVE SUMMARY.",
         "Rule 4: Focus on business impact and actionable next steps.",
-        "Rule 5: Never invent data or targets."
+        "Rule 5: Never invent data or targets.",
+        "Rule 6: Never use 'pt', 'pts', or 'pp'. Write 'percentage points' and clearly state which metric changed, its magnitude, direction, and business meaning.",
+        "Rule 7: Write for business executives. Avoid analyst shorthand."
     ].join("\n");
 
     const risksText = ep.topRisks.slice(0, 3)
@@ -112,7 +117,7 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
 METRIC: ${pack.metricName}
 VALIDATION: ${pack.validationStatus}
 
-OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' points (' + pack.metricChange.direction + ')' : 'N/A'}
+OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' percentage points (' + pack.metricChange.direction + ')' : 'N/A'}
 PERIOD: Prior → Current
 
 HEADLINE: ${ep.headline}
@@ -207,6 +212,61 @@ export async function generateNarrative(pack: ClaudeInputPack): Promise<Narrativ
         const parsed = parseClaudeNarrative(result.text, pack);
 
         logger.info({ chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) }, "Narrative generator Claude returned");
+
+        return parsed;
+    } catch (err: any) {
+        logger.error({ err, code: err.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
+        const fallback = buildDeterministicNarrative(pack);
+        fallback.claudeFailed = true;
+        return fallback;
+    }
+}
+
+/**
+ * Streaming variant of generateNarrative.
+ * - Streams natural text chunks to `onToken`
+ * - Still accumulates the full text and parses it using the existing parser
+ *   to preserve identical analytical output.
+ */
+export async function generateNarrativeStream(
+    pack: ClaudeInputPack,
+    opts: {
+        onToken?: (chunk: string) => void;
+        abortSignal?: AbortSignal;
+    }
+): Promise<NarrativeResult> {
+    const onToken = opts.onToken ?? (() => {});
+    logger.info({ question: pack.question.slice(0, 80), metricName: pack.metricName }, "Narrative generator entered (stream)");
+
+    // 1. Safety gate
+    try {
+        assertClaudeInputSafe(pack);
+        logger.info({ metricName: pack.metricName }, "Narrative generator safety gate passed");
+    } catch (err) {
+        logger.error({ err, metricName: pack.metricName }, "Narrative generator safety gate blocked");
+        return buildDeterministicNarrative(pack);
+    }
+
+    // 2. Build prompt
+    const prompt = buildNarrativePrompt(pack);
+    logger.info({ chars: prompt.length }, "Narrative generator prompt built");
+
+    // 3. Call Claude streaming
+    logger.info({}, "Narrative generator calling Claude Haiku (stream)");
+    try {
+        const result = await generateNarrativeTextStream(
+            prompt,
+            SYSTEM_PROMPT,
+            (chunk) => onToken(chunk),
+            opts.abortSignal
+        );
+
+        const parsed = parseClaudeNarrative(result.text, pack);
+
+        logger.info(
+            { chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) },
+            "Narrative generator Claude returned (stream accumulated)"
+        );
 
         return parsed;
     } catch (err: any) {

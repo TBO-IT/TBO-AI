@@ -30,7 +30,7 @@ router.get(
             response.content.find(
                 (block: any) =>
                     block.type === "text"
-            );
+            ) as any;
 
         return res.json({
             answer:

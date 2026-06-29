@@ -92,9 +92,11 @@ export function buildRecommendationPrompt(pack: ClaudeInputPack): string {
     const supportingTargetsText = (ep.drilldowns ?? []).map(d => `  • ${d.name} (${d.entityType}): ${d.reason}`).join("\n");
     
     // Supporting Evidence (Legacy/Raw Context)
-    const risksText = (ep.topRisks ?? []).map(r => `  • ${r.title}: ${r.description}`).join("\n");
-    const oppsText = (ep.topOpportunities ?? []).map(o => `  • ${o.title}: ${o.description}`).join("\n");
-    const driversText = (ep.topDrivers ?? []).map(d => `  • ${d.dimension}: ${d.contributor} (${d.metricDelta} pts)`).join("\n");
+    // Types: ExecutiveRisk/Opportunity use `explanation` (not `description`)
+    // PrioritizedInsight uses `name` (not `dimension`) and includes metricDelta directly.
+    const risksText = (ep.topRisks ?? []).map(r => `  • ${r.title}: ${r.explanation}`).join("\n");
+    const oppsText = (ep.topOpportunities ?? []).map(o => `  • ${o.title}: ${o.explanation}`).join("\n");
+    const driversText = (ep.topDrivers ?? []).map(d => `  • ${d.name}: ${d.metricDelta} percentage points`).join("\n");
 
     // ── Competitor Context Section ─────────────────────────────────────────
     const competitorSection = pack.competitorName
@@ -109,7 +111,7 @@ export function buildRecommendationPrompt(pack: ClaudeInputPack): string {
 
     return `USER QUESTION: "${pack.question}"
 METRIC: ${pack.metricName}
-OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' points (' + pack.metricChange.direction + ')' : 'N/A'}
+OVERALL CHANGE: ${pack.metricChange ? pack.metricChange.absoluteChange.toFixed(2) + ' percentage points (' + pack.metricChange.direction + ')' : 'N/A'}
 ${competitorSection}
 PRIORITY 1: PRIMARY TARGET
   • ${primaryTargetText}

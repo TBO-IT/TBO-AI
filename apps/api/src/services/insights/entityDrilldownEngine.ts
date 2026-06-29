@@ -1,9 +1,10 @@
-import { QuestionAnalysis } from "../../../ai/questionTypes.js";
-import { EnrichedSemanticLayer } from "../../../ai/semanticLayer.js";
+import { QuestionAnalysis } from "../../ai/questionTypes.js";
+import { EnrichedSemanticLayer } from "../../ai/semanticLayer.js";
 import { generateContributionSql } from "../contributionEngine.js";
 import { executeQuery } from "../queryExecutionService.js";
 import { ActionabilityTarget } from "./actionabilityEngine.js";
-import { ContributorEntry } from "../../RootCausePackBuilder.js";
+// ContributorEntry is unused in this file; keeping import would require correct path resolution,
+// so remove it to avoid TS module/type issues.
 
 export interface DrilldownInsight {
     entityType: string;
@@ -26,6 +27,7 @@ export async function executeEntityDrilldown(
     baseAnalysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer,
     csvPath: string,
+    metricName: string = "performance metric",
     competitorContext?: { competitorName: string; sourceColumn: string }
 ): Promise<DrilldownInsight[]> {
     if (!primaryTarget || primaryTarget.entityType === "UNKNOWN") {
@@ -50,7 +52,7 @@ export async function executeEntityDrilldown(
     
     // We want to drill down into the other dimensions
     const drilldownDims = ["hotel", "chain", "supplier", "destination"]
-        .filter(dim => dim !== targetDimension && semanticLayer?.dimensions?.some(d => d.toLowerCase() === dim.toLowerCase()));
+        .filter(dim => dim !== targetDimension && semanticLayer?.dimensions?.some((d: string) => d.toLowerCase() === dim.toLowerCase()));
 
     for (const dim of drilldownDims) {
         const result = generateContributionSql(drilldownAnalysis, semanticLayer, dim);
@@ -89,9 +91,11 @@ export async function executeEntityDrilldown(
                     entityType: dim.toUpperCase(),
                     name,
                     impactScore: maxImpact,
-                    reason: isNegativeDrilldown 
-                        ? `Largest negative driver within ${primaryTarget.name} (${metricDelta.toFixed(2)} pts)`
-                        : `Largest positive driver within ${primaryTarget.name} (${metricDelta.toFixed(2)} pts)`
+                    reason: metricDelta === 0 
+                        ? `${metricName} remained stable for ${name} within ${primaryTarget.name}`
+                        : isNegativeDrilldown 
+                            ? `${name} reduced ${metricName} by ${Math.abs(metricDelta).toFixed(2)} percentage points, making it the largest negative driver within ${primaryTarget.name}`
+                            : `${name} increased ${metricName} by ${metricDelta.toFixed(2)} percentage points, making it the largest positive driver within ${primaryTarget.name}`
                 });
             }
 

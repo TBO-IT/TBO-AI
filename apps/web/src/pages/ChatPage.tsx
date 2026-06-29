@@ -3,21 +3,26 @@ import { Send, Sparkles, MessageSquare, Plus, ChevronDown, Database, Cpu, Loader
 import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
 import { api } from "../api/client";
+import { useAuth } from "@clerk/clerk-react";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  stage?: string;
 }
 
 export default function ChatPage() {
+  const { getToken } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loadingDatasets, setLoadingDatasets] = useState(true);
+  const [isThinking, setIsThinking] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("Analyzing your data…");
 
   useEffect(() => {
     async function load() {
@@ -37,11 +42,7 @@ export default function ChatPage() {
   }, []);
 
   const handleSend = async () => {
-
-    if (!input.trim()) return;
-
-    if (!selectedDataset) return;
-
+    if (!input.trim() || !selectedDataset || isThinking) return;
     const currentInput = input;
 
     const userMessage: Message = {
@@ -52,66 +53,114 @@ export default function ChatPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
-
     setInput("");
+    setIsThinking(true);
+    setLoadingStage("Analyzing your data…");
+
+    const assistantId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      stage: "Analyzing your data…",
+      timestamp: new Date(),
+    }]);
 
     try {
+      const token = await getToken();
+      const response = await fetch("http://localhost:3000/chat", {
+        method: "POST",
+        headers: { 
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          datasetId: selectedDataset.id,
+          message: currentInput,
+        })
+      });
 
-      const response =
-        await api.post(
-          "/chat",
-          {
-            datasetId:
-              selectedDataset.id,
-            message:
-              currentInput,
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch(e) {}
+        throw { response: { status: response.status, data: errorData } };
+      }
+      if (!response.body) throw new Error("No response body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let done = false;
+      let buffer = "";
+      let rawContent = "";
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+        }
+
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const block of lines) {
+          const eventMatch = block.match(/^event:\s*(.*)$/m);
+          const dataMatch = block.match(/^data:\s*(.*)$/m);
+          
+          if (eventMatch && dataMatch) {
+            const eventType = eventMatch[1].trim();
+            const rawData = dataMatch[1].trim();
+            let data;
+            try {
+              data = JSON.parse(rawData);
+            } catch (e) {
+              continue;
+            }
+
+            if (eventType === "status") {
+              if (data.stage) {
+                setLoadingStage(data.stage);
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantId ? { ...msg, stage: data.stage } : msg
+                ));
+              }
+            } else if (eventType === "token") {
+              rawContent += data.text;
+              setMessages(prev => prev.map(msg => 
+                msg.id === assistantId ? { ...msg, content: rawContent, stage: undefined } : msg
+              ));
+            } else if (eventType === "complete") {
+              let finalAns = rawContent;
+              if (data.response?.answer) finalAns = data.response.answer;
+              else if (data.response?.narrative) finalAns = data.response.narrative;
+              else if (data.answer) finalAns = data.answer;
+              else if (data.narrative) finalAns = data.narrative;
+              else if (data.text) finalAns = data.text;
+              else finalAns = data.response ? JSON.stringify(data.response) : finalAns;
+
+              rawContent = finalAns;
+              setMessages(prev => prev.map(msg => 
+                msg.id === assistantId ? { ...msg, content: rawContent, stage: undefined } : msg
+              ));
+              break;
+            } else if (eventType === "error") {
+              throw new Error(data.message || "Streaming error");
+            }
           }
-        );
-
-      const assistantMessage: Message = {
-        id:
-          (Date.now() + 1).toString(),
-
-        role:
-          "assistant",
-
-        content:
-          response.data.answer,
-
-        timestamp:
-          new Date(),
-      };
-
-      setMessages(prev => [
-        ...prev,
-        assistantMessage,
-      ]);
-
-    } catch (error) {
-
+        }
+      }
+    } catch (error: any) {
       console.error(error);
-
-      const assistantMessage: Message = {
-        id:
-          (Date.now() + 1).toString(),
-
-        role:
-          "assistant",
-
-        content:
-          "Failed to contact backend.",
-
-        timestamp:
-          new Date(),
-      };
-
-      setMessages(prev => [
-        ...prev,
-        assistantMessage,
-      ]);
-
+      const errorContent = error.message || "Failed to contact backend.";
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantId ? { ...msg, content: errorContent, stage: undefined } : msg
+      ));
+    } finally {
+      setIsThinking(false);
+      setLoadingStage("Analyzing your data…");
     }
-
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -235,7 +284,14 @@ export default function ChatPage() {
                       : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none"
                       }`}
                   >
-                    <p className="whitespace-pre-line">{msg.content}</p>
+                    {msg.stage ? (
+                      <div className="flex items-center space-x-2">
+                        <Loader2 className="h-4 w-4 text-brand-blue animate-spin" />
+                        <span className="text-slate-500">{msg.stage}</span>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-line">{msg.content}</p>
+                    )}
                     <span className="text-[10px] block mt-1.5 text-right text-slate-400 dark:text-slate-500">
                       {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>

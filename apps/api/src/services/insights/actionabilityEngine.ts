@@ -1,4 +1,4 @@
-import { ContributorEntry } from "../../RootCausePackBuilder.js";
+import { ContributorEntry } from "../RootCausePackBuilder.js";
 
 export enum DecisionIntent {
     EXPLAIN = "EXPLAIN",
@@ -87,7 +87,7 @@ function buildSelectionRationale(
     intent: DecisionIntent
 ): string {
     const volume = `${entry.volumeSharePct.toFixed(1)}% volume`;
-    const delta = `${Math.abs(entry.metricDelta).toFixed(2)} pts`;
+    const delta = `${Math.abs(entry.metricDelta).toFixed(2)} percentage points`;
 
     if (polarity === TargetPolarity.RISK) {
         return `Selected because ${entry.name} carries the highest concentration risk for the current allocation decision. Reducing dependency here protects ${volume} and improves resilience.`;
@@ -103,7 +103,8 @@ function buildSelectionRationale(
 export function calculateActionabilityTargets(
     allContributors: { entry: ContributorEntry; type: ActionabilityTarget["entityType"] }[],
     intent: DecisionIntent = DecisionIntent.EXPLAIN,
-    competitorContext?: { competitorName: string; sourceColumn: string }
+    competitorContext?: { competitorName: string; sourceColumn: string },
+    metricName: string = "performance metric"
 ): ActionabilityTarget[] {
     
     if (!allContributors?.length) {
@@ -136,9 +137,11 @@ export function calculateActionabilityTargets(
         const contextStr = competitorContext ? ` vs ${competitorContext.competitorName}` : "";
 
         if (impactScore < 0) {
-            reason = `Largest negative contributor${contextStr} (${entry.metricDelta.toFixed(2)} pts at ${entry.volumeSharePct.toFixed(1)}% volume).`;
+            reason = `${entry.name} reduced ${metricName} by ${Math.abs(entry.metricDelta).toFixed(2)} percentage points within the segment${contextStr}, making it the largest negative contributor at ${entry.volumeSharePct.toFixed(1)}% volume.`;
+        } else if (impactScore > 0) {
+            reason = `${entry.name} increased ${metricName} by ${entry.metricDelta.toFixed(2)} percentage points within the segment${contextStr}, making it a high-growth segment to scale at ${entry.volumeSharePct.toFixed(1)}% volume.`;
         } else {
-            reason = `High-growth segment to scale${contextStr} (${entry.metricDelta.toFixed(2)} pts at ${entry.volumeSharePct.toFixed(1)}% volume).`;
+            reason = `${metricName} remained stable for ${entry.name}${contextStr} at ${entry.volumeSharePct.toFixed(1)}% volume.`;
         }
 
         const polarity = derivePolarity(impactScore, intent);

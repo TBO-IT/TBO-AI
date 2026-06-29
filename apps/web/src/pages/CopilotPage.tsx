@@ -6,6 +6,7 @@ import type { Dataset } from "../types/dataset";
 import { api } from "../api/client";
 import { saveReport } from "../api/reportApi";
 import { cn } from "../lib/utils";
+import { useAuth } from "@clerk/clerk-react";
 
 // ── Types ──
 
@@ -16,6 +17,7 @@ interface Message {
     timestamp: Date;
     /** Structured sections from the backend ExecutivePack */
     sections?: Record<string, string>;
+    stage?: string;
 }
 
 // ── Formatted Text Renderer ──
@@ -155,6 +157,7 @@ function SectionCard({ title, content, defaultOpen = false }: { title: string; c
 // ── Main Page ──
 
 export default function CopilotPage() {
+    const { getToken } = useAuth();
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -162,6 +165,7 @@ export default function CopilotPage() {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [loadingDatasets, setLoadingDatasets] = useState(true);
     const [isThinking, setIsThinking] = useState(false);
+    const [loadingStage, setLoadingStage] = useState("Analyzing your data…");
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [savingReportId, setSavingReportId] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -200,24 +204,104 @@ export default function CopilotPage() {
         setMessages(prev => [...prev, userMessage]);
         setInput("");
         setIsThinking(true);
+        setLoadingStage("Analyzing your data…");
+
+        const assistantId = (Date.now() + 1).toString();
+        setMessages(prev => [...prev, {
+            id: assistantId,
+            role: "assistant",
+            content: "",
+            stage: "Analyzing your data…",
+            timestamp: new Date(),
+        }]);
 
         try {
-            const response = await api.post("/chat", {
-                datasetId: selectedDataset.id,
-                message: currentInput,
+            const token = await getToken();
+            const response = await fetch("http://localhost:3000/chat", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                    datasetId: selectedDataset.id,
+                    message: currentInput,
+                })
             });
 
-            const raw = response.data.answer || response.data.narrative || JSON.stringify(response.data);
-            const sections = parseExecutiveResponse(raw);
+            if (!response.ok) {
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch(e) {}
+                throw { response: { status: response.status, data: errorData } };
+            }
+            if (!response.body) throw new Error("No response body");
 
-            const assistantMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: "assistant",
-                content: raw,
-                sections: sections || undefined,
-                timestamp: new Date(),
-            };
-            setMessages(prev => [...prev, assistantMessage]);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let done = false;
+            let buffer = "";
+            let rawContent = "";
+
+            while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                    buffer += decoder.decode(value, { stream: true });
+                }
+
+                const lines = buffer.split("\n\n");
+                buffer = lines.pop() || "";
+
+                for (const block of lines) {
+                    const eventMatch = block.match(/^event:\s*(.*)$/m);
+                    const dataMatch = block.match(/^data:\s*(.*)$/m);
+                    
+                    if (eventMatch && dataMatch) {
+                        const eventType = eventMatch[1].trim();
+                        const rawData = dataMatch[1].trim();
+                        let data;
+                        try {
+                            data = JSON.parse(rawData);
+                        } catch (e) {
+                            continue;
+                        }
+
+                        if (eventType === "status") {
+                            if (data.stage) {
+                                setLoadingStage(data.stage);
+                                setMessages(prev => prev.map(msg => 
+                                    msg.id === assistantId ? { ...msg, stage: data.stage } : msg
+                                ));
+                            }
+                        } else if (eventType === "token") {
+                            rawContent += data.text;
+                            const sections = parseExecutiveResponse(rawContent);
+                            setMessages(prev => prev.map(msg => 
+                                msg.id === assistantId ? { ...msg, content: rawContent, sections: sections || undefined, stage: undefined } : msg
+                            ));
+                        } else if (eventType === "complete") {
+                            let finalAns = rawContent;
+                            if (data.response?.answer) finalAns = data.response.answer;
+                            else if (data.response?.narrative) finalAns = data.response.narrative;
+                            else if (data.answer) finalAns = data.answer;
+                            else if (data.narrative) finalAns = data.narrative;
+                            else if (data.text) finalAns = data.text;
+                            else finalAns = data.response ? JSON.stringify(data.response) : finalAns;
+
+                            rawContent = finalAns;
+                            const sections = parseExecutiveResponse(rawContent);
+                            setMessages(prev => prev.map(msg => 
+                                msg.id === assistantId ? { ...msg, content: rawContent, sections: sections || undefined, stage: undefined } : msg
+                            ));
+                            break;
+                        } else if (eventType === "error") {
+                            throw new Error(data.message || "Streaming error");
+                        }
+                    }
+                }
+            }
         } catch (err: any) {
             console.error("[PIPELINE_FATAL]", err);
             
@@ -238,17 +322,12 @@ export default function CopilotPage() {
                 errorContent = `Internal Processing Error:\n${err.message}`;
             }
 
-            setMessages(prev => [
-                ...prev,
-                {
-                    id: (Date.now() + 1).toString(),
-                    role: "assistant",
-                    content: errorContent,
-                    timestamp: new Date(),
-                },
-            ]);
+            setMessages(prev => prev.map(msg => 
+                msg.id === assistantId ? { ...msg, content: errorContent, sections: undefined, stage: undefined } : msg
+            ));
         } finally {
             setIsThinking(false);
+            setLoadingStage("Analyzing your data…");
         }
     };
 
@@ -400,6 +479,11 @@ export default function CopilotPage() {
                             )}>
                                 {msg.role === "user" ? (
                                     <p>{msg.content}</p>
+                                ) : msg.stage ? (
+                                    <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
+                                        <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />
+                                        <span className="text-[12px] text-slate-400">{msg.stage}</span>
+                                    </div>
                                 ) : msg.sections ? (
                                     /* Structured executive response */
                                     <div className="space-y-2">
@@ -448,23 +532,6 @@ export default function CopilotPage() {
                             </div>
                         </motion.div>
                     ))}
-
-                    {/* Thinking indicator */}
-                    {isThinking && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex gap-3"
-                        >
-                            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-brand-blue flex items-center justify-center flex-shrink-0">
-                                <Cpu className="h-3.5 w-3.5 text-white" />
-                            </div>
-                            <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
-                                <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />
-                                <span className="text-[12px] text-slate-400">Analyzing your data…</span>
-                            </div>
-                        </motion.div>
-                    )}
                 </div>
             </div>
 
