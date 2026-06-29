@@ -12,7 +12,7 @@ import crypto from "crypto";
 //   { narrative, responseSource, createdAt }
 // ───────────────────────────────────────────────────────────────────────────────
 /** Cache version — bump to invalidate all legacy entries */
-const NARRATIVE_CACHE_VERSION = 29;
+const NARRATIVE_CACHE_VERSION = 32;
 /** TTL of 24 hours */
 const CACHE_TTL = 60 * 60 * 24;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
