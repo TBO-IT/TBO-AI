@@ -3,10 +3,10 @@ import { Send, Sparkles, Cpu, Loader2, Database, ChevronDown, BookmarkPlus, Copy
 import { motion, AnimatePresence } from "framer-motion";
 import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
-import { api } from "../api/client";
 import { saveReport } from "../api/reportApi";
 import { cn } from "../lib/utils";
 import { useAuth } from "@clerk/clerk-react";
+import { FormattedText, SimpleMarkdown } from "./ChatPage";
 
 // ── Types ──
 
@@ -21,21 +21,7 @@ interface Message {
 }
 
 // ── Formatted Text Renderer ──
-// Simple utility to parse **text** into bold tags
-function FormattedText({ text }: { text: string }) {
-    if (!text) return null;
-    const parts = text.split(/(\*\*.*?\*\*)/g);
-    return (
-        <>
-            {parts.map((part, i) => {
-                if (part.startsWith("**") && part.endsWith("**")) {
-                    return <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>;
-                }
-                return <span key={i}>{part}</span>;
-            })}
-        </>
-    );
-}
+// Imported from ChatPage
 
 // ── Section Renderer ──
 
@@ -165,10 +151,11 @@ export default function CopilotPage() {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [loadingDatasets, setLoadingDatasets] = useState(true);
     const [isThinking, setIsThinking] = useState(false);
-    const [loadingStage, setLoadingStage] = useState("Analyzing your data…");
+    const [, setLoadingStage] = useState("Analyzing your data…");
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [savingReportId, setSavingReportId] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         async function load() {
@@ -194,6 +181,11 @@ export default function CopilotPage() {
     const handleSend = async () => {
         if (!input.trim() || !selectedDataset || isThinking) return;
         const currentInput = input;
+
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
 
         const userMessage: Message = {
             id: Date.now().toString(),
@@ -223,6 +215,7 @@ export default function CopilotPage() {
                     "Content-Type": "application/json",
                     ...(token ? { Authorization: `Bearer ${token}` } : {})
                 },
+                signal: abortControllerRef.current.signal,
                 body: JSON.stringify({
                     datasetId: selectedDataset.id,
                     message: currentInput,
@@ -303,6 +296,10 @@ export default function CopilotPage() {
                 }
             }
         } catch (err: any) {
+            if (err.name === "AbortError") {
+                console.log("Fetch aborted");
+                return;
+            }
             console.error("[PIPELINE_FATAL]", err);
             
             let errorContent = "Internal Processing Error: An unknown error occurred.";
@@ -525,8 +522,8 @@ export default function CopilotPage() {
                                     </div>
                                 ) : (
                                     /* Plain text fallback */
-                                    <div className="rounded-2xl rounded-tl-md px-4 py-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 text-[13px] text-slate-700 dark:text-slate-300 whitespace-pre-line">
-                                        <FormattedText text={msg.content} />
+                                    <div className="rounded-2xl rounded-tl-md px-4 py-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 text-[13px] text-slate-700 dark:text-slate-300">
+                                        <SimpleMarkdown text={msg.content} />
                                     </div>
                                 )}
                             </div>

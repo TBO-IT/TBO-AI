@@ -218,6 +218,57 @@ export async function generateRecommendations(pack: ClaudeInputPack): Promise<Re
     }
 }
 
+export async function generateRecommendationsStream(
+    pack: ClaudeInputPack,
+    opts: {
+        onToken?: (chunk: string) => void;
+        abortSignal?: AbortSignal;
+    }
+): Promise<RecommendationResult> {
+    const onToken = opts.onToken ?? (() => {});
+    try {
+        assertClaudeInputSafe(pack);
+    } catch (err) {
+        logger.error({ err }, "Recommendation engine safety gate blocked");
+        return buildDeterministicRecommendations(pack);
+    }
+
+    const prompt = buildRecommendationPrompt(pack);
+    let systemPrompt = SYSTEM_PROMPT;
+    if (pack.competitorName) {
+        systemPrompt += `\n\nCOMPETITOR MODE — Active\nCompetitor: ${pack.competitorName}\n\nResponse MUST begin with:\nCOMPETITIVE GAP SUMMARY\nCompetitor: ${pack.competitorName}\nPrimary Vulnerability: [entity from the data]\n\nThen follow the standard TARGET-FIRST RESPONSE FORMAT.\nEvery recommendation MUST specifically address how to win against ${pack.competitorName}.\nDo NOT produce generic recommendations that would apply to any competitor.`;
+    }
+
+    try {
+        const { generateRecommendationTextStream } = await import("./anthropicClient.js");
+        const result = await generateRecommendationTextStream(
+            prompt,
+            systemPrompt,
+            onToken,
+            opts.abortSignal
+        );
+
+        logger.info({ chars: result.text.length, preview: result.text.slice(0, 200) }, "Recommendation engine raw Claude text (stream)");
+
+        const recommendations = parseClaudeRecommendations(result.text);
+
+        if (recommendations.length === 0) {
+            logger.warn({}, "Recommendation engine Claude returned 0 recommendations; using deterministic");
+            return buildDeterministicRecommendations(pack);
+        }
+
+        return {
+            recommendations,
+            claudeUsed: true,
+            claudeFailed: false,
+            rawClaudeText: result.text
+        };
+    } catch (err: any) {
+        logger.error({ err, code: err.code ?? "UNKNOWN" }, "Recommendation engine Claude failed; using deterministic");
+        return buildDeterministicRecommendations(pack);
+    }
+}
+
 // ─── Claude Response Parser ───────────────────────────────────────────────────
 
 function parseClaudeRecommendations(text: string): Recommendation[] {

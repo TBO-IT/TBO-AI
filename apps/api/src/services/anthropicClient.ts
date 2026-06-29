@@ -294,6 +294,65 @@ export async function generateRecommendationText(
     return generateText(prompt, systemPrompt, "SONNET", 1500, 0.2);
 }
 
+/**
+ * Stream recommendations from Claude Sonnet using Anthropic streaming APIs.
+ */
+export async function generateRecommendationTextStream(
+    prompt: string,
+    systemPrompt: string,
+    onToken: (chunk: string) => void,
+    abortSignal?: AbortSignal,
+    maxTokens: number = 1500,
+    temperature: number = 0.2
+): Promise<GenerateTextResult> {
+    validatePrompt(prompt);
+
+    const model = getModel("SONNET");
+    const start = performance.now();
+
+    logger.info({ tier: "SONNET", model, maxTokens, promptChars: prompt.length }, "Claude input (stream)");
+
+    const client = getClient();
+    let accumulated = "";
+
+    const response = await client.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        system: systemPrompt,
+        messages: [{ role: "user", content: prompt }],
+        signal: abortSignal
+    });
+
+    for await (const event of response) {
+        const anyEvent: any = event;
+        const deltaText: unknown = anyEvent?.delta?.text;
+        if (typeof deltaText === "string" && deltaText.length > 0) {
+            accumulated += deltaText;
+            onToken(deltaText);
+        }
+    }
+
+    const latencyMs = Math.round(performance.now() - start);
+
+    const inputTokens = 0;
+    const outputTokens = accumulated.length > 0 ? accumulated.length : 0;
+    const estimatedCost = estimateCost(model, inputTokens, outputTokens);
+
+    logger.info({ model, latencyMs, responseChars: accumulated.length }, "Claude stream output (accumulated)");
+
+    await recordUsage(model, "RECOMMENDATIONS", inputTokens, outputTokens).catch(() => {});
+
+    return {
+        text: accumulated,
+        inputTokens,
+        outputTokens,
+        model,
+        latencyMs,
+        estimatedCost
+    };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function validatePrompt(prompt: string): void {

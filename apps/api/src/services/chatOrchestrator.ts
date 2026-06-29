@@ -33,7 +33,7 @@ import { buildComparisonPack, formatComparisonNarrative } from "./comparisonPack
 import { isNegativeIntent, isPositiveIntent } from "../ai/queryPolarity.js";
 import { routeClaude } from "./claudeRouter.js";
 import { generateNarrative, generateNarrativeStream } from "./narrativeGenerator.js";
-import { generateRecommendations, Recommendation } from "./recommendationGenerator.js";
+import { generateRecommendations, generateRecommendationsStream, Recommendation } from "./recommendationGenerator.js";
 import { detectCompetitorContext, CompetitorContext } from "./competitorDetector.js";
 import { startTimer, logCache, logRootCause, logClaude } from "./analyticsLogger.js";
 import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContradiction } from "./analyticsMetrics.js";
@@ -48,11 +48,17 @@ export class ChatOrchestrator {
         question: string,
         opts?: {
             onClaudeToken?: (chunk: string) => void;
+            onStageChange?: (stage: string) => void;
             abortSignal?: AbortSignal;
         }
     ): Promise<any> {
         const timer = new PerformanceTimer("Chat Query");
         let currentStage = "Init";
+        const setStage = (stage: string) => {
+            currentStage = stage;
+            opts?.onStageChange?.(stage);
+        };
+        setStage("Init");
         let parsedIntent = "Unknown";
         let routeType = "";
         let tempPath = "";
@@ -62,7 +68,7 @@ export class ChatOrchestrator {
         console.log(`\n[QUESTION] "${question}"`);
 
         try {
-            currentStage = "Early Detection";
+            setStage("Understanding question...");
             // ── 0. Early Recommendation Detection ─────────────────────────────
             // Runs BEFORE route selection. Recommendation queries require a
             // RootCausePack, so they must be forced to ROOT_CAUSE regardless of
@@ -71,7 +77,7 @@ export class ChatOrchestrator {
             const isNarrative = detectNarrativeRequest(question);
             console.log(`[PRE_ROUTER] recommendation=${isRecommendation} | narrative=${isNarrative}`);
 
-            currentStage = "Dataset Fetch";
+            setStage("Loading dataset...");
             // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
             const dataset = await getDataset(datasetId , userId);
             if (!dataset || !dataset.storagePath) {
@@ -87,7 +93,7 @@ export class ChatOrchestrator {
             console.log("ENTITY FILTERS:", entityFilters);
             console.log("DATASET METADATA:", JSON.stringify(metadata, null, 2));
 
-            currentStage = "Schema Extraction";
+            setStage("Analyzing dataset schema...");
             const schema = await getDatasetSchema(tempPath);
             console.log(
                 `[SCHEMA_COLUMNS] (${schema.length} cols):`,
@@ -102,7 +108,7 @@ export class ChatOrchestrator {
                 `mappings=${JSON.stringify(semanticLayer.columnMappings)}`
             );
 
-            currentStage = "Question Analysis";
+            setStage("Analyzing query intent...");
             // ── 2. Question Analysis ───────────────────────────────────────────
             let parsedQuestion = analyzeQuestion(question);
             parsedQuestion = inferDefaultMetric(question, parsedQuestion, semanticLayer);
@@ -195,7 +201,7 @@ export class ChatOrchestrator {
                 console.log(`[RCA_FILTERS]\nthirdparty=${competitorContext.competitorName}`);
             }
 
-            currentStage = "Route Decision";
+            setStage("Planning analytical route...");
             // ── 3. Route Decision ──────────────────────────────────────────────
             let sql = "";
             let explanation = "";
@@ -416,7 +422,7 @@ export class ChatOrchestrator {
                 console.log(`[SQL_FILTERS]\nthirdparty=${competitorContext.competitorName}`);
             }
 
-            currentStage = "SQL Execution";
+            setStage("Running duckdb analytics...");
             // ── 4. SQL Validation & Execution ──────────────────────────────────
             let queryResultsList: Record<string, unknown>[][] = [];
             let queryResults: Record<string, unknown>[] = [];
@@ -460,7 +466,7 @@ export class ChatOrchestrator {
                 throw new Error("COMPETITOR_FILTER_EMPTY: Competitor query returned 0 rows. No silent fallback allowed.");
             }
 
-            currentStage = "Pack Building";
+            setStage("Building root cause analysis...");
             // ── 5. Pack Building ───────────────────────────────────────────────
             let rootCausePack = null;
             let executivePack = null;
@@ -674,7 +680,7 @@ export class ChatOrchestrator {
                 }
             }
             timer.checkpoint("Executive Pack");
-            currentStage = "Claude Input Pack";
+            setStage("Building executive pack...");
             // ── 6. Classify response source ───────────────────────────────
             let responseSource: ResponseSource = "ANALYTICS";
             let claudeInputPack = null;
@@ -706,7 +712,7 @@ export class ChatOrchestrator {
                 recordContradiction();
             }
 
-            currentStage = "Claude Response";
+            setStage("Generating narrative...");
             // ── 7. Narrative / Recommendation Generation ──────────────────────
             let narrative = "";
             const cachedNarrative = await getCachedNarrative(
@@ -738,7 +744,13 @@ export class ChatOrchestrator {
                         console.log(`[ROUTE_CLAUDE_INPUT] analyticsRoute=ROOT_CAUSE | operation=RECOMMENDATIONS | hasValidPack=true`);
                         console.log(`[CLAUDE_CALL] operation=RECOMMENDATIONS | tier=SONNET`);
                         const claudeStart = performance.now();
-                        const recResult = await generateRecommendations(claudeInputPack);
+                        const recResult = await (opts?.onClaudeToken
+                            ? generateRecommendationsStream(claudeInputPack, {
+                                onToken: opts.onClaudeToken,
+                                abortSignal: opts.abortSignal
+                            })
+                            : generateRecommendations(claudeInputPack)
+                        );
                         logger.info({
     durationMs: Math.round(performance.now() - claudeStart)
 }, "Claude Recommendation");

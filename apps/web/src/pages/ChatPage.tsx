@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Send, Sparkles, MessageSquare, Plus, ChevronDown, Database, Cpu, Loader2 } from "lucide-react";
 import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
-import { api } from "../api/client";
 import { useAuth } from "@clerk/clerk-react";
 
 interface Message {
@@ -13,6 +12,103 @@ interface Message {
   stage?: string;
 }
 
+export function FormattedText({ text }: { text: string }) {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return (
+        <>
+            {parts.map((part, i) => {
+                if (part.startsWith("**") && part.endsWith("**")) {
+                    return <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>;
+                }
+                return <span key={i}>{part}</span>;
+            })}
+        </>
+    );
+}
+
+export const SimpleMarkdown = ({ text }: { text: string }) => {
+    if (!text) return null;
+    
+    // Split by blocks: double newline
+    const blocks = text.split(/\n\n+/);
+    
+    return (
+        <div className="space-y-4">
+            {blocks.map((block, i) => {
+                // Check if block is a table
+                if (block.trim().startsWith("|") && block.includes("-|-")) {
+                    const lines = block.trim().split("\n");
+                    const headers = lines[0].split("|").filter(Boolean).map(s => s.trim());
+                    // Find the separator line index
+                    const sepIdx = lines.findIndex(l => l.includes("-|-"));
+                    const rows = lines.slice(sepIdx + 1).map(line => line.split("|").filter(Boolean).map(s => s.trim()));
+                    
+                    return (
+                        <div key={i} className="overflow-x-auto my-2">
+                            <table className="w-full text-left border-collapse text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                                        {headers.map((h, j) => (
+                                            <th key={j} className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-300">
+                                                <FormattedText text={h} />
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.map((row, j) => (
+                                        <tr key={j} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                                            {row.map((cell, k) => (
+                                                <td key={k} className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                                                    <FormattedText text={cell} />
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    );
+                }
+                
+                // Check if block is a list (all lines start with - or *)
+                const listLines = block.trim().split("\n");
+                if (listLines.every(line => /^\s*[-*]\s+/.test(line))) {
+                    return (
+                        <ul key={i} className="list-disc pl-5 space-y-1">
+                            {listLines.map((line, j) => (
+                                <li key={j} className="text-slate-700 dark:text-slate-300">
+                                    <FormattedText text={line.replace(/^\s*[-*]\s+/, "")} />
+                                </li>
+                            ))}
+                        </ul>
+                    );
+                }
+                
+                // Check if block is a header
+                if (block.trim().startsWith("#")) {
+                    const match = block.trim().match(/^(#+)\s+(.+)$/);
+                    if (match) {
+                        const level = match[1].length;
+                        const content = match[2];
+                        if (level === 1) return <h1 key={i} className="text-xl font-bold mt-4 mb-2 text-slate-800 dark:text-slate-200"><FormattedText text={content} /></h1>;
+                        if (level === 2) return <h2 key={i} className="text-lg font-bold mt-4 mb-2 text-slate-800 dark:text-slate-200"><FormattedText text={content} /></h2>;
+                        return <h3 key={i} className="text-md font-bold mt-3 mb-1 text-slate-800 dark:text-slate-200"><FormattedText text={content} /></h3>;
+                    }
+                }
+                
+                // Default paragraph
+                return (
+                    <p key={i} className="whitespace-pre-line text-slate-700 dark:text-slate-300">
+                        <FormattedText text={block} />
+                    </p>
+                );
+            })}
+        </div>
+    );
+};
+
 export default function ChatPage() {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -22,7 +118,8 @@ export default function ChatPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loadingDatasets, setLoadingDatasets] = useState(true);
   const [isThinking, setIsThinking] = useState(false);
-  const [loadingStage, setLoadingStage] = useState("Analyzing your data…");
+  const [, setLoadingStage] = useState("Analyzing your data…");
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -44,6 +141,11 @@ export default function ChatPage() {
   const handleSend = async () => {
     if (!input.trim() || !selectedDataset || isThinking) return;
     const currentInput = input;
+
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -74,6 +176,7 @@ export default function ChatPage() {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           datasetId: selectedDataset.id,
           message: currentInput,
@@ -152,6 +255,10 @@ export default function ChatPage() {
         }
       }
     } catch (error: any) {
+      if (error.name === "AbortError") {
+        console.log("Fetch aborted");
+        return;
+      }
       console.error(error);
       const errorContent = error.message || "Failed to contact backend.";
       setMessages(prev => prev.map(msg => 
@@ -290,7 +397,7 @@ export default function ChatPage() {
                         <span className="text-slate-500">{msg.stage}</span>
                       </div>
                     ) : (
-                      <p className="whitespace-pre-line">{msg.content}</p>
+                      <SimpleMarkdown text={msg.content} />
                     )}
                     <span className="text-[10px] block mt-1.5 text-right text-slate-400 dark:text-slate-500">
                       {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

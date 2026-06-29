@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { FileText, Calendar, Search, Loader2, Database, ChevronRight, ArrowRight } from "lucide-react";
+import { FileText, Calendar, Search, Loader2, Database, ArrowRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import PageShell from "../components/layout/PageShell";
 import PageHeader from "../components/layout/PageHeader";
 import EmptyState from "../components/shared/EmptyState";
 import { getReports, type Report } from "../api/reportApi";
-import { cn } from "../lib/utils";
 
 export default function ReportsPage() {
     const [reports, setReports] = useState<Report[]>([]);

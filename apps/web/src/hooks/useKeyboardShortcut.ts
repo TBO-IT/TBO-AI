@@ -8,8 +8,6 @@ export function useKeyboardShortcut(
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             const matchKey = e.key.toLowerCase() === key.toLowerCase();
-            const matchCtrl = options.ctrl ? e.ctrlKey : !e.ctrlKey;
-            const matchMeta = options.meta ? e.metaKey : !e.metaKey;
             const matchShift = options.shift ? e.shiftKey : !e.shiftKey;
             const matchAlt = options.alt ? e.altKey : !e.altKey;
 

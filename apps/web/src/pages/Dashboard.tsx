@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { getAnalysis } from "../api/analyticsApi";
-import { useAuth } from "@clerk/clerk-react";
-
 import type {
   DatasetSummary,
 } from "../types/analytics";

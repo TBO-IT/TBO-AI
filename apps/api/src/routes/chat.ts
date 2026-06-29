@@ -97,6 +97,9 @@ router.post(
                 message,
                 {
                     onClaudeToken: onToken,
+                    onStageChange: (stage: string) => {
+                        sseSend(res, "status", { stage });
+                    },
                     abortSignal: abortController.signal
                 }
             );
