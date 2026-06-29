@@ -1,5 +1,5 @@
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 import { ZodError } from "zod";
-import { Prisma } from "@prisma/client";
 import { AppError } from "../errors/AppError.js";
 import { logger } from "../lib/logger.js";
 export function errorHandler(err, req, res, _next) {
@@ -33,7 +33,7 @@ export function errorHandler(err, req, res, _next) {
     // ==============================
     // Prisma Errors
     // ==============================
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err instanceof PrismaClientKnownRequestError) {
         switch (err.code) {
             case "P2002":
                 return res.status(409).json({

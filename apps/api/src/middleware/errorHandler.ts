@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../errors/AppError.js";
@@ -42,7 +43,7 @@ export function errorHandler(
     // ==============================
     // Prisma Errors
     // ==============================
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err instanceof PrismaClientKnownRequestError) {
         switch (err.code) {
             case "P2002":
                 return res.status(409).json({
