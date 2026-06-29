@@ -56,6 +56,7 @@ export async function runExecutivePriorityPipeline(
         parsedQuestion,
         semanticLayer,
         csvPath,
+        undefined,
         competitorContext
     );
     rootCausePack.drilldowns = drilldowns;

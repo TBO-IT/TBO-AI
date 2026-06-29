@@ -10,25 +10,10 @@
 //   If Claude fails → return deterministic dashboard narrative.
 //   The user's request NEVER fails.
 // ───────────────────────────────────────────────────────────────────────────────
-
-import { ClaudeInputPack, assertClaudeInputSafe } from "./claudeInputContract.js";
+import { assertClaudeInputSafe } from "./claudeInputContract.js";
 import { generateNarrativeText, generateNarrativeTextStream } from "./anthropicClient.js";
 import { logger } from "../lib/logger.js";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface NarrativeResult {
-    executiveSummary: string;
-    keyDrivers: string[];
-    risks: string[];
-    rawNarrative: string;
-    contradictionNote?: string;
-    claudeUsed: boolean;
-    claudeFailed: boolean;
-}
-
-const SYSTEM_PROMPT =
-    `You are an elite Revenue Operator and Analytics Copilot for a travel industry executive.
+const SYSTEM_PROMPT = `You are an elite Revenue Operator and Analytics Copilot for a travel industry executive.
 
 DESIGN PRINCIPLE: Information Density > Word Count
 Every line should communicate new information.
@@ -47,44 +32,34 @@ RULES:
 9. For flat metrics (0.00 change), write "[Metric Name] remained stable".
 10. Enforce the EXACT response structure below. Do not add extra headings or change their order.
 11. Reduce output tokens by increasing information density.`;
-
 // ─── Public: buildNarrativePrompt ─────────────────────────────────────────────
-
 /**
  * Builds the Claude prompt from a validated ClaudeInputPack.
  * This function is exported for testing and inspection.
  */
-export function buildNarrativePrompt(pack: ClaudeInputPack): string {
+export function buildNarrativePrompt(pack) {
     const ep = pack.executivePack;
-
     const risksText = ep.topRisks.slice(0, 3)
         .map(r => `  • [${r.severity}] ${r.title}: ${r.explanation}`)
         .join("\n");
-
     const oppsText = ep.topOpportunities.slice(0, 3)
         .map(o => `  • [${o.severity}] ${o.title}: ${o.explanation}`)
         .join("\n");
-
     const actionsText = ep.topActions.slice(0, 3)
         .map(a => `  • [${a.priority}] ${a.action}: ${a.rationale}`)
         .join("\n");
-
     const primaryTargetText = ep.primaryTarget
         ? `${ep.primaryTarget.name} (${ep.primaryTarget.entityType}): ${ep.primaryTarget.reason}`
         : "None identified.";
-
     const supportingTargetsText = ep.drilldowns.slice(0, 3)
         .map(d => `  • ${d.name} (${d.entityType}): ${d.reason}`)
         .join("\n");
-
     const newActionsText = ep.recommendations.slice(0, 3)
         .map(r => `  • ${r.targetName}: ${r.expectedImpact}`)
         .join("\n");
-
     const warnings = pack.validationErrors.length > 0
         ? `\nDATA QUALITY WARNINGS:\n${pack.validationErrors.map(e => `  ⚠ ${e}`).join("\n")}\n`
         : "";
-
     return `USER QUESTION: "${pack.question}"
 METRIC: ${pack.metricName}
 VALIDATION: ${pack.validationStatus}
@@ -174,123 +149,90 @@ STRUCTURE (EXACT):
 • [one sentence]
 ━━━━━━━━━━━━━━━━━━━━━━`;
 }
-
 // ─── Public: generateNarrative ────────────────────────────────────────────────
-
 /**
  * Generates an executive dashboard narrative from a validated ClaudeInputPack.
  * Calls Claude Haiku. Falls back to deterministic if Claude fails.
  */
-export async function generateNarrative(pack: ClaudeInputPack): Promise<NarrativeResult> {
+export async function generateNarrative(pack) {
     logger.info({ question: pack.question.slice(0, 80), metricName: pack.metricName }, "Narrative generator entered");
-
     // 1. Safety gate
     try {
         assertClaudeInputSafe(pack);
         logger.info({ metricName: pack.metricName }, "Narrative generator safety gate passed");
-    } catch (err) {
+    }
+    catch (err) {
         logger.error({ err, metricName: pack.metricName }, "Narrative generator safety gate blocked");
         return buildDeterministicNarrative(pack);
     }
-
     // 2. Build prompt
     const prompt = buildNarrativePrompt(pack);
     logger.info({ chars: prompt.length }, "Narrative generator prompt built");
-
     // 3. Call Claude
     logger.info({}, "Narrative generator calling Claude Haiku");
     try {
         const result = await generateNarrativeText(prompt, SYSTEM_PROMPT);
         const parsed = parseClaudeNarrative(result.text, pack);
-        logger.info(
-            { chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) },
-            "Narrative generator Claude returned"
-        );
+        logger.info({ chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) }, "Narrative generator Claude returned");
         return parsed;
-    } catch (err: any) {
+    }
+    catch (err) {
         logger.error({ err, code: err?.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
         const fallback = buildDeterministicNarrative(pack);
         fallback.claudeFailed = true;
         return fallback;
     }
 }
-
 /**
  * Streaming variant of generateNarrative.
  * - Streams tokens via `onToken`
  * - Still parses the final text for identical analytical output.
  */
-export async function generateNarrativeStream(
-    pack: ClaudeInputPack,
-    opts: {
-        onToken?: (chunk: string) => void;
-        abortSignal?: AbortSignal;
-    }
-): Promise<NarrativeResult> {
-    const onToken = opts.onToken ?? (() => {});
+export async function generateNarrativeStream(pack, opts) {
+    const onToken = opts.onToken ?? (() => { });
     logger.info({ question: pack.question.slice(0, 80), metricName: pack.metricName }, "Narrative generator entered (stream)");
-
     // 1. Safety gate
     try {
         assertClaudeInputSafe(pack);
         logger.info({ metricName: pack.metricName }, "Narrative generator safety gate passed");
-    } catch (err) {
+    }
+    catch (err) {
         logger.error({ err, metricName: pack.metricName }, "Narrative generator safety gate blocked");
         return buildDeterministicNarrative(pack);
     }
-
     // 2. Build prompt
     const prompt = buildNarrativePrompt(pack);
     logger.info({ chars: prompt.length }, "Narrative generator prompt built");
-
     // 3. Call Claude streaming
     logger.info({}, "Narrative generator calling Claude Haiku (stream)");
     try {
-        const result = await generateNarrativeTextStream(
-            prompt,
-            SYSTEM_PROMPT,
-            (chunk) => onToken(chunk),
-            opts.abortSignal
-        );
-
+        const result = await generateNarrativeTextStream(prompt, SYSTEM_PROMPT, (chunk) => onToken(chunk), opts.abortSignal);
         const parsed = parseClaudeNarrative(result.text, pack);
-        logger.info(
-            { chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) },
-            "Narrative generator Claude returned (stream accumulated)"
-        );
+        logger.info({ chars: result.text.length, estimatedCost: result.estimatedCost, rawPreview: result.text.slice(0, 120) }, "Narrative generator Claude returned (stream accumulated)");
         return parsed;
-    } catch (err: any) {
+    }
+    catch (err) {
         logger.error({ err, code: err?.code ?? "UNKNOWN" }, "Narrative generator Claude failed; using deterministic fallback");
         const fallback = buildDeterministicNarrative(pack);
         fallback.claudeFailed = true;
         return fallback;
     }
 }
-
 // ─── Deterministic Fallback ───────────────────────────────────────────────────
-
-export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeResult {
+export function buildDeterministicNarrative(pack) {
     const ep = pack.executivePack;
-
     const primary = ep.primaryTarget;
-
     const overallStatus = ep.topRisks.length > 0 ? "⚠ Hidden deterioration" : "✅ Stable performance";
     const highestPriority = primary?.name ?? (ep.topRisks[0]?.title ?? ep.topOpportunities[0]?.title ?? "N/A");
-
     const impactText = pack.metricChange
         ? `${pack.metricName} ${pack.metricChange.direction === "increase" ? "increased" : "decreased"} by ${Math.abs(pack.metricChange.absoluteChange).toFixed(2)} percentage points`
         : `${pack.metricName} remained stable`;
-
-
     const volumeText = primary?.volumeShare != null
         ? `${(primary.volumeShare * 100).toFixed(1)}%`
         : "N/A";
-
-
     const recommendedAction = ep.topActions[0]?.action
         ? ep.topActions[0].action
         : (ep.topRisks[0] ? `Mitigate ${ep.topRisks[0].affectedEntity} deterioration` : "Maintain current strategy");
-
     const decisionTable = [
         ["Overall Status", overallStatus],
         ["Highest Priority", highestPriority],
@@ -298,7 +240,6 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
         ["Volume", volumeText],
         ["Recommended Action", recommendedAction]
     ];
-
     const primaryTargetTable = [
         ["Metric", pack.metricName],
         ["Target Name", primary?.name ?? "None identified"],
@@ -306,35 +247,28 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
         ["Volume Share", primary?.volumeShare != null ? `${(primary.volumeShare * 100).toFixed(1)}%` : "N/A"],
         ["Recommended Direction", primary?.polarity === "POSITIVE" ? "recover" : primary?.polarity === "RISK" ? "de-risk" : "scale"]
     ];
-
     const recRows = (ep.topActions ?? []).slice(0, 3);
     const recActionsTable = recRows.length
-        ? recRows.map((a: any) => [a.priority, a.action, a.rationale, "Execute the linked action to improve the business outcome"])
+        ? recRows.map((a) => [a.priority, a.action, a.rationale, "Execute the linked action to improve the business outcome"])
         : [["P0", "No action found", "Insufficient data", "Maintain current performance"]];
-
-
     const driverRows = (ep.topDrivers ?? []).slice(0, 3);
-
-    const keyDriversTable = driverRows.map((d: any) => [
+    const keyDriversTable = driverRows.map((d) => [
         d.name,
         `${d.metricDelta >= 0 ? "Increase" : "Decrease"} by ${Math.abs(d.metricDelta).toFixed(2)} percentage points`,
         d.volumeShare != null ? `${(d.volumeShare * 100).toFixed(1)}%` : "N/A",
         d.priority ?? "—"
     ]);
-
     const riskRows = (ep.topRisks ?? []).slice(0, 3);
-    const keyRisksTable = riskRows.map((r: any) => [
+    const keyRisksTable = riskRows.map((r) => [
         r.severity,
         r.title,
         r.explanation
     ]);
-
     const leadershipNotes = [
         ep.topActions[0]?.action ? `Execute: ${ep.topActions[0].action}.` : `Focus: ${ep.keyTakeaway}.`,
         ep.topRisks[0] ? `Address risk: ${ep.topRisks[0].title}.` : `Protect upside by monitoring top opportunities weekly.`,
         ep.topOpportunities[0] ? `Pursue opportunity: ${ep.topOpportunities[0].title}.` : `Maintain discipline on the primary target.`,
     ];
-
     const raw = [
         "━━━━━━━━━━━━━━━━━━━━━━",
         "## Executive Decision",
@@ -368,11 +302,10 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
         `• ${leadershipNotes[2]}`,
         "━━━━━━━━━━━━━━━━━━━━━━"
     ].join("\n");
-
     return {
         executiveSummary: ep.executiveSummary,
-        keyDrivers: (ep.topDrivers ?? []).slice(0, 3).map((d: any) => d.name),
-        risks: (ep.topRisks ?? []).slice(0, 3).map((r: any) => r.title),
+        keyDrivers: (ep.topDrivers ?? []).slice(0, 3).map((d) => d.name),
+        risks: (ep.topRisks ?? []).slice(0, 3).map((r) => r.title),
         rawNarrative: raw,
         claudeUsed: false,
         claudeFailed: true,
@@ -381,16 +314,12 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
             : undefined
     };
 }
-
 // ─── Claude Response Parser ───────────────────────────────────────────────────
-
-function parseClaudeNarrative(text: string, pack: ClaudeInputPack): NarrativeResult {
+function parseClaudeNarrative(text, pack) {
     const keyDrivers = extractSection(text, /##\s*Key Drivers/i);
     const risks = extractSection(text, /##\s*Key Risks/i);
-
     // Keep executiveSummary field as the raw text for UI/search (original behavior)
     const executiveSummary = text.split("\n")[0]?.trim() ? text : epSafeExecutiveSummary(pack);
-
     return {
         executiveSummary,
         keyDrivers,
@@ -403,20 +332,18 @@ function parseClaudeNarrative(text: string, pack: ClaudeInputPack): NarrativeRes
         claudeFailed: false
     };
 }
-
-function epSafeExecutiveSummary(pack: ClaudeInputPack): string {
+function epSafeExecutiveSummary(pack) {
     try {
         return pack.executivePack?.executiveSummary ?? "";
-    } catch {
+    }
+    catch {
         return "";
     }
 }
-
-function extractSection(text: string, headerPattern: RegExp): string[] {
+function extractSection(text, headerPattern) {
     const lines = text.split("\n");
-    const items: string[] = [];
+    const items = [];
     let capturing = false;
-
     for (const line of lines) {
         if (headerPattern.test(line)) {
             capturing = true;
@@ -424,9 +351,10 @@ function extractSection(text: string, headerPattern: RegExp): string[] {
         }
         if (capturing) {
             const trimmed = line.trim();
-            if (trimmed === "") continue;
-            if (/^##\s*/i.test(trimmed)) break;
-
+            if (trimmed === "")
+                continue;
+            if (/^##\s*/i.test(trimmed))
+                break;
             // For markdown tables, extract the first column value (best-effort)
             if (trimmed.startsWith("|")) {
                 const cells = trimmed.split("|").map(c => c.trim()).filter(Boolean);
@@ -435,13 +363,10 @@ function extractSection(text: string, headerPattern: RegExp): string[] {
                 }
                 continue;
             }
-
             if (!/^(Driver|Severity|Risk|Priority|---)/i.test(trimmed) && trimmed.length > 3) {
                 items.push(trimmed.replace(/^[-•*]\s*/, ""));
             }
         }
     }
-
     return items.slice(0, 5);
 }
-
