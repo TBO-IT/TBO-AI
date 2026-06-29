@@ -6,7 +6,7 @@ import type { Dataset } from "../types/dataset";
 import { saveReport } from "../api/reportApi";
 import { cn } from "../lib/utils";
 import { useAuth } from "@clerk/clerk-react";
-import { SimpleMarkdown } from "./ChatPage";
+import { MarkdownRenderer } from "../components/shared/MarkdownRenderer";
 import { ExecutiveKPICard, RecommendationCard } from "../components/ExecutiveCards";
 
 // ── Types ──
@@ -156,7 +156,7 @@ function SectionCard({ title, content, defaultOpen = false }: { title: string; c
     }
 
     if (!renderedContent) {
-        renderedContent = <SimpleMarkdown text={content} />;
+        renderedContent = <MarkdownRenderer text={content} />;
     }
 
     return (
@@ -595,7 +595,7 @@ export default function CopilotPage() {
                                 ) : (
                                     /* Plain text fallback */
                                     <div className="rounded-2xl rounded-tl-md px-4 py-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 text-[13px] text-slate-700 dark:text-slate-300">
-                                        <SimpleMarkdown text={msg.content} />
+                                        <MarkdownRenderer text={msg.content} />
                                     </div>
                                 )}
                             </div>

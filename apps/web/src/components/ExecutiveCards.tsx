@@ -1,6 +1,6 @@
 import { Target, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "../lib/utils";
-import { FormattedText } from "../pages/ChatPage";
+import { InlineMarkdown } from "./shared/MarkdownRenderer";
 
 interface KPIProps {
     data: Record<string, string>;
@@ -27,16 +27,16 @@ export function ExecutiveKPICard({ data }: KPIProps) {
                     </div>
                     <div>
                         <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Primary Target</div>
-                        <div className="text-base font-bold text-slate-900 dark:text-slate-100"><FormattedText text={target} /></div>
+                        <div className="text-base font-bold text-slate-900 dark:text-slate-100"><InlineMarkdown text={target} /></div>
                     </div>
                 </div>
                 <div className="text-right flex-shrink-0 ml-4">
-                    <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400"><FormattedText text={metric} /></div>
+                    <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400"><InlineMarkdown text={metric} /></div>
                     <div className={cn(
                         "text-lg font-bold",
                         isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                     )}>
-                        <FormattedText text={impact} />
+                        <InlineMarkdown text={impact} />
                     </div>
                 </div>
             </div>
@@ -44,11 +44,11 @@ export function ExecutiveKPICard({ data }: KPIProps) {
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Volume</div>
-                    <div className="text-[13px] font-medium text-slate-800 dark:text-slate-200"><FormattedText text={volume} /></div>
+                    <div className="text-[13px] font-medium text-slate-800 dark:text-slate-200"><InlineMarkdown text={volume} /></div>
                 </div>
                 <div className="space-y-1">
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Expected ROI</div>
-                    <div className="text-[13px] font-medium text-slate-800 dark:text-slate-200"><FormattedText text={roi} /></div>
+                    <div className="text-[13px] font-medium text-slate-800 dark:text-slate-200"><InlineMarkdown text={roi} /></div>
                 </div>
             </div>
         </div>
@@ -74,7 +74,7 @@ export function RecommendationCard({ title, why, outcome, index }: RecProps) {
                 
                 <div className="flex-1 space-y-3">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">
-                        <FormattedText text={title} />
+                        <InlineMarkdown text={title} />
                     </h4>
                     
                     <div className="grid gap-2 text-[12px]">
@@ -82,7 +82,7 @@ export function RecommendationCard({ title, why, outcome, index }: RecProps) {
                             <Target className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
                             <div>
                                 <span className="font-semibold text-slate-700 dark:text-slate-200 block mb-0.5">Rationale</span>
-                                <FormattedText text={why} />
+                                <InlineMarkdown text={why} />
                             </div>
                         </div>
                         
@@ -90,7 +90,7 @@ export function RecommendationCard({ title, why, outcome, index }: RecProps) {
                             <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
                             <div>
                                 <span className="font-semibold text-slate-700 dark:text-slate-200 block mb-0.5">Expected Outcome</span>
-                                <FormattedText text={outcome} />
+                                <InlineMarkdown text={outcome} />
                             </div>
                         </div>
                     </div>

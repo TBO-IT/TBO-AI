@@ -15,7 +15,7 @@ import type { ResponseSource } from "./claudeRequestDetector.js";
 // ───────────────────────────────────────────────────────────────────────────────
 
 /** Cache version — bump to invalidate all legacy entries */
-const NARRATIVE_CACHE_VERSION = 30;
+const NARRATIVE_CACHE_VERSION = 31;
 
 /** TTL of 24 hours */
 const CACHE_TTL = 60 * 60 * 24;
