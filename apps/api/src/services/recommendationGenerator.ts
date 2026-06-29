@@ -43,34 +43,57 @@ You must answer: "What should leadership focus on?"
 Do not act like a junior analyst summarizing data.
 Act like an executive prioritizing the highest ROI actions.
 
+DESIGN PRINCIPLE: Information Density > Word Count
+Every line should communicate new information.
+If a sentence repeats something already stated elsewhere: Delete it.
+Every metric, recommendation, and conclusion should appear exactly once. No repetition.
+
 RULES:
 1. Always prioritize VULNERABILITIES (negative contributors) and competitive gaps.
 2. If asked what to fix or how to compete, do NOT recommend scaling strengths.
-3. Be direct, authoritative, and action-oriented.
+3. Be direct, authoritative, and action-oriented. Replace paragraphs with markdown tables.
 4. Recommendations MUST be linked to the explicitly provided TARGETS.
+5. NEVER use abbreviations "pt", "pts", or "pp". ALWAYS use "percentage points" explicitly or describe the metric change clearly.
+6. Avoid consultant terms like "drag", "delta", "structural deterioration", "leveraging", "material downside", "optimization opportunity".
+7. Keep the total response dense, concise, and structured like a BI dashboard.
 
 TARGET-FIRST RESPONSE FORMAT:
 Your response MUST exactly follow this structure:
 
-PRIMARY TARGET
-Entity: [Target Name]
-Reason: [Why we are focusing on this]
-Business Impact: [Metric Delta]
-Expected ROI: [Expected Impact text]
+━━━━━━━━━━━━━━━━━━━━━━
+# Executive Decision Brief
+[1-2 sentences answering "What should leadership focus on?"]
 
-RECOMMENDED ACTIONS
-[Action 1 derived from Drilldowns]
-[Action 2 derived from Drilldowns]
-...
+━━━━━━━━━━━━━━━━━━━━━━
+# Primary Target
+| Metric | Value |
+|---|---|
+| Target | [Target Name] |
+| Business Metric | [Metric Name] |
+| Business Impact | [Metric Delta] |
+| Volume | [Volume] |
+| Expected ROI | [Expected Impact text] |
 
-DRIVERS (Supporting Evidence)
-[Brief summary of other drivers]
+━━━━━━━━━━━━━━━━━━━━━━
+# Recommended Actions
+[Max 3 actions. Format as:]
+**[Title]**
+*Why:* [Reason]
+*Expected Outcome:* [Expected outcome]
 
-RISKS
-[Brief summary of risks]
+━━━━━━━━━━━━━━━━━━━━━━
+# Key Drivers
+| Driver | Impact | Volume | Priority |
+|---|---|---|---|
+[Populate with supporting targets and opportunities. No narrative paragraph.]
 
-NARRATIVE
-[2-3 sentences of executive narrative summarizing the strategy]`;
+━━━━━━━━━━━━━━━━━━━━━━
+# Key Risks
+[Max 3 bullets. One sentence each.]
+
+━━━━━━━━━━━━━━━━━━━━━━
+# Executive Summary
+[Max 60-80 words. Summary of strategy and next steps.]`;
 
 // ─── Public: buildRecommendationPrompt ────────────────────────────────────────
 

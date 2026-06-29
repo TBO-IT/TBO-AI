@@ -38,6 +38,11 @@ export interface NarrativeResult {
 const SYSTEM_PROMPT =
     `You are an elite Revenue Operator and Analytics Copilot for a travel industry executive.
 
+DESIGN PRINCIPLE: Information Density > Word Count
+Every line should communicate new information.
+If a sentence repeats something already stated elsewhere: Delete it.
+Every metric, recommendation, and conclusion should appear exactly once. No repetition.
+
 RULES:
 1. Use ONLY the facts provided in the user message.
 2. NEVER invent numbers that are not in the data.
@@ -46,10 +51,10 @@ RULES:
 5. If a contradiction is noted, explain it FIRST before any other analysis.
 6. Use concise, direct, action-oriented business language. No fluff. Write for business executives, not analysts. Never assume readers understand statistical terminology.
 7. NEVER use abbreviations "pt", "pts", or "pp". ALWAYS use "percentage points" explicitly or describe the metric change clearly (e.g., "Win Rate decreased by 9.73 percentage points").
-8. Every numeric change must clearly state: the metric that changed, the magnitude, the direction, and the business meaning.
+8. Avoid words like "drag", "delta", "structural deterioration", "leveraging", "material downside", "optimization opportunity".
 9. For flat metrics (0.00 change), DO NOT write "0.00 pts" or "0.00 percentage points". Instead write "Overall [Metric Name] appears unchanged" or "[Metric Name] remained stable."
-10. Structure: PRIMARY TARGET -> SUPPORTING TARGETS -> RECOMMENDED ACTIONS -> EXECUTIVE SUMMARY -> KEY TAKEAWAY -> TOP RISKS -> TOP OPPORTUNITIES -> SCENARIO OUTLOOK.
-11. Keep the total response under 800 words.`;
+10. Replace paragraphs with markdown tables where instructed.
+11. Keep the total response dense, concise, and structured like a BI dashboard.`;
 
 // ─── Public: buildNarrativePrompt ─────────────────────────────────────────────
 
@@ -64,13 +69,14 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
     const rules = [
         "Write an action-oriented briefing for the CEO / CRO.",
         "You are the Revenue Operator.",
-        "Rule 1: Always list the PRIMARY TARGET and SUPPORTING TARGETS first.",
-        "Rule 2: List the RECOMMENDED ACTIONS immediately after the targets.",
-        "Rule 3: Answer 'What happened?' in the EXECUTIVE SUMMARY.",
+        "Rule 1: Always use the exact markdown structure provided.",
+        "Rule 2: Never produce long paragraphs. Use short sentences, active voice, and strong verbs.",
+        "Rule 3: Answer 'What should leadership know?' in the Executive Decision Brief in 1-2 sentences.",
         "Rule 4: Focus on business impact and actionable next steps.",
         "Rule 5: Never invent data or targets.",
-        "Rule 6: Never use 'pt', 'pts', or 'pp'. Write 'percentage points' and clearly state which metric changed, its magnitude, direction, and business meaning.",
-        "Rule 7: Write for business executives. Avoid analyst shorthand."
+        "Rule 6: Never use 'pt', 'pts', or 'pp'. Write 'percentage points' and always name the metric.",
+        "Rule 7: Write for business executives. Avoid analyst shorthand.",
+        "Rule 8: Reduce output tokens by increasing information density. Never repeat numerical values."
     ].join("\n");
 
     const risksText = ep.topRisks.slice(0, 3)
@@ -155,31 +161,41 @@ Write the executive briefing following these rules:
 ${rules}
 
 Structure the output EXACTLY like this:
-PRIMARY TARGET
-[text]
+━━━━━━━━━━━━━━━━━━━━━━
+# Executive Decision Brief
+[1-2 sentences immediately answering "What should leadership know?"]
 
-SUPPORTING TARGETS
-[text]
+━━━━━━━━━━━━━━━━━━━━━━
+# Primary Target
+| Metric | Value |
+|---|---|
+| Target | [Target Name] |
+| Business Metric | [Metric Name] |
+| Business Impact | [Metric Change] |
+| Volume | [Volume/Share] |
+| Expected ROI | [Expected Impact] |
 
-RECOMMENDED ACTIONS
-[text]
+━━━━━━━━━━━━━━━━━━━━━━
+# Recommended Actions
+[Max 3 actions. Format as:]
+**[Title]**
+*Why:* [Reason]
+*Expected Outcome:* [Expected outcome]
 
-EXECUTIVE SUMMARY
-[text]
+━━━━━━━━━━━━━━━━━━━━━━
+# Key Drivers
+| Driver | Impact | Volume | Priority |
+|---|---|---|---|
+[Populate with supporting targets and opportunities. No narrative paragraph.]
 
-KEY TAKEAWAY
-[text]
+━━━━━━━━━━━━━━━━━━━━━━
+# Key Risks
+[Max 3 bullets. One sentence each.]
 
-TOP RISKS
-[text]
-
-TOP OPPORTUNITIES
-[text]
-
-SCENARIO OUTLOOK
-[text]
-
-Use ONLY the facts above. Do NOT invent data.`;
+━━━━━━━━━━━━━━━━━━━━━━
+# Executive Summary
+[Max 60-80 words. Summarize what happened, why, and what leadership should do next.]
+ONLY the facts above. Do NOT invent data.`;
 }
 
 // ─── Public: generateNarrative ────────────────────────────────────────────────
