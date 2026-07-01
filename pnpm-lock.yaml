@@ -39,7 +39,7 @@ importers:
         specifier: ^17.4.2
         version: 17.4.2
       duckdb:
-        specifier: ^1.4.4
+        specifier: 1.4.4
         version: 1.4.4(encoding@0.1.13)
       express:
         specifier: ^5.2.1
