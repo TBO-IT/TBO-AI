@@ -131,10 +131,10 @@ function parseRecommendations(text: string) {
 function SectionCard({ title, content, defaultOpen = false }: { title: string; content: string; defaultOpen?: boolean }) {
     const [open, setOpen] = useState(defaultOpen);
     const icon = SECTION_ICONS[title] || "📌";
-    
+
     // Always open key sections
     const alwaysOpen = title === "PRIMARY TARGET" || title === "EXECUTIVE SUMMARY" || title === "RECOMMENDED ACTIONS" || title === "LEADERSHIP MESSAGE";
-    
+
     // Attempt parsing structured data
     let renderedContent: React.ReactNode = null;
     if (title === "PRIMARY TARGET") {
@@ -181,7 +181,7 @@ function SectionCard({ title, content, defaultOpen = false }: { title: string; c
                     )} />
                 </button>
             )}
-            
+
             {alwaysOpen && (
                 <div className="flex items-center gap-2 mb-3 px-1">
                     <span className="text-[12px] font-bold tracking-wider uppercase text-slate-800 dark:text-slate-200">
@@ -281,9 +281,9 @@ export default function CopilotPage() {
 
         try {
             const token = await getToken();
-            const response = await fetch("http://localhost:3000/chat", {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
                 method: "POST",
-                headers: { 
+                headers: {
                     "Content-Type": "application/json",
                     ...(token ? { Authorization: `Bearer ${token}` } : {})
                 },
@@ -298,7 +298,7 @@ export default function CopilotPage() {
                 let errorData;
                 try {
                     errorData = await response.json();
-                } catch(e) {}
+                } catch (e) { }
                 throw { response: { status: response.status, data: errorData } };
             }
             if (!response.body) throw new Error("No response body");
@@ -322,7 +322,7 @@ export default function CopilotPage() {
                 for (const block of lines) {
                     const eventMatch = block.match(/^event:\s*(.*)$/m);
                     const dataMatch = block.match(/^data:\s*(.*)$/m);
-                    
+
                     if (eventMatch && dataMatch) {
                         const eventType = eventMatch[1].trim();
                         const rawData = dataMatch[1].trim();
@@ -336,14 +336,14 @@ export default function CopilotPage() {
                         if (eventType === "status") {
                             if (data.stage) {
                                 setLoadingStage(data.stage);
-                                setMessages(prev => prev.map(msg => 
+                                setMessages(prev => prev.map(msg =>
                                     msg.id === assistantId ? { ...msg, stage: data.stage } : msg
                                 ));
                             }
                         } else if (eventType === "token") {
                             rawContent += data.text;
                             const sections = parseExecutiveResponse(rawContent);
-                            setMessages(prev => prev.map(msg => 
+                            setMessages(prev => prev.map(msg =>
                                 msg.id === assistantId ? { ...msg, content: rawContent, sections: sections || undefined, stage: undefined } : msg
                             ));
                         } else if (eventType === "complete") {
@@ -357,7 +357,7 @@ export default function CopilotPage() {
 
                             rawContent = finalAns;
                             const sections = parseExecutiveResponse(rawContent);
-                            setMessages(prev => prev.map(msg => 
+                            setMessages(prev => prev.map(msg =>
                                 msg.id === assistantId ? { ...msg, content: rawContent, sections: sections || undefined, stage: undefined } : msg
                             ));
                             break;
@@ -373,9 +373,9 @@ export default function CopilotPage() {
                 return;
             }
             console.error("[PIPELINE_FATAL]", err);
-            
+
             let errorContent = "Internal Processing Error: An unknown error occurred.";
-            
+
             if (err.response?.status === 422 && err.response?.data?.errors) {
                 const validationErrors = err.response.data.errors.join("\n- ");
                 const suggestions = err.response.data.suggestions?.join("\n- ") || "";
@@ -391,7 +391,7 @@ export default function CopilotPage() {
                 errorContent = `Internal Processing Error:\n${err.message}`;
             }
 
-            setMessages(prev => prev.map(msg => 
+            setMessages(prev => prev.map(msg =>
                 msg.id === assistantId ? { ...msg, content: errorContent, sections: undefined, stage: undefined } : msg
             ));
         } finally {
@@ -408,20 +408,20 @@ export default function CopilotPage() {
 
     const handleSaveReport = async (msg: Message) => {
         if (savingReportId) return;
-        
+
         try {
             setSavingReportId(msg.id);
             // Derive a title from the preceding user question, or fall back
             const msgIndex = messages.findIndex(m => m.id === msg.id);
             const userMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
             const title = userMsg?.content.slice(0, 100) || "Executive Report";
-            
+
             await saveReport({
                 title: title,
                 content: msg.content,
                 datasetId: selectedDataset?.id
             });
-            
+
             // Show brief success state on button
             setTimeout(() => setSavingReportId(null), 2000);
         } catch (error) {
@@ -578,7 +578,7 @@ export default function CopilotPage() {
                                                 {copiedId === msg.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                                                 {copiedId === msg.id ? "Copied" : "Copy"}
                                             </button>
-                                            <button 
+                                            <button
                                                 onClick={() => handleSaveReport(msg)}
                                                 disabled={savingReportId === msg.id}
                                                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer disabled:opacity-50"

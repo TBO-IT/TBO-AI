@@ -48,7 +48,7 @@ export default function ChatPage() {
     const currentInput = input;
 
     if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
 
@@ -75,11 +75,11 @@ export default function ChatPage() {
 
     try {
       const token = await getToken();
-      const response = await fetch("http://localhost:3000/chat", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
         method: "POST",
-        headers: { 
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         signal: abortControllerRef.current.signal,
         body: JSON.stringify({
@@ -92,7 +92,7 @@ export default function ChatPage() {
         let errorData;
         try {
           errorData = await response.json();
-        } catch(e) {}
+        } catch (e) { }
         throw { response: { status: response.status, data: errorData } };
       }
       if (!response.body) throw new Error("No response body");
@@ -116,7 +116,7 @@ export default function ChatPage() {
         for (const block of lines) {
           const eventMatch = block.match(/^event:\s*(.*)$/m);
           const dataMatch = block.match(/^data:\s*(.*)$/m);
-          
+
           if (eventMatch && dataMatch) {
             const eventType = eventMatch[1].trim();
             const rawData = dataMatch[1].trim();
@@ -130,13 +130,13 @@ export default function ChatPage() {
             if (eventType === "status") {
               if (data.stage) {
                 setLoadingStage(data.stage);
-                setMessages(prev => prev.map(msg => 
+                setMessages(prev => prev.map(msg =>
                   msg.id === assistantId ? { ...msg, stage: data.stage } : msg
                 ));
               }
             } else if (eventType === "token") {
               rawContent += data.text;
-              setMessages(prev => prev.map(msg => 
+              setMessages(prev => prev.map(msg =>
                 msg.id === assistantId ? { ...msg, content: rawContent, stage: undefined } : msg
               ));
             } else if (eventType === "complete") {
@@ -149,7 +149,7 @@ export default function ChatPage() {
               else finalAns = data.response ? JSON.stringify(data.response) : finalAns;
 
               rawContent = finalAns;
-              setMessages(prev => prev.map(msg => 
+              setMessages(prev => prev.map(msg =>
                 msg.id === assistantId ? { ...msg, content: rawContent, stage: undefined } : msg
               ));
               break;
@@ -166,7 +166,7 @@ export default function ChatPage() {
       }
       console.error(error);
       const errorContent = error.message || "Failed to contact backend.";
-      setMessages(prev => prev.map(msg => 
+      setMessages(prev => prev.map(msg =>
         msg.id === assistantId ? { ...msg, content: errorContent, stage: undefined } : msg
       ));
     } finally {

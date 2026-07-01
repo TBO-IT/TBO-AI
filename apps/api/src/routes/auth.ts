@@ -1,71 +1,24 @@
 import { Router } from "express";
-
-import { requireAuth, getAuth } from "@clerk/express";
-
-import { clerkClient } from "@clerk/express";
-
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
+import { currentUser } from "../middleware/currentUser.js";
 
 const router = Router();
 
-router.post("/sync-user", requireAuth(), async (req, res) => {
+router.post("/sync-user", currentUser, async (req: any, res: any) => {
     try {
-        const auth = getAuth(req);
+        const user = req.user;
 
-        const clerkUserId = auth.userId;
-
-        if (!clerkUserId) {
-            return res.status(401).json({
-                error: "Unauthorized",
-            });
-        }
-
-        const existingUser = await prisma.user.findUnique({
+        const updatedUser = await prisma.user.update({
             where: {
-                clerkUserId,
+                id: user.id,
             },
-        });
-
-        if (existingUser) {
-            const updatedUser = await prisma.user.update({
-                where: {
-                    id: existingUser.id,
-                },
-                data: {
-                    lastLoginAt: new Date(),
-                },
-            });
-            return res.json(updatedUser);
-        }
-
-        // default role
-        const viewerRole = await prisma.userRole.findFirst({
-            where: {
-                roleName: "viewer",
-            },
-        });
-
-        if (!viewerRole) {
-            return res.status(500).json({
-                error: "Viewer role missing",
-            });
-        }
-
-        const clerkUser = await clerkClient.users.getUser(clerkUserId);
-        const email = clerkUser.emailAddresses[0]?.emailAddress;
-        const fullName = `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim();
-
-        const user = await prisma.user.create({
             data: {
-                clerkUserId,
-                email,
-                fullName,
-                roleId: viewerRole.id,
+                lastLoginAt: new Date(),
             },
         });
 
-        return res.json(user);
+        return res.json(updatedUser);
     } catch (error) {
         logger.error({ err: error }, "sync-user failed");
 
