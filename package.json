@@ -9,7 +9,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "dev:doppler": "doppler run -- pnpm dev",
-    "build:web": "cd apps/web && npm install && npm run build",
+    "build:web": "cd apps/web && npm install --production=false && npm run build",
     "build:api": "cd apps/api && npm install && npm run build",
     "render-build": "pnpm install --prod=false && pnpm run build",
     "postinstall": "pnpm rebuild duckdb --filter api || true"
