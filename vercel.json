@@ -1,5 +1,5 @@
 {
-    "buildCommand": "pnpm --filter web build",
-    "installCommand": "pnpm install --no-frozen-lockfile",
+    "buildCommand": "npm run build:web",
+    "installCommand": "npm install",
     "outputDirectory": "apps/web/dist"
 }
