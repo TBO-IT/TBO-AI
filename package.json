@@ -1,14 +1,19 @@
 {
   "name": "TBO-project",
   "version": "1.0.0",
-  "packageManager": "pnpm@10.17.1",
+  "packageManager": "pnpm@8.6.12",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "dev:doppler": "doppler run -- pnpm dev"
+    "dev:doppler": "doppler run -- pnpm dev",
+    "build:web": "pnpm --filter web build",
+    "build:api": "pnpm --filter api build",
+    "vercel-build": "npm run build:web",
+    "render-build": "pnpm install && pnpm run build",
+    "postinstall": "pnpm rebuild duckdb --filter api || true"
   },
   "keywords": [],
   "author": "",
@@ -17,8 +22,9 @@
   "devDependencies": {
     "turbo": "^2.10.1"
   },
-
   "engines": {
-    "node": ">=22"
+    "node": "20.x",
+    "pnpm": "8.6.12",
+    "npm": ">=9.0.0"
   }
 }

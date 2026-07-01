@@ -1,0 +1,7 @@
+{
+    "version": 2,
+    "buildCommand": "npm run vercel-build",
+    "installCommand": "npm install",
+    "outputDirectory": "apps/web/dist",
+    "nodeVersion": "20.x"
+}
