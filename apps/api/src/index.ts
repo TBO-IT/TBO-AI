@@ -20,6 +20,8 @@ import { logger } from "./lib/logger.js";
 
 dotenv.config();
 
+console.log("FRONTEND_URL:", process.env.FRONTEND_URL);
+
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // trust first proxy
