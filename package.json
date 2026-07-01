@@ -26,5 +26,8 @@
       "esbuild",
       "prisma"
     ]
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
