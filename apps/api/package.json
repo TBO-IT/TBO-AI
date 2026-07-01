@@ -6,12 +6,13 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch src/index.ts",
-    "build" : "tsc",
-    "start" : "node dist/index.js",
+    "build": "tsc",
+    "start": "node dist/index.js",
     "test:claude": "doppler run -- tsx src/scripts/testClaude.ts",
     "test:connection": "doppler run -- tsx src/scripts/testClaudeConnection.ts",
     "test:narrative": "doppler run -- tsx src/scripts/testNarrative.ts",
-    "test:recommendations": "doppler run -- tsx src/scripts/testRecommendations.ts"
+    "test:recommendations": "doppler run -- tsx src/scripts/testRecommendations.ts",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
