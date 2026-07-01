@@ -12,7 +12,7 @@
     "build:web": "pnpm --filter web build",
     "build:api": "pnpm --filter api build",
     "vercel-build": "npm run build:web",
-    "render-build": "pnpm install && pnpm run build",
+    "render-build": "pnpm install --prod=false && pnpm run build",
     "postinstall": "pnpm rebuild duckdb --filter api || true"
   },
   "keywords": [],
@@ -24,7 +24,6 @@
   },
   "engines": {
     "node": "20.x",
-    "pnpm": "8.6.12",
-    "npm": ">=9.0.0"
+    "pnpm": "8.6.12"
   }
 }
