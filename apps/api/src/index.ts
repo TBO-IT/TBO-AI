@@ -12,7 +12,6 @@ import datasetRoutes from "./routes/dataset.js";
 import chatRoutes from "./routes/chat.js";
 import metricsRoutes from "./routes/metrics.js";
 import testRouter from "./routes/test.js";
-import reportRoutes from "./routes/reports.js";
 import deepDiveRoutes from "./routes/deep-dives.js";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -70,7 +69,7 @@ app.use(
 );
 
 app.use(express.json({
-    limit : "1mb"
+    limit: "1mb"
 }));
 app.use(requestLogger);
 app.use(clerkMiddleware());
@@ -91,7 +90,6 @@ app.use("/test", testRouter);
 app.use("/api", meRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/auth", authLimiter, authRoutes);
-app.use("/reports", reportRoutes);
 app.use("/deep-dives", deepDiveRoutes);
 
 app.get("/", (req, res) => {
