@@ -3,15 +3,14 @@ import dotenv from "dotenv";
 import { clerkMiddleware, requireAuth } from '@clerk/express'
 import authRoutes from "./routes/auth.js";
 import cors from "cors";
-import testRoutes from "./routes/test.js";
-import adminRoutes from "./routes/admin.js"
+import testRouter from "./routes/test.js";
+import adminRoutes from "./routes/admin.js";
 import meRoutes from "./routes/me.js";
 import uploadRoutes from "./routes/upload.js";
 import testAnalysisRoutes from "./routes/testAnalysis.js";
 import datasetRoutes from "./routes/dataset.js";
 import chatRoutes from "./routes/chat.js";
 import metricsRoutes from "./routes/metrics.js";
-import testRouter from "./routes/test.js";
 import deepDiveRoutes from "./routes/deep-dives.js";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
