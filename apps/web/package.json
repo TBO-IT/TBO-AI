@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "build:web": "npm install --include=dev && npm run build"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.3",
