@@ -5,7 +5,8 @@ import { buildSemanticLayer } from "../ai/semanticLayer.js";
 import { buildPrompt } from "../ai/promptBuilder.js";
 import { analyzeQuestion } from "../ai/questionAnalyzer.js";
 import { validateQuestion } from "../ai/questionValidator.js";
-import { routeQuery } from "../ai/queryRouter.js";
+import { routeQuery, planExecution } from "../ai/queryRouter.js";
+import { normalizeBusinessSemantics } from "../ai/businessNormalizer.js";
 import { getCachedSql, setCachedSql } from "./queryCacheService.js";
 import { getCachedNarrative, setCachedNarrative, invalidateNarrativeCache } from "./narrativeCacheService.js";
 import { ClaudeOutputSchemas, GeneratedQueryResponse } from "../ai/outputSchemas.js";
@@ -14,7 +15,7 @@ import { executeQuery } from "./queryExecutionService.js";
 import { extractInsights } from "./insightEngine.js";
 import { QuestionValidationError } from "../ai/questionTypes.js";
 import { buildDatasetMetadata } from "./metadataService.js";
-import { resolveEntities, dedupeFilters } from "../ai/entityResolver.js";
+import { resolveEntities, dedupeFilters, resolveOrDiscardEntities } from "../ai/entityResolver.js";
 import { generateTrendSql } from "./trendEngine.js";
 import { generateComparisonSql, extractComparisonEntities } from "./comparisonEngine.js";
 import { generateContributionSql } from "./contributionEngine.js";
@@ -40,6 +41,10 @@ import { recordQuery, recordCacheHit, recordCacheMiss, recordError, recordContra
 import { TargetPolarity } from "./insights/actionabilityEngine.js";
 import { PerformanceTimer } from "../lib/performanceTimer.js";
 import { logger } from "../lib/logger.js";
+import { objectiveSelector } from "../ai/objectives/index.js";
+import { analysisPlanner } from "../ai/planning/index.js";
+import { evidencePlanner } from "../ai/evidence/index.js";
+
 
 export class ChatOrchestrator {
     static async execute(
@@ -79,7 +84,7 @@ export class ChatOrchestrator {
 
             setStage("Loading dataset...");
             // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
-            const dataset = await getDataset(datasetId , userId);
+            const dataset = await getDataset(datasetId, userId);
             if (!dataset || !dataset.storagePath) {
                 throw new Error("Dataset not found or does not have a storage path.");
             }
@@ -111,9 +116,58 @@ export class ChatOrchestrator {
             setStage("Analyzing query intent...");
             // ── 2. Question Analysis ───────────────────────────────────────────
             let parsedQuestion = analyzeQuestion(question);
-            parsedQuestion = inferDefaultMetric(question, parsedQuestion, semanticLayer);
+
+            parsedQuestion = inferDefaultMetric(
+                question,
+                parsedQuestion,
+                semanticLayer
+            );
+
+            // Merge entity-aware filters into the parsed question
+            const existingKeys = new Set(
+                parsedQuestion.filters.map(
+                    f => `${f.dimension}|${f.operator}|${String(f.value).toLowerCase()}`
+                )
+            );
+
+            for (const filter of entityFilters) {
+                const key = `${filter.dimension}|${filter.operator}|${String(filter.value).toLowerCase()}`;
+
+                if (!existingKeys.has(key)) {
+                    parsedQuestion.filters.push(filter);
+                    existingKeys.add(key);
+                }
+            }
+
+            // Normalise business semantics after merging entity filters
+            parsedQuestion = normalizeBusinessSemantics(parsedQuestion);
+
+            // Resolve or discard unclassified proper noun (_entity) filters
+            parsedQuestion.filters = resolveOrDiscardEntities(
+                parsedQuestion.filters,
+                parsedQuestion.focus,
+                semanticLayer.dimensions
+            );
+
+            // ================================
+            // New Intelligence Planning Layer
+            // ================================
+
+            const objective = objectiveSelector.select(parsedQuestion);
+
+            const analysisPlan = analysisPlanner.createPlan(objective);
+
+            const evidencePlan = evidencePlanner.createPlan(analysisPlan);
+
+            console.log("\n========== AI PLANNING ==========");
+            console.log("Objective:", objective.id);
+            console.log("Analysis:", analysisPlan);
+            console.log("Evidence:", evidencePlan);
+            console.log("=================================\n");
+
+            // Existing production flow
             parsedIntent = parsedQuestion.intent;
-            
+
             const rawFilters = [...parsedQuestion.filters];
             const resolvedFilters = [...entityFilters];
 
@@ -144,7 +198,7 @@ export class ChatOrchestrator {
                 // Check if we already have a supplier filter for this competitor
                 const alreadyFiltered = mergedFilters.some(
                     f => (f.dimension === "supplier" || f.dimension === "thirdparty") &&
-                         String(f.value).toLowerCase() === competitorContext!.competitorName.toLowerCase()
+                        String(f.value).toLowerCase() === competitorContext!.competitorName.toLowerCase()
                 );
                 if (!alreadyFiltered) {
                     const compFilter: any = {
@@ -217,10 +271,48 @@ export class ChatOrchestrator {
                 explanation = "Retrieved from SQL cache.";
                 routeType = "CACHE";
             } else {
-                const routing = routeQuery(parsedQuestion, semanticLayer);
-                routeType = routing.route;
+                let routing: ReturnType<typeof planExecution>[0] | undefined = undefined;
 
-                console.log("ROUTING:", JSON.stringify(routing, null, 2));
+                // ── Multi-Analysis Gate ──────────────────────────────────────────
+                // MULTI_ANALYSIS fires when the AnalysisPlan requires BOTH a
+                // time-series step (EXPLAIN / trend-analysis) AND a diagnostic
+                // step (DIAGNOSE / diagnosis-analysis) — the hallmark of
+                // "What changed X and why?" questions.
+                //
+                // Comparison-primary plans are explicitly excluded so
+                // COMPARE_ENTITIES / COMPARISON keep their dedicated pipelines.
+                //
+                // All other questions fall through to the deterministic
+                // legacy routeQuery so their existing pack builders work.
+                const planHasTrendStep = analysisPlan.analyses.some(pa =>
+                    pa.analysis.capability === "EXPLAIN" || pa.analysis.id === "trend-analysis"
+                );
+                const planHasDiagnoseStep = analysisPlan.analyses.some(pa =>
+                    pa.analysis.capability === "DIAGNOSE" || pa.analysis.id === "diagnosis-analysis"
+                );
+                const planPrimaryIsCompare = analysisPlan.analyses.length > 0 &&
+                    (analysisPlan.analyses[0].analysis.capability === "COMPARE" ||
+                     analysisPlan.analyses[0].analysis.id === "comparison-analysis");
+                const requiresMultiAnalysis = planHasTrendStep && planHasDiagnoseStep && !planPrimaryIsCompare;
+
+                if (requiresMultiAnalysis) {
+                    console.log(`[MULTI-ANALYSIS] Objective=${analysisPlan.objectiveId} requires both trend and diagnosis`);
+                    routeType = "MULTI_ANALYSIS";
+                } else {
+                    const executionPlan = planExecution(
+                        parsedQuestion,
+                        semanticLayer
+                    );
+
+                    console.log(
+                        "[EXECUTION PLAN]",
+                        executionPlan.map(r => r.route)
+                    );
+
+                    routing = executionPlan[0];
+
+                    routeType = routing.route;
+                }
 
                 // ── Route Override: Recommendation / Narrative → ROOT_CAUSE ───
                 // Recommendation and narrative queries need a RootCausePack.
@@ -232,7 +324,7 @@ export class ChatOrchestrator {
                 // This ensures competitor queries run multi-dimensional RCA instead
                 // of the simple APW-gap analysis, producing differentiated results.
                 const shouldOverrideCompetitor = competitorContext && (isRecommendation || isNarrative) && routeType === "COMPETITOR_STRATEGY";
-                const packRoutes = new Set(["ROOT_CAUSE", "EXECUTIVE_PRIORITY", "COMPARE_ENTITIES"]);
+                const packRoutes = new Set(["ROOT_CAUSE", "EXECUTIVE_PRIORITY", "COMPARE_ENTITIES", "MULTI_ANALYSIS"]);
                 if ((isRecommendation || isNarrative) && !packRoutes.has(routeType) && routeType !== "LLM" && (!routeType.includes("COMPETITOR") || shouldOverrideCompetitor)) {
                     console.log(
                         `[PRE_ROUTER] ${isRecommendation ? "Recommendation" : "Narrative"} query detected — ` +
@@ -252,8 +344,8 @@ export class ChatOrchestrator {
 
                 // ── TEMPLATE ───────────────────────────────────────────────────
                 // Check routeType (override-aware) for flow control.
-                // Check routing.route for TS discriminated union narrowing (.sql access).
-                if (routeType === "TEMPLATE" && routing.route === "TEMPLATE") {
+                // routing is only defined when routeType came from planExecution (i.e. not MULTI_ANALYSIS).
+                if (routeType === "TEMPLATE" && routing && routing.route === "TEMPLATE") {
                     sql = routing.sql;
                     explanation = routing.explanation;
                 }
@@ -291,6 +383,9 @@ export class ChatOrchestrator {
                 else if (routeType === "EXECUTIVE_PRIORITY") {
                     explanation = "Executive priority pack will be built from multi-dimensional contribution analysis.";
                 }
+                else if (routeType === "PERFORMANCE") {
+
+                }
 
                 // ── COMPETITOR STRATEGY ────────────────────────────────────────
                 else if (routeType === "COMPETITOR_STRATEGY") {
@@ -320,19 +415,19 @@ export class ChatOrchestrator {
                 // Root cause uses the Contribution Engine for SQL across multiple
                 // dimensions, then wraps the results in the Root Cause Pack Builder.
                 else if (routeType === "ROOT_CAUSE") {
-                    let availableDims = ["hotel", "chain", "supplier", "apw"].filter(dim => 
+                    let availableDims = ["hotel", "chain", "supplier", "apw", "destination", "competitor"].filter(dim =>
                         semanticLayer.dimensions.some(d => d.toLowerCase() === dim.toLowerCase())
                     );
-                    
+
                     if (parsedQuestion.dimensions.length > 0) {
-                        const requestedDims = availableDims.filter(dim => 
+                        const requestedDims = availableDims.filter(dim =>
                             parsedQuestion.dimensions.some(pd => pd.toLowerCase() === dim.toLowerCase())
                         );
                         if (requestedDims.length > 0) {
                             availableDims = requestedDims;
                         }
                     }
-                    
+
                     const rootCauseSqls: string[] = [];
                     const rootCauseExplanations: string[] = [];
 
@@ -350,6 +445,60 @@ export class ChatOrchestrator {
                         explanation = "Multi-dimensional Root Cause Analysis:\n" + rootCauseExplanations.join("\n");
                     } else {
                         console.warn("[ORCHESTRATOR] Root cause: contribution engine returned null for all dims — falling back to LLM.");
+                        routeType = "LLM";
+                    }
+                }
+
+                // ── MULTI_ANALYSIS ─────────────────────────────────────────────
+                // Executes every PlannedAnalysis step from the AnalysisPlan in
+                // sequence, collecting SQL from each engine.
+                // Results from ALL steps are aggregated and passed to
+                // buildRootCausePack so Claude synthesises all evidence at once.
+                else if (routeType === "MULTI_ANALYSIS") {
+                    const multiSqls: string[] = [];
+                    const multiExplanations: string[] = [];
+
+                    for (const step of analysisPlan.analyses) {
+                        const stepId = step.analysis.id;
+                        console.log(`[MULTI-ANALYSIS] Executing step: ${stepId} (${step.analysis.capability})`);
+
+                        if (stepId === "trend-analysis") {
+                            const result = generateTrendSql(parsedQuestion, semanticLayer);
+                            if (result) {
+                                multiSqls.push(result.sql);
+                                multiExplanations.push(`[TREND] ${result.explanation}`);
+                                console.log(`[MULTI-ANALYSIS] TREND SQL generated`);
+                            } else {
+                                console.warn(`[MULTI-ANALYSIS] trend-analysis: generateTrendSql returned null, skipping`);
+                            }
+                        } else if (stepId === "diagnosis-analysis") {
+                            // Contribution engine runs across every available dimension
+                            let availableDims = ["hotel", "chain", "supplier", "apw", "destination", "competitor"].filter(dim =>
+                                semanticLayer.dimensions.some(d => d.toLowerCase() === dim.toLowerCase())
+                            );
+                            if (parsedQuestion.dimensions.length > 0) {
+                                const requested = availableDims.filter(dim =>
+                                    parsedQuestion.dimensions.some(pd => pd.toLowerCase() === dim.toLowerCase())
+                                );
+                                if (requested.length > 0) availableDims = requested;
+                            }
+                            for (const dim of availableDims) {
+                                const result = generateContributionSql(parsedQuestion, semanticLayer, dim);
+                                if (result) {
+                                    multiSqls.push(result.sql);
+                                    multiExplanations.push(`[DIAGNOSIS:${dim}] ${result.explanation}`);
+                                }
+                            }
+                            console.log(`[MULTI-ANALYSIS] DIAGNOSIS SQL generated for dims: [${availableDims.join(", ")}]`);
+                        }
+                    }
+
+                    if (multiSqls.length > 0) {
+                        sql = multiSqls.join("\n---\n");
+                        explanation = "Multi-Analysis (Trend + Root Cause):\n" + multiExplanations.join("\n");
+                        console.log(`[MULTI-ANALYSIS] ${multiSqls.length} SQL statements compiled`);
+                    } else {
+                        console.warn("[MULTI-ANALYSIS] All steps returned null — falling back to LLM");
                         routeType = "LLM";
                     }
                 }
@@ -405,8 +554,8 @@ export class ChatOrchestrator {
                     }
                 }
 
-                // Save to SQL cache (skip ROOT_CAUSE — packs are not cacheable as SQL)
-                if (sql && routeType !== "ROOT_CAUSE" && routeType !== "EXECUTIVE_PRIORITY" && routeType !== "COMPARE_ENTITIES") {
+                // Save to SQL cache (skip routes that produce multi-statement SQL packs)
+                if (sql && routeType !== "ROOT_CAUSE" && routeType !== "MULTI_ANALYSIS" && routeType !== "EXECUTIVE_PRIORITY" && routeType !== "COMPARE_ENTITIES") {
                     await setCachedSql(semanticLayer.datasetType, question.toLowerCase().trim(), sql);
                 }
             }
@@ -426,22 +575,27 @@ export class ChatOrchestrator {
             // ── 4. SQL Validation & Execution ──────────────────────────────────
             let queryResultsList: Record<string, unknown>[][] = [];
             let queryResults: Record<string, unknown>[] = [];
-            
-            if (routeType === "ROOT_CAUSE") {
-                const sqlStatements = sql.split("\n---\n");
+
+            if (routeType === "ROOT_CAUSE" || routeType === "MULTI_ANALYSIS") {
+                // Both ROOT_CAUSE and MULTI_ANALYSIS produce multiple SQL statements
+                // separated by "\n---\n". Execute each in parallel and collect all results.
+                const sqlStatements = sql.split("\n---\n").filter(s => s.trim().length > 0);
+                console.log(`[${routeType}] Executing ${sqlStatements.length} SQL statement(s)`);
 
                 queryResultsList = await Promise.all(
-                    sqlStatements.map(async (statement) => {
+                    sqlStatements.map(async (statement, idx) => {
                         try {
-                            return await executeQuery(statement, tempPath);
+                            const rows = await executeQuery(statement, tempPath);
+                            console.log(`[${routeType}] Statement ${idx + 1}/${sqlStatements.length} → ${rows.length} rows`);
+                            return rows;
                         } catch (err) {
-                            console.warn("[ROOT_CAUSE_QUERY_FAILED]", err);
+                            console.warn(`[${routeType}_QUERY_FAILED] Statement ${idx + 1}:`, err);
                             return [];
                         }
                     })
                 );
 
-                // Deterministic: pick the first non-empty dimension result set for downstream insights
+                // Make the first non-empty result available for single-result consumers
                 queryResults = queryResultsList.find(res => res.length > 0) || [];
             } else if (routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPARE_ENTITIES") {
                 // SQL executed during pack building for these routes
@@ -453,7 +607,7 @@ export class ChatOrchestrator {
                 queryResults = await executeQuery(sql, tempPath);
             }
 
-            const totalFetchedRows = (routeType === "ROOT_CAUSE" || routeType === "EXECUTIVE_PRIORITY")
+            const totalFetchedRows = (routeType === "ROOT_CAUSE" || routeType === "MULTI_ANALYSIS" || routeType === "EXECUTIVE_PRIORITY")
                 ? queryResultsList.reduce((acc, res) => acc + res.length, 0)
                 : queryResults.length;
 
@@ -539,9 +693,12 @@ export class ChatOrchestrator {
                     comparisonPack: comparisonPackResult
                 } as any;
                 console.log("[ORCHESTRATOR] Comparison pack built");
-            } else if (routeType === "ROOT_CAUSE") {
+            } else if (routeType === "ROOT_CAUSE" || routeType === "MULTI_ANALYSIS") {
+                // For MULTI_ANALYSIS: queryResultsList contains results from BOTH the
+                // trend engine AND the contribution engine across all dimensions.
+                // buildRootCausePack processes all result sets and aggregates them.
                 rootCausePack = buildRootCausePack(question, semanticLayer, queryResultsList, competitorContext || undefined);
-                console.log("[ORCHESTRATOR] Root cause pack built");
+                console.log(`[ORCHESTRATOR] ${routeType} pack built from ${queryResultsList.length} result set(s)`);
 
                 const { executeEntityDrilldown } = await import("./insights/entityDrilldownEngine.js");
                 const { generateAttributedRecommendations } = await import("./insights/recommendationAttributionEngine.js");
@@ -578,7 +735,7 @@ export class ChatOrchestrator {
                 let compPrimaryTarget: any = undefined;
                 let drilldowns: any[] = [];
                 let recommendations: any[] = [];
-                
+
                 if (competitiveGaps.length > 0) {
                     const topGap = competitiveGaps[0];
                     compPrimaryTarget = {
@@ -591,7 +748,7 @@ export class ChatOrchestrator {
                         resourceAllocationScore: Math.abs(topGap.gap),
                         polarity: TargetPolarity.RISK,
                         reason: `Largest competitive vulnerability (Gap: ${topGap.gap.toFixed(2)} percentage points)`
-                        ,selectionRationale: `Selected because closing ${topGap.dimension} creates the largest competitive defense opportunity.`
+                        , selectionRationale: `Selected because closing ${topGap.dimension} creates the largest competitive defense opportunity.`
                     };
 
                     const metricName = semanticLayer.metrics[0]?.name || "Win Rate";
@@ -621,7 +778,7 @@ export class ChatOrchestrator {
                     recommendations,
                     competitiveGaps
                 };
-                
+
                 // We fake a minimal rootCausePack so buildClaudeInputPack doesn't crash
                 rootCausePack = {
                     metricName: semanticLayer.metrics[0]?.name || "Metric",
@@ -686,7 +843,7 @@ export class ChatOrchestrator {
             let claudeInputPack = null;
             let recommendations = null;
 
-            if ((routeType === "ROOT_CAUSE" || routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPETITOR_STRATEGY") && rootCausePack && executivePack) {
+            if ((routeType === "ROOT_CAUSE" || routeType === "MULTI_ANALYSIS" || routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPETITOR_STRATEGY") && rootCausePack && executivePack) {
                 responseSource = classifyResponseSource(question);
                 claudeInputPack = buildClaudeInputPack(
                     question,
@@ -694,6 +851,7 @@ export class ChatOrchestrator {
                     executivePack,
                     competitorContext ? competitorContext.competitorName : undefined
                 );
+                console.log(`[CLAUDE_INPUT_PACK] built for routeType=${routeType} | responseSource=${responseSource}`);
                 if (competitorContext) {
                     console.log(
                         `[COMPETITOR_RCA] competitor=${competitorContext.competitorName} | ` +
@@ -752,8 +910,8 @@ export class ChatOrchestrator {
                             : generateRecommendations(claudeInputPack)
                         );
                         logger.info({
-    durationMs: Math.round(performance.now() - claudeStart)
-}, "Claude Recommendation");
+                            durationMs: Math.round(performance.now() - claudeStart)
+                        }, "Claude Recommendation");
                         console.log(`🔥 SONNET_RETURNED`);
                         console.log(`[ROUTE_CLAUDE_OUTPUT] tier=${routerDecision.tier} | operation=${routerDecision.operation} | shouldCallClaude=${routerDecision.shouldCallClaude}`);
                         recommendations = recResult.recommendations;
@@ -800,7 +958,7 @@ export class ChatOrchestrator {
                         console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS_FALLBACK_REC | preview="${narrative.slice(0, 100)}"`);
                     }
 
-                // ── CLAUDE_NARRATIVE: Haiku generates executive narrative ──────
+                    // ── CLAUDE_NARRATIVE: Haiku generates executive narrative ──────
                 } else if (responseSource === "CLAUDE_NARRATIVE" && claudeInputPack) {
                     console.log(`[NARRATIVE_REQUEST] source=CLAUDE_NARRATIVE | routing to narrativeGenerator`);
 
@@ -819,7 +977,7 @@ export class ChatOrchestrator {
                             : generateNarrative(claudeInputPack)
                         );
                         logger.info({
-                        durationMs: Math.round(performance.now() - claudeStart)
+                            durationMs: Math.round(performance.now() - claudeStart)
                         }, "Claude Narrative");
                         narrative = narResult.rawNarrative;
                         responseSource = narResult.claudeUsed ? "CLAUDE_NARRATIVE" : "ANALYTICS";
@@ -834,7 +992,7 @@ export class ChatOrchestrator {
                         console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS_FALLBACK_NAR | preview="${narrative.slice(0, 100)}"`);
                     }
 
-                // ── ANALYTICS: deterministic narrative (no Claude) ─────────────
+                    // ── ANALYTICS: deterministic narrative (no Claude) ─────────────
                 } else if (routeType === "COMPARE_ENTITIES" && comparisonPackResult) {
                     console.log(`[NARRATIVE_REQUEST] source=COMPARE_ENTITIES | deterministic comparison`);
                     narrative = formatComparisonNarrative(comparisonPackResult);
@@ -844,6 +1002,33 @@ export class ChatOrchestrator {
                     narrative = buildExecutivePriorityNarrative(executivePack);
                     validateExecutivePriorityNarrative(executivePack, narrative, question);
                     console.log(`[NARRATIVE_VALUE_SET] source=EXECUTIVE_PRIORITY | preview="${narrative.slice(0, 100)}"`);
+                } else if (routeType === "MULTI_ANALYSIS" && claudeInputPack && executivePack) {
+                    // Multi-Analysis: ExecutivePack is built from Trend + Contribution results.
+                    // Route through Claude narrative generator so the pack fields drive the
+                    // response instead of raw SQL rows.
+                    console.log(`[NARRATIVE_REQUEST] source=MULTI_ANALYSIS | routing to narrativeGenerator`);
+                    try {
+                        const claudeStart = performance.now();
+                        const narResult = await (opts?.onClaudeToken
+                            ? generateNarrativeStream(claudeInputPack, {
+                                onToken: opts.onClaudeToken,
+                                abortSignal: opts.abortSignal
+                            })
+                            : generateNarrative(claudeInputPack)
+                        );
+                        logger.info({
+                            durationMs: Math.round(performance.now() - claudeStart)
+                        }, "Claude Narrative (MULTI_ANALYSIS)");
+                        narrative = narResult.rawNarrative;
+                        responseSource = narResult.claudeUsed ? "CLAUDE_NARRATIVE" : "ANALYTICS";
+                        console.log(`[NARRATIVE_VALUE_SET] source=MULTI_ANALYSIS | claudeUsed=${narResult.claudeUsed} | chars=${narrative.length} | preview="${narrative.slice(0, 100)}"`);
+                    } catch (err: any) {
+                        console.error(`[MULTI_ANALYSIS_NARRATIVE_FAILED] ${err.message} — falling back to ExecutivePack summary`);
+                        // Deterministic fallback: build directly from ExecutivePack fields
+                        narrative = buildExecutivePriorityNarrative(executivePack);
+                        responseSource = "ANALYTICS";
+                        console.log(`[NARRATIVE_VALUE_SET] source=MULTI_ANALYSIS_FALLBACK | preview="${narrative.slice(0, 100)}"`);
+                    }
                 } else {
                     console.log(`[NARRATIVE_REQUEST] source=ANALYTICS | deterministic`);
                     narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));

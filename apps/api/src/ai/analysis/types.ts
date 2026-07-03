@@ -1,0 +1,9 @@
+export enum AnalysisType {
+    PERFORMANCE = "PERFORMANCE",
+    COMPARISON = "COMPARISON",
+    DIAGNOSIS = "DIAGNOSIS",
+    TREND = "TREND",
+    OPPORTUNITY = "OPPORTUNITY",
+    RISK = "RISK",
+    FORECAST = "FORECAST",
+}

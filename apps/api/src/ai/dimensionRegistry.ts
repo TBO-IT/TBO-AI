@@ -1,11 +1,11 @@
+import { getDimensionMapping, resolvePhysicalColumn as executionResolvePhysicalColumn } from "./execution/ExecutionRegistry.js";
+
 /**
  * Dimension Registry
  *
  * Single source of truth for every business dimension in the platform.
- * Maps canonical dimension keys → physical schema columns + valid values.
- *
- * All components (Analyzer, Validator, Router, Template Engine) must reference
- * this registry instead of hard-coding column names or bucket values.
+ * Maps canonical dimension keys → valid values.
+ * Physical schema mapping has been moved to ExecutionRegistry.
  */
 export interface DimensionDefinition {
     /** Canonical key used internally everywhere (e.g. "apw") */
@@ -31,88 +31,48 @@ export interface DimensionDefinition {
     filterType: "exact" | "ilike";
 }
 
-export const DIMENSION_REGISTRY: Record<string, DimensionDefinition> = {
-
-    destination: {
-        canonicalKey: "destination",
-        label: "Destination",
-        physicalColumns: ["destination"],
-        filterType: "ilike"
-    },
-
-    supplier: {
-        canonicalKey: "supplier",
-        label: "Supplier",
-        physicalColumns: ["suppliername", "supplier"],
-        filterType: "ilike"
-    },
-
-    hotel: {
-        canonicalKey: "hotel",
-        label: "Hotel",
-        physicalColumns: ["tbo_hotelname", "hotel name", "Hotel name"],
-        filterType: "ilike"
-    },
-
-    chain: {
-        canonicalKey: "chain",
-        label: "Hotel Chain",
-        physicalColumns: ["tbo_chainname", "chain", "chainname"],
-        filterType: "ilike"
-    },
-
-    city: {
-        canonicalKey: "city",
-        label: "City",
-        physicalColumns: ["city", "City"],
-        filterType: "ilike"
-    },
-
-    country: {
-        canonicalKey: "country",
-        label: "Country",
-        physicalColumns: ["country", "Country"],
-        filterType: "ilike"
-    },
-
-    hotel_id: {
-        canonicalKey: "hotel_id",
-        label: "Hotel ID",
-        physicalColumns: ["hotel_id", "Hotel Id"],
-        filterType: "exact"
-    },
-
+// Temporary internal structure for valid values and labels
+const DIMENSION_BUSINESS_PROPS: Record<string, { label: string, validValues?: string[] }> = {
+    destination: { label: "Destination" },
+    supplier: { label: "Supplier" },
+    hotel: { label: "Hotel" },
+    chain: { label: "Hotel Chain" },
+    city: { label: "City" },
+    country: { label: "Country" },
+    hotel_id: { label: "Hotel ID" },
     apw: {
-        canonicalKey: "apw",
         label: "Advanced Purchase Window",
-        physicalColumns: ["apw_bucket", "apw_bucket_new"],
-        validValues: [
-            "< 10 days",
-            "11-30 days",
-            "31-45 days",
-            "46-60 days",
-            "61-90 days",
-            "90+ days",
-            "Other"
-        ],
-        filterType: "exact"
+        validValues: ["< 10 days", "11-30 days", "31-45 days", "46-60 days", "61-90 days", "90+ days", "Other"]
     },
-
     competitive_status: {
-        canonicalKey: "competitive_status",
         label: "Competitive Status",
-        physicalColumns: ["Competitive Status", "competitive_status"],
-        validValues: ["Winning", "Losing", "Equal"],
-        filterType: "exact"
+        validValues: ["Winning", "Losing", "Equal"]
     },
-
-    thirdparty: {
-        canonicalKey: "thirdparty",
-        label: "Competitor",
-        physicalColumns: ["thirdparty", "third_party", "competitor"],
-        filterType: "exact"
-    }
+    thirdparty: { label: "Competitor" }
 };
+
+/**
+ * Builds the backward-compatible dimension registry by merging business 
+ * props with execution props.
+ */
+function buildLegacyDimensionRegistry(): Record<string, DimensionDefinition> {
+    const registry: Record<string, DimensionDefinition> = {};
+    for (const [key, props] of Object.entries(DIMENSION_BUSINESS_PROPS)) {
+        const mapping = getDimensionMapping(key);
+        if (mapping) {
+            registry[key] = {
+                canonicalKey: key,
+                label: props.label,
+                validValues: props.validValues,
+                physicalColumns: mapping.physicalColumns,
+                filterType: mapping.filterType
+            };
+        }
+    }
+    return registry;
+}
+
+export const DIMENSION_REGISTRY = buildLegacyDimensionRegistry();
 
 /**
  * Resolves the canonical key to the first matching physical column
@@ -122,17 +82,7 @@ export function resolvePhysicalColumn(
     canonicalKey: string,
     schemaColumns: string[]
 ): string | null {
-    const def = DIMENSION_REGISTRY[canonicalKey];
-    if (!def) return null;
-
-    const schemaLower = schemaColumns.map(c => c.toLowerCase());
-
-    for (const physCol of def.physicalColumns) {
-        const idx = schemaLower.indexOf(physCol.toLowerCase());
-        if (idx !== -1) return schemaColumns[idx]; // Return original casing
-    }
-
-    return null;
+    return executionResolvePhysicalColumn(canonicalKey, schemaColumns);
 }
 
 /**

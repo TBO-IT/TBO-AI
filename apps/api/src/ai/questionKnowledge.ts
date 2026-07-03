@@ -20,7 +20,9 @@ export const METRIC_SYNONYMS: SynonymEntry[] = [
         type: "metric",
         synonyms: [
             "average price difference", "avg price diff", "price difference",
-            "price gap", "average price gap", "mean price diff"
+            "price gap", "average price gap", "mean price diff",
+            "winning margin", "winning-margin", "losing margin", "losing-margin",
+            "pricing gap", "markup"
         ]
     },
     {
@@ -62,7 +64,8 @@ export const METRIC_SYNONYMS: SynonymEntry[] = [
         type: "metric",
         synonyms: [
             "bookings", "total bookings", "number of bookings",
-            "booking count", "reservations", "booking volume", "volume"
+            "booking count", "reservations", "booking volume", "volume",
+            "volume share", "volume-share"
         ]
     },
     {
@@ -270,7 +273,8 @@ export const INTENT_SIGNALS = {
     SUMMARY: [
         "overview", "summary", "summarize",
         "total", "overall", "all",
-        "show me", "what is", "how much", "how many"
+        "show me", "what is", "how much", "how many",
+        "show", "list", "display", "give me", "give", "get"
     ],
     COMPETITOR_STRATEGY: [
         "beat",
@@ -318,9 +322,13 @@ export const TIME_SIGNALS = [
     "last month", "this month", "last week", "this week",
     "last quarter", "this quarter", "last year", "this year",
     "yesterday", "today",
+    "previous week", "past week", "previous month", "past month",
+    "previous quarter", "past quarter", "previous year", "past year",
     // Comparison periods
-    "month over month", "week over week", "year over year",
-    "mom", "wow", "yoy", "qoq"
+    "month over month", "week over week", "year over year", "quarter over quarter",
+    "month-over-month", "week-over-week", "year-over-year", "quarter-over-quarter",
+    "mom", "wow", "yoy", "qoq",
+    "w-o-w", "m-o-m", "y-o-y", "q-o-q"
 ];
 
 // ─── Dataset Metric Availability ──────────────────────────────────────────────

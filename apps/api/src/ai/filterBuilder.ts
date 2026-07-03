@@ -55,7 +55,10 @@ export function buildFilterCondition(
     }
 
     // ── All other filters — resolve physical column from schema ────────────────
-    const physicalCol = resolvePhysicalColumn(filter.dimension, schemaColumns);
+    const isAbs = filter.dimension.startsWith("abs_");
+    const cleanDimension = isAbs ? filter.dimension.slice(4) : filter.dimension;
+
+    const physicalCol = resolvePhysicalColumn(cleanDimension, schemaColumns);
 
     if (!physicalCol) {
         console.warn(
@@ -64,9 +67,17 @@ export function buildFilterCondition(
         return null;
     }
 
-    const dim = getDimension(filter.dimension);
+    const dim = getDimension(cleanDimension);
     const operator = filter.operator;
-    const col = `"${physicalCol}"`;
+    let col = `"${physicalCol}"`;
+    if (isAbs) {
+        col = `ABS(${col})`;
+    }
+
+    // BETWEEN operator (must not quote values since they contain AND keyword, e.g. "1 AND 3")
+    if (operator === "BETWEEN") {
+        return `${col} BETWEEN ${filter.value}`;
+    }
 
     // Numeric values must NOT be quoted in SQL
     if (typeof filter.value === "number") {
@@ -101,15 +112,6 @@ export function buildFilterCondition(
 /**
  * Builds a full WHERE clause string from an array of QuestionFilters.
  * Returns empty string if no filters or no conditions could be resolved.
- *
- * This function contains NO dimension-specific logic — it only:
- *  1. Iterates through filters
- *  2. Delegates to buildFilterCondition()
- *  3. Collects non-null conditions
- *  4. Returns "WHERE cond1 AND cond2 AND ..."
- *
- * @param filters        The structured filters from QuestionAnalysis
- * @param schemaColumns  Physical column names from the actual dataset schema
  */
 export function buildWhereClause(
     filters: QuestionFilter[],
@@ -117,9 +119,51 @@ export function buildWhereClause(
 ): string {
     if (filters.length === 0) return "";
 
-    const conditions: string[] = [];
+    // 1. Group equality-like filters (=, ILIKE, IN) by dimension to compile them into IN clauses
+    const groupedFilters: Record<string, QuestionFilter[]> = {};
+    const otherFilters: QuestionFilter[] = [];
 
     for (const filter of filters) {
+        const isEquality = ["=", "ILIKE", "IN"].includes(filter.operator);
+        if (isEquality) {
+            if (!groupedFilters[filter.dimension]) {
+                groupedFilters[filter.dimension] = [];
+            }
+            groupedFilters[filter.dimension].push(filter);
+        } else {
+            otherFilters.push(filter);
+        }
+    }
+
+    const conditions: string[] = [];
+
+    // Process grouped equality filters
+    for (const [dim, list] of Object.entries(groupedFilters)) {
+        if (list.length === 1) {
+            const condition = buildFilterCondition(list[0], schemaColumns);
+            if (condition) conditions.push(condition);
+        } else {
+            // Multiple entity values for the same dimension — combine into a single IN clause!
+            const physicalCol = resolvePhysicalColumn(dim, schemaColumns);
+            if (physicalCol) {
+                const col = `"${physicalCol}"`;
+                const values = list
+                    .map(f => `'${escapeString(String(f.value).trim())}'`)
+                    .join(", ");
+                conditions.push(`${col} IN (${values})`);
+                console.log(`[FilterBuilder] Applied grouped entity IN clause: ${col} IN (${values})`);
+            } else {
+                // Fallback to individual compilation if column mapping fails
+                for (const f of list) {
+                    const condition = buildFilterCondition(f, schemaColumns);
+                    if (condition) conditions.push(condition);
+                }
+            }
+        }
+    }
+
+    // Process other filters (ranges, etc.)
+    for (const filter of otherFilters) {
         const condition = buildFilterCondition(filter, schemaColumns);
         if (condition) {
             conditions.push(condition);

@@ -1,5 +1,6 @@
 import { QuestionAnalysis } from "../../ai/questionTypes.js";
 import { EnrichedSemanticLayer } from "../../ai/semanticLayer.js";
+import { resolveOrDiscardEntities } from "../../ai/entityResolver.js";
 
 export interface CompetitiveGap {
     dimension: string;
@@ -13,6 +14,13 @@ export function generateCompetitorStrategySql(
     analysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer
 ): { sql: string; explanation: string; competitorName: string } | null {
+    // Resolve/discard placeholder entity filters
+    analysis.filters = resolveOrDiscardEntities(
+        analysis.filters,
+        analysis.focus,
+        semanticLayer.dimensions
+    );
+
     // 1. Identify the competitor from filters (usually an _entity or supplier filter)
     const competitorFilter = analysis.filters.find(f => f.dimension === "_entity" || f.dimension === "supplier");
     

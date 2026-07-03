@@ -27,7 +27,9 @@ export function validateQueryPreExecution(
     // 1. Validate metrics exist in the semantic layer
     for (const metric of analysis.metrics) {
         const found = semanticLayer.metrics.some(
-            m => m.name.toLowerCase() === metric.toLowerCase()
+            m => m.name.toLowerCase() === metric.toLowerCase() ||
+                 m.name.toLowerCase().replace(/\s+/g, "_") === metric.toLowerCase() ||
+                 m.name.toLowerCase() === metric.toLowerCase().replace(/_/g, " ")
         );
         if (!found) {
             errors.push(`Unknown metric: "${metric}". This dataset does not contain a metric called "${metric}".`);

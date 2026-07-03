@@ -12,7 +12,13 @@
     "test:connection": "doppler run -- tsx src/scripts/testClaudeConnection.ts",
     "test:narrative": "doppler run -- tsx src/scripts/testNarrative.ts",
     "test:recommendations": "doppler run -- tsx src/scripts/testRecommendations.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:architecture": "tsx src/tests/architectureSmokeTest.ts",
+    "test:selector": "tsx src/tests/analysisSelectorTest.ts",
+    "test:context": "tsx src/tests/contextSmokeTest.ts",
+    "test:pipeline": "tsx src/tests/analysisPipelineTest.ts",
+    "test:objectives": "tsx src/tests/objectiveRegistryTest.ts",
+    "test:planner": "tsx src/tests/analysisPlannerSmokeTest.ts"
   },
   "keywords": [],
   "author": "",

@@ -2,6 +2,7 @@ import { QuestionAnalysis, QuestionValidationResult } from "./questionTypes.js";
 import { DATASET_METRIC_AVAILABILITY } from "./questionKnowledge.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { isValidFilterValue, getDimension } from "./dimensionRegistry.js";
+import { METRIC_SQL_FORMULAS } from "./execution/ExecutionRegistry.js";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -88,7 +89,14 @@ export function validateQuestion(
         // Skip generic entity filters — they can't be validated
         if (filter.dimension === "_entity" || filter.dimension === "time") continue;
 
-        const dimDef = getDimension(filter.dimension);
+        const cleanDimension = filter.dimension.startsWith("abs_") ? filter.dimension.slice(4) : filter.dimension;
+        const dimDef = getDimension(cleanDimension);
+        const isMetricFilter = Object.keys(METRIC_SQL_FORMULAS).includes(cleanDimension);
+
+        if (isMetricFilter) {
+            // Recognized metric filter — valid, no value allowlist to check
+            continue;
+        }
 
         if (!dimDef) {
             // Unknown canonical key — warn but don't hard-fail (may be a future dimension)
@@ -97,7 +105,7 @@ export function validateQuestion(
         }
 
         // Validate the value against the allowlist (if one exists)
-        if (!isValidFilterValue(filter.dimension, String(filter.value))) {
+        if (!isValidFilterValue(cleanDimension, String(filter.value))) {
             const validList = dimDef.validValues?.join(", ") ?? "any";
             errors.push(
                 `Invalid filter value '${filter.value}' for dimension '${dimDef.label}'. ` +

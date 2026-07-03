@@ -13,6 +13,7 @@ import { validateCsv } from "../services/csvValidator.js";
 import { ValidationError } from "../errors/ValidationError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { logger } from "../lib/logger.js";
+import { buildEntityIndex } from "../ai/entity/EntityIndexBuilder.js";
 
 const router = Router();
 
@@ -54,22 +55,22 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const upload = multer({
     dest: "uploads/",
-    limits : {
+    limits: {
         fileSize: 20 * 1024 * 1024, // 20 MB
     },
 
-   fileFilter(req, file, cb) {
-    const extension = path.extname(file.originalname).toLowerCase();
+    fileFilter(req, file, cb) {
+        const extension = path.extname(file.originalname).toLowerCase();
 
-    if (!ALLOWED_EXTENSIONS.has(extension)) {
-        return cb(new Error("Invalid file extension. Only CSV files are allowed."));
-    }
+        if (!ALLOWED_EXTENSIONS.has(extension)) {
+            return cb(new Error("Invalid file extension. Only CSV files are allowed."));
+        }
 
-    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-        return cb(new Error("Invalid file type. Only CSV files are allowed."));
-    }
+        if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+            return cb(new Error("Invalid file type. Only CSV files are allowed."));
+        }
 
-    cb(null, true);
+        cb(null, true);
     },
 });
 
@@ -124,6 +125,9 @@ router.post(
                 filePath
             );
 
+            const entityIndex =
+                await buildEntityIndex(filePath);
+
             const redisKey = `dataset:${dataset.id}`;
 
             await redis.set(
@@ -144,6 +148,6 @@ router.post(
             await safeUnlink(filePath);
         }
     }
-));
+    ));
 
 export default router;

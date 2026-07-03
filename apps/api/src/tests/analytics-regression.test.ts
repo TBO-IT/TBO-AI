@@ -56,10 +56,10 @@ describe("Route Validation", () => {
         assert.equal(routing.route, "TREND");
     });
 
-    it("routes 'compare affiliate vs synxis' to COMPARISON", () => {
+    it("routes 'compare affiliate vs synxis' to COMPARE_ENTITIES", () => {
         const analysis = analyzeQuestion("compare affiliate vs synxis");
         const routing = routeQuery(analysis, sl);
-        assert.equal(routing.route, "COMPARISON");
+        assert.equal(routing.route, "COMPARE_ENTITIES");
     });
 
     it("routes 'which hotels contribute most to win rate' to CONTRIBUTION", () => {

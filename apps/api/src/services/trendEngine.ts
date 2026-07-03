@@ -1,6 +1,7 @@
 import { QuestionAnalysis } from "../ai/questionTypes.js";
 import { EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { buildWhereClause } from "../ai/filterBuilder.js";
+import { resolveOrDiscardEntities } from "../ai/entityResolver.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -209,6 +210,12 @@ export function generateTrendSql(
     analysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer
 ): TrendResult | null {
+    // Resolve/discard placeholder entity filters
+    analysis.filters = resolveOrDiscardEntities(
+        analysis.filters,
+        analysis.focus,
+        semanticLayer.dimensions
+    );
 
     // ── 1. Resolve metric ──────────────────────────────────────────────────────
     const metric = resolveMetric(analysis, semanticLayer);

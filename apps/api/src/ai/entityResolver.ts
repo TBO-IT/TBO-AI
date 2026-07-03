@@ -145,3 +145,51 @@ export function dedupeFilters(filters: QuestionFilter[]): QuestionFilter[] {
         return true;
     });
 }
+
+/**
+ * Resolves or discards intermediate _entity filters.
+ * Discards them if there is a canonical filter for the same value.
+ * Otherwise, maps them to the primary focus dimension or the first resolved canonical dimension.
+ */
+export function resolveOrDiscardEntities(
+    filters: QuestionFilter[],
+    focus: string | null | undefined,
+    canonicalDims: string[]
+): QuestionFilter[] {
+    const canonicalFilters = filters.filter(f => f.dimension !== "_entity");
+    const canonicalValues = new Set(canonicalFilters.map(f => String(f.value).toLowerCase()));
+
+    let entityFilters = filters.filter(f => f.dimension === "_entity");
+    
+    // Discard any _entity filter whose value is already represented by a canonical filter (case-insensitive)
+    entityFilters = entityFilters.filter(ef => !canonicalValues.has(String(ef.value).toLowerCase()));
+
+    const resolvedPlaceholderFilters: QuestionFilter[] = [];
+    const presentCanonicalDims = Array.from(new Set(canonicalFilters.map(f => f.dimension)));
+
+    for (const ef of entityFilters) {
+        const val = String(ef.value);
+        let resolvedDim: string | null = null;
+
+        // Infer dimension
+        if (focus && canonicalDims.includes(focus)) {
+            resolvedDim = focus;
+        } else if (presentCanonicalDims.length > 0) {
+            resolvedDim = presentCanonicalDims[0];
+        } else if (canonicalDims.includes("hotel")) {
+            resolvedDim = "hotel";
+        } else if (canonicalDims.length > 0) {
+            resolvedDim = canonicalDims[0];
+        }
+
+        if (resolvedDim) {
+            resolvedPlaceholderFilters.push({
+                dimension: resolvedDim,
+                operator: "=",
+                value: val
+            });
+        }
+    }
+
+    return [...canonicalFilters, ...resolvedPlaceholderFilters];
+}

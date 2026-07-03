@@ -7,21 +7,22 @@ import {
 } from "./questionKnowledge.js";
 import { DIMENSION_REGISTRY } from "./dimensionRegistry.js";
 import { buildTimeFilter } from "./timeFilterExtractor.js";
+import { normalizeBusinessSemantics } from "./businessNormalizer.js";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Normalizes text for matching: lowercase, collapse whitespace, remove punctuation
- * but keep hyphens (needed for "look-to-book") and +/< chars (needed for APW buckets).
+ * but keep hyphens (needed for "look-to-book"), decimals, =, and +/< chars (needed for APW buckets).
  */
 function normalize(text: string): string {
-    return text.toLowerCase().replace(/[^\w\s\-+<>]/g, " ").replace(/\s+/g, " ").trim();
+    return text.toLowerCase().replace(/[^\w\s\-+<>=\.]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /**
  * Returns true if the phrase appears as a whole-word match in the normalized text.
  */
 function containsPhrase(text: string, phrase: string): boolean {
-    const escaped = phrase.replace(/[-+<>]/g, "\\$&").replace(/[.*?^${}()|[\]\\]/g, "\\$&");
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\\-]/g, "\\$&");
     const pattern = new RegExp(`(?:^|\\s|\\b)${escaped}(?:\\s|$|\\b)`, "i");
     return pattern.test(text);
 }
@@ -107,7 +108,10 @@ function extractStatusFilters(question: string): QuestionFilter[] {
 
     const qLower = question.toLowerCase();
     for (const status of statusDef.validValues) {
-        if (qLower.includes(status.toLowerCase())) {
+        // Use whole-word matching so "losing" inside "not losing" or compound phrases
+        // is still detected, but the match is anchored to word boundaries.
+        const pattern = new RegExp(`(?:^|\\s|\\b)${status.toLowerCase()}(?:\\s|$|\\b)`, "i");
+        if (pattern.test(qLower)) {
             filters.push({ dimension: "competitive_status", operator: "=", value: status });
         }
     }
@@ -131,7 +135,8 @@ const STOP_WORDS = new Set([
     "show", "compare", "what", "why", "how", "which", "who", "when", "where",
     "between", "across", "over", "under", "above", "below", "during",
     "top", "bottom", "best", "worst", "high", "low", "last", "this", "next",
-    "give", "list", "tell", "find", "get", "if", "roi", "apw"
+    "give", "list", "tell", "find", "get", "if", "roi", "apw",
+    "me", "my", "we", "us", "our", "i", "you", "he", "she", "they", "it", "them", "their", "your"
 ]);
 
 const TIME_COMPARISON_TERMS = new Set([
@@ -148,6 +153,17 @@ const TIME_COMPARISON_TERMS = new Set([
     "month-over-month",
     "year-over-year"
 ]);
+
+function stripStopWords(phrase: string): string {
+    const words = phrase.trim().split(/\s+/);
+    while (words.length > 0 && STOP_WORDS.has(words[0].toLowerCase())) {
+        words.shift();
+    }
+    while (words.length > 0 && STOP_WORDS.has(words[words.length - 1].toLowerCase())) {
+        words.pop();
+    }
+    return words.join(" ");
+}
 
 function extractNamedEntityFilters(originalQuestion: string): QuestionFilter[] {
     const filters: QuestionFilter[] = [];
@@ -197,6 +213,54 @@ function extractNamedEntityFilters(originalQuestion: string): QuestionFilter[] {
         }
     }
     flush();
+
+    // ── FALLBACK / EXTRA: Lowercase lists of entities separated by and/or/vs/comma ──
+    // Canonical competitive status words — must never be treated as entity tokens.
+    const STATUS_WORDS = new Set(
+        (DIMENSION_REGISTRY["competitive_status"]?.validValues ?? ["Winning", "Losing", "Equal"])
+            .map(v => v.toLowerCase())
+    );
+
+    /**
+     * Strips canonical status value words from a segment so that
+     * "bangkok losing" becomes "bangkok" and is emitted as a destination entity,
+     * while the status filter is independently produced by extractStatusFilters().
+     */
+    function stripStatusWords(phrase: string): string {
+        return phrase
+            .split(/\s+/)
+            .filter(word => !STATUS_WORDS.has(word.toLowerCase()))
+            .join(" ")
+            .trim();
+    }
+
+    const qLower = originalQuestion.toLowerCase();
+    const segments = qLower.split(/\s*(?:,|\band\b|\bor\b|\bvs\b|\bversus\b)\s*/i);
+    for (const seg of segments) {
+        // First strip punctuation and stop words, then also strip status value words
+        const withoutPunct = seg.replace(/[^a-zA-Z0-9\s]/g, "").trim();
+        const withoutStop = stripStopWords(withoutPunct);
+        const cleaned = stripStatusWords(withoutStop);
+        if (cleaned) {
+            const normalized = cleaned.toLowerCase();
+            const wordCount = cleaned.split(/\s+/).length;
+
+            const isStop = STOP_WORDS.has(normalized);
+            const isNum = /^\d+(?:\.\d+)?$/.test(normalized);
+            const isTimeRef = TIME_COMPARISON_TERMS.has(normalized);
+
+            // Exclude if the segment contains any known metric or dimension synonym as a word
+            const containsMetricOrDim =
+                METRIC_SYNONYMS.some(e => e.synonyms.some(s => normalized === s || normalized.includes(" " + s) || normalized.includes(s + " "))) ||
+                DIMENSION_SYNONYMS.some(e => e.synonyms.some(s => normalized === s || normalized.includes(" " + s) || normalized.includes(s + " ")));
+
+            if (!isStop && !containsMetricOrDim && !isNum && !isTimeRef && wordCount <= 3) {
+                if (!filters.some(f => String(f.value).toLowerCase() === normalized)) {
+                    filters.push({ dimension: "_entity", operator: "ILIKE", value: cleaned });
+                }
+            }
+        }
+    }
 
     return filters;
 }
@@ -374,9 +438,178 @@ function detectIntent(normalizedQuestion: string): QuestionIntent {
         return "BREAKDOWN";
     }
 
+    // ── 8.5. LIST ─────────────────────────────────────────────────────────────
+    const listVerbs = ["show", "list", "display", "give me", "fetch", "give"];
+    const startsWithListVerb = listVerbs.some(verb => q.trim().startsWith(verb + " ") || q.trim() === verb);
+    const hasFocusNoun = /\b(hotels?|properties|property|suppliers?|vendors?|providers?|otas?|chains?|brands?|groups?|destinations?|markets?|locations?|cities|city|regions?|competitors?|apw|lead\s+time|purchase\s+window)\b/i.test(q);
+
+    let hasMetricSynonym = false;
+    for (const entry of METRIC_SYNONYMS) {
+        for (const synonym of entry.synonyms) {
+            if (containsPhrase(q, synonym)) {
+                hasMetricSynonym = true;
+                break;
+            }
+        }
+        if (hasMetricSynonym) break;
+    }
+
+    const rangeFilters = extractRangeFilters(q, normalizedQuestion);
+    const hasRangeFilters = rangeFilters.length > 0;
+    const isAggMetric = hasMetricSynonym && !hasRangeFilters;
+
+    if ((startsWithListVerb && hasFocusNoun && !isAggMetric) || (hasFocusNoun && !isAggMetric && !/\b(why|trend|compare|vs|versus)\b/.test(q))) {
+        console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: LIST_RULE\n  INTENT:       LIST`);
+        return "LIST";
+    }
+
     // ── 9. SUMMARY (default fallback) ─────────────────────────────────────────
     console.log(`[INTENT_DETECTOR]\n  QUESTION:     ${normalizedQuestion}\n  MATCHED_RULE: DEFAULT_FALLBACK\n  INTENT:       SUMMARY`);
     return "SUMMARY";
+}
+
+/**
+ * Extractor 5: Range Filters
+ * Detects numeric range expressions like "between X and Y", "X to Y", "greater than X", etc.
+ * Associates them with the closest dimension or metric synonym in the question.
+ */
+function extractRangeFilters(question: string, normalizedQuestion: string): QuestionFilter[] {
+    const filters: QuestionFilter[] = [];
+    const q = normalizedQuestion.toLowerCase();
+
+    // Order from most specific/complex to least to avoid partial match overlaps
+    const patterns = [
+        {
+            regex: /\bbetween\s+(\d+(?:\.\d+)?)\s+and\s+(\d+(?:\.\d+)?)\b/g,
+            type: "between"
+        },
+        {
+            regex: /\b(\d+(?:\.\d+)?)\s+to\s+(\d+(?:\.\d+)?)\b/g,
+            type: "between"
+        },
+        {
+            regex: /(?:greater\s+than\s+or\s+equal\s+to|>=)\s*(\d+(?:\.\d+)?)\b/g,
+            type: ">="
+        },
+        {
+            regex: /(?:less\s+than\s+or\s+equal\s+to|<=)\s*(\d+(?:\.\d+)?)\b/g,
+            type: "<="
+        },
+        {
+            regex: /(?:greater\s+than|above|>(?!=))\s*(\d+(?:\.\d+)?)\b/g,
+            type: ">"
+        },
+        {
+            regex: /(?:less\s+than|below|<(?!=))\s*(\d+(?:\.\d+)?)\b/g,
+            type: "<"
+        }
+    ];
+
+    const targets: { canonicalKey: string; index: number }[] = [];
+
+    for (const entry of METRIC_SYNONYMS) {
+        for (const synonym of entry.synonyms) {
+            let idx = q.indexOf(synonym);
+            while (idx !== -1) {
+                targets.push({ canonicalKey: entry.canonicalKey, index: idx });
+                idx = q.indexOf(synonym, idx + 1);
+            }
+        }
+    }
+
+    for (const entry of DIMENSION_SYNONYMS) {
+        for (const synonym of entry.synonyms) {
+            let idx = q.indexOf(synonym);
+            while (idx !== -1) {
+                targets.push({ canonicalKey: entry.canonicalKey, index: idx });
+                idx = q.indexOf(synonym, idx + 1);
+            }
+        }
+    }
+
+    for (const pattern of patterns) {
+        let match;
+        pattern.regex.lastIndex = 0;
+        while ((match = pattern.regex.exec(q)) !== null) {
+            const matchIndex = match.index;
+            const val1 = Number(match[1]);
+            const val2 = match[2] ? Number(match[2]) : undefined;
+
+            let closestDim = "apw"; // default fallback
+            let minDistance = Infinity;
+
+            for (const target of targets) {
+                const dist = Math.abs(target.index - matchIndex);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestDim = target.canonicalKey;
+                }
+            }
+
+            if (pattern.type === "between" && val2 !== undefined) {
+                filters.push({ dimension: closestDim, operator: "BETWEEN", value: `${val1} AND ${val2}` });
+            } else if (pattern.type === ">=") {
+                filters.push({ dimension: closestDim, operator: ">=", value: val1 });
+            } else if (pattern.type === "<=") {
+                filters.push({ dimension: closestDim, operator: "<=", value: val1 });
+            } else if (pattern.type === ">") {
+                filters.push({ dimension: closestDim, operator: ">", value: val1 });
+            } else if (pattern.type === "<") {
+                filters.push({ dimension: closestDim, operator: "<", value: val1 });
+            }
+        }
+    }
+
+    return filters;
+}
+
+/**
+ * Detects the primary business object/focus of the question.
+ */
+function detectPrimaryBusinessObject(
+    question: string,
+    dimensions: string[],
+    filters: QuestionFilter[]
+): string | null {
+    const q = question.toLowerCase();
+
+    // 1. Explicit keyword checks (chains/suppliers before hotel to avoid compound word mismatch)
+    if (/\bchains?\b|\bbrands?\b|\bgroups?\b/.test(q)) return "chain";
+    if (/\bsuppliers?\b|\bvendors?\b|\bproviders?\b|\botas?\b/.test(q)) return "supplier";
+    if (/\bhotels?\b|\bproperties\b|\bproperty\b/.test(q)) return "hotel";
+    if (/\bdestinations?\b|\bmarkets?\b|\blocations?\b|\bcities\b|\bcity\b|\bregions?\b/.test(q)) return "destination";
+    if (/\bcompetitors?\b|\bthird\s+part(y|ies)\b|\bthird-part(y|ies)\b/.test(q)) return "competitor";
+    if (/\bapw\b|\blead\s+time\b|\bpurchase\s+window\b/.test(q)) return "apw";
+
+    // 2. Lookup well-known entities in TBO dataset
+    const chainKeywords = ["marriott", "hilton", "hyatt", "accor", "ihg", "sheraton", "westin", "holiday inn", "premier inn"];
+    const destKeywords = ["london", "paris", "phuket", "tokyo", "new york", "dubai", "pattaya"];
+    const supplierKeywords = ["tripjack", "otilla", "booking.com", "expedia", "agoda"];
+    const competitorKeywords = ["affiliate", "synxis"];
+
+    if (chainKeywords.some(kw => q.includes(kw))) return "chain";
+    if (destKeywords.some(kw => q.includes(kw))) return "destination";
+    if (supplierKeywords.some(kw => q.includes(kw))) return "supplier";
+    if (competitorKeywords.some(kw => q.includes(kw))) return "competitor";
+
+    // 3. Fallback to parsed dimensions
+    if (dimensions.includes("hotel")) return "hotel";
+    if (dimensions.includes("supplier")) return "supplier";
+    if (dimensions.includes("chain")) return "chain";
+    if (dimensions.includes("destination") || dimensions.includes("city") || dimensions.includes("country")) return "destination";
+    if (dimensions.includes("apw")) return "apw";
+    
+    // Check filter dimensions
+    for (const f of filters) {
+        if (f.dimension === "hotel") return "hotel";
+        if (f.dimension === "supplier") return "supplier";
+        if (f.dimension === "chain") return "chain";
+        if (f.dimension === "destination" || f.dimension === "city" || f.dimension === "country") return "destination";
+        if (f.dimension === "apw") return "apw";
+        if (f.dimension === "thirdparty") return "competitor";
+    }
+
+    return null;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -392,17 +625,19 @@ export function analyzeQuestion(question: string): QuestionAnalysis {
 
     const metrics = extractMetrics(normalizedQuestion);
     const dimensions = extractDimensions(normalizedQuestion);
-    const filters = [
+    
+    // Extract range filters
+    const rangeFilters = extractRangeFilters(question, normalizedQuestion);
 
+    const filters = [
         ...extractAllFilters(
             question,
             normalizedQuestion
         ),
-
         ...extractTimeFilters(
             question
-        )
-
+        ),
+        ...rangeFilters
     ];
     console.log(
         "TIME FILTERS:",
@@ -422,21 +657,27 @@ export function analyzeQuestion(question: string): QuestionAnalysis {
         }
     }
 
+    // Detect primary focus
+    const focus = detectPrimaryBusinessObject(question, dimensions, filters);
+
     const analysis: QuestionAnalysis = {
         metrics,
         dimensions,
         filters,
         timeReferences: timeRefs,
         intent,
-        originalQuestion: question
+        originalQuestion: question,
+        focus
     };
 
+    const normalizedAnalysis = normalizeBusinessSemantics(analysis);
+
     console.log(
-        `[ANALYSIS] Intent: ${intent} | Metrics: [${metrics.join(",")}] | ` +
-        `Dims: [${dimensions.join(",")}] | ` +
-        `Filters: [${filters.map(f => `${f.dimension}=${f.value}`).join(",")}] | ` +
-        `Time: [${timeRefs.join(",")}]`
+        `[ANALYSIS] Intent: ${normalizedAnalysis.intent} | Metrics: [${normalizedAnalysis.metrics.join(",")}] | ` +
+        `Dims: [${normalizedAnalysis.dimensions.join(",")}] | ` +
+        `Filters: [${normalizedAnalysis.filters.map(f => `${f.dimension}=${f.value}`).join(",")}] | ` +
+        `Time: [${normalizedAnalysis.timeReferences.join(",")}] | Focus: ${normalizedAnalysis.focus}`
     );
 
-    return analysis;
+    return normalizedAnalysis;
 }

@@ -14,7 +14,8 @@ export type QuestionIntent =
     | "CORRELATION"
     | "ANOMALY"
     | "COMPETITOR_STRATEGY"
-    | "EXECUTIVE_PRIORITY";
+    | "EXECUTIVE_PRIORITY"
+    | "LIST";
 
 // ─── Component Extraction Types ───────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ export type QuestionTimeReference = string;
 
 // ─── Filter Types ─────────────────────────────────────────────────────────────
 
-export type FilterOperator = "=" | "ILIKE" | ">" | "<" | ">=" | "<=" | "IN";
+export type FilterOperator = "=" | "ILIKE" | ">" | "<" | ">=" | "<=" | "IN" | "BETWEEN";
 
 /**
  * A structured filter extracted from a question.
@@ -65,6 +66,9 @@ export interface QuestionAnalysis {
 
     /** The original unmodified question */
     originalQuestion: string;
+
+    /** Detected primary business focus object (hotel, supplier, chain, destination, competitor, apw) */
+    focus?: string | null;
 }
 
 // ─── Validation Result ────────────────────────────────────────────────────────

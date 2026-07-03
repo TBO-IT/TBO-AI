@@ -9,6 +9,7 @@ import { logger } from "../lib/logger.js";
 
 export type RouteType =
     | "TEMPLATE"
+    | "PERFORMANCE"
     | "TREND"
     | "COMPARISON"
     | "COMPARE_ENTITIES"
@@ -16,18 +17,21 @@ export type RouteType =
     | "COMPETITOR_STRATEGY"
     | "EXECUTIVE_PRIORITY"
     | "ROOT_CAUSE"
+    | "MULTI_ANALYSIS"
     | "LLM";
 
 export type RoutingDecision =
-    | { route: "TEMPLATE";     type: "TEMPLATE";     sql: string; explanation: string }
-    | { route: "TREND";        type: "TREND";        explanation: string }
-    | { route: "COMPARISON";   type: "COMPARISON";   explanation: string }
+    | { route: "TEMPLATE"; type: "TEMPLATE"; sql: string; explanation: string }
+    | { route: "TREND"; type: "TREND"; explanation: string }
+    | { route: "COMPARISON"; type: "COMPARISON"; explanation: string }
     | { route: "COMPARE_ENTITIES"; type: "COMPARE_ENTITIES"; explanation: string }
     | { route: "CONTRIBUTION"; type: "CONTRIBUTION"; explanation: string }
     | { route: "COMPETITOR_STRATEGY"; type: "COMPETITOR_STRATEGY"; explanation: string }
     | { route: "EXECUTIVE_PRIORITY"; type: "EXECUTIVE_PRIORITY"; explanation: string }
-    | { route: "ROOT_CAUSE";   type: "ROOT_CAUSE";   explanation: string }
-    | { route: "LLM";          type: "LLM";          explanation: string };
+    | { route: "ROOT_CAUSE"; type: "ROOT_CAUSE"; explanation: string }
+    | { route: "MULTI_ANALYSIS"; type: "MULTI_ANALYSIS"; explanation: string }
+    | { route: "PERFORMANCE"; type: "PERFORMANCE"; explanation: string }
+    | { route: "LLM"; type: "LLM"; explanation: string };
 
 // ─── Keyword Dictionaries ─────────────────────────────────────────────────────
 
@@ -178,7 +182,8 @@ export function isRootCauseQuestion(question: string, intent: QuestionIntent): b
 const TEMPLATE_INTENTS: Set<QuestionIntent> = new Set([
     "RANKING",
     "SUMMARY",
-    "BREAKDOWN"
+    "BREAKDOWN",
+    "LIST"
 ]);
 
 const LLM_ONLY_INTENTS: Set<QuestionIntent> = new Set([
@@ -239,6 +244,52 @@ function logRouterDecision(
  *  "win rate trend"                               → TREND ✓
  *  "best hotels in london"                        → TEMPLATE ✓
  */
+
+export function planExecution(
+    analysis: QuestionAnalysis,
+    semanticLayer: EnrichedSemanticLayer
+): RoutingDecision[] {
+
+    const decisions: RoutingDecision[] = [];
+
+    // Existing router determines the primary analysis
+    const primary = routeQuery(analysis, semanticLayer);
+
+    decisions.push(primary);
+
+    // -----------------------------------
+    // Add complementary analyses
+    // -----------------------------------
+
+    if (
+        primary.route === "ROOT_CAUSE" &&
+        !decisions.some(d => d.route === "CONTRIBUTION")
+    ) {
+        decisions.push({
+            route: "CONTRIBUTION",
+            type: "CONTRIBUTION",
+            explanation:
+                "Contribution analysis supports root cause analysis."
+        });
+    }
+
+    if (
+        primary.route === "COMPARISON" &&
+        analysis.timeReferences.length > 0 &&
+        !decisions.some(d => d.route === "TREND")
+    ) {
+        decisions.push({
+            route: "TREND",
+            type: "TREND",
+            explanation:
+                "Trend analysis complements comparison over time."
+        });
+    }
+
+
+    return decisions;
+}
+
 export function routeQuery(
     analysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer
@@ -319,6 +370,28 @@ export function routeQuery(
             type: "ROOT_CAUSE",
             explanation: "Routed to Root Cause Pack Builder — structural analysis without LLM."
         };
+    }
+
+    // ── Priority 5: PERFORMANCE ───────────────────────────────
+
+    if (
+        intent === "SUMMARY" &&
+        analysis.filters.length > 0
+    ) {
+
+        logRouterDecision(
+            analysis,
+            "PERFORMANCE",
+            "SUMMARY_PERFORMANCE"
+        );
+
+        return {
+            route: "PERFORMANCE",
+            type: "PERFORMANCE",
+            explanation:
+                "Executive performance review."
+        };
+
     }
 
     // ── Priority 5: TEMPLATE ───────────────────────────────────────────────────

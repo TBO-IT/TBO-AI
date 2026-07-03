@@ -2,6 +2,7 @@ import { QuestionAnalysis, QuestionFilter } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { buildWhereClause, buildFilterCondition } from "./filterBuilder.js";
 import { detectSortDirection as polaritySortDirection } from "./queryPolarity.js";
+import { resolveOrDiscardEntities } from "./entityResolver.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -23,6 +24,128 @@ function getPhysicalColumnName(canonicalKey: string, semanticLayer: EnrichedSema
  */
 function detectSortDirection(question: string): "ASC" | "DESC" {
     return polaritySortDirection(question);
+}
+
+/**
+ * Maps a canonical focus keyword (hotel, supplier, chain, destination)
+ * to physical columns that should be selected for row-level queries.
+ */
+function getSelectColumnsForFocus(
+    focus: string | null | undefined,
+    datasetType: string,
+    schemaColumns: string[]
+): string[] {
+    const columns: string[] = [];
+    const schemaLower = schemaColumns.map(c => c.toLowerCase());
+
+    const resolveCol = (name: string) => {
+        const idx = schemaLower.indexOf(name.toLowerCase());
+        return idx !== -1 ? schemaColumns[idx] : null;
+    };
+
+    if (datasetType === "COMPETITIVENESS") {
+        const hotelCol = resolveCol("tbo_hotelname") || resolveCol("hotel name") || resolveCol("thirdparty_hotelname");
+        const supplierCol = resolveCol("suppliername") || resolveCol("supplier");
+        const chainCol = resolveCol("tbo_chainname") || resolveCol("chain");
+        const destCol = resolveCol("destination") || resolveCol("city");
+        const statusCol = resolveCol("Competitive Status") || resolveCol("competitive_status");
+        const priceDiffCol = resolveCol("price_diff_perc");
+        const tboPriceCol = resolveCol("tbo_price");
+        const competitorPriceCol = resolveCol("thirdparty_price");
+
+        if (focus === "hotel") {
+            if (hotelCol) columns.push(hotelCol);
+            if (destCol) columns.push(destCol);
+            if (priceDiffCol) columns.push(priceDiffCol);
+            if (statusCol) columns.push(statusCol);
+            if (tboPriceCol) columns.push(tboPriceCol);
+            if (competitorPriceCol) columns.push(competitorPriceCol);
+        } else if (focus === "supplier") {
+            if (supplierCol) columns.push(supplierCol);
+            if (destCol) columns.push(destCol);
+            if (priceDiffCol) columns.push(priceDiffCol);
+            if (statusCol) columns.push(statusCol);
+        } else if (focus === "chain") {
+            if (chainCol) columns.push(chainCol);
+            if (destCol) columns.push(destCol);
+            if (priceDiffCol) columns.push(priceDiffCol);
+            if (statusCol) columns.push(statusCol);
+        } else if (focus === "destination") {
+            if (destCol) columns.push(destCol);
+            if (priceDiffCol) columns.push(priceDiffCol);
+            if (statusCol) columns.push(statusCol);
+        } else {
+            // Default select checklist
+            if (hotelCol) columns.push(hotelCol);
+            if (destCol) columns.push(destCol);
+            if (priceDiffCol) columns.push(priceDiffCol);
+            if (statusCol) columns.push(statusCol);
+        }
+    } else if (datasetType === "CONVERSION") {
+        const hotelCol = resolveCol("Hotel name") || resolveCol("hotel_name");
+        const cityCol = resolveCol("City") || resolveCol("city");
+        const searchesCol = resolveCol("Searches");
+        const bookingsCol = resolveCol("Bookings");
+        const l2bCol = resolveCol("L2B%");
+
+        if (focus === "hotel") {
+            if (hotelCol) columns.push(hotelCol);
+            if (cityCol) columns.push(cityCol);
+            if (searchesCol) columns.push(searchesCol);
+            if (bookingsCol) columns.push(bookingsCol);
+            if (l2bCol) columns.push(l2bCol);
+        } else if (focus === "destination") {
+            if (cityCol) columns.push(cityCol);
+            if (searchesCol) columns.push(searchesCol);
+            if (bookingsCol) columns.push(bookingsCol);
+            if (l2bCol) columns.push(l2bCol);
+        } else {
+            if (hotelCol) columns.push(hotelCol);
+            if (cityCol) columns.push(cityCol);
+            if (searchesCol) columns.push(searchesCol);
+            if (bookingsCol) columns.push(bookingsCol);
+            if (l2bCol) columns.push(l2bCol);
+        }
+    }
+
+    return columns;
+}
+
+/**
+ * Extracts limit and sort direction dynamically from ranking/list keywords.
+ */
+function getLimitAndDirection(
+    question: string,
+    defaultLimit: number = 10
+): { limit: number | null; direction: "ASC" | "DESC" } {
+    const q = question.toLowerCase();
+
+    let limit: number | null = null;
+    const limitMatch = /\b(limit|top|bottom|best|worst|first|last)\s+(\d+)\b/i.exec(q);
+    if (limitMatch) {
+        limit = Number(limitMatch[2]);
+    } else {
+        const numberMatch = /\b(\d+)\b/.exec(q);
+        if (numberMatch && /\b(top|bottom|best|worst|limit)\b/.test(q)) {
+            limit = Number(numberMatch[1]);
+        }
+    }
+
+    if (!limit && /\b(top|bottom|best|worst|highest|lowest|limit)\b/.test(q)) {
+        limit = defaultLimit;
+    }
+
+    let direction: "ASC" | "DESC" = "DESC";
+
+    if (/\b(bottom|worst|lowest)\b/.test(q)) {
+        direction = "ASC";
+    } else if (/\b(top|best|highest)\b/.test(q)) {
+        direction = "DESC";
+    } else {
+        direction = detectSortDirection(question);
+    }
+
+    return { limit, direction };
 }
 
 /**
@@ -99,8 +222,13 @@ export function generateTemplatedSql(
     const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
 
     // ── 2. WHERE clause from structured filters ───────────────────────────────
-    const typedFilters = filters.filter(f => f.dimension !== "_entity");
-    const entityFilters = filters.filter(f => f.dimension === "_entity");
+    const resolvedFilters = resolveOrDiscardEntities(
+        filters,
+        analysis.focus,
+        semanticLayer.dimensions
+    );
+    const typedFilters = resolvedFilters.filter(f => f.dimension !== "_entity");
+    const entityFilters = resolvedFilters.filter(f => f.dimension === "_entity");
 
     const typedWhere = buildWhereClause(typedFilters, schemaColumns);
     const entityConditions = buildEntityFilterConditions(entityFilters, semanticLayer);
@@ -145,6 +273,26 @@ export function generateTemplatedSql(
 
     // ── 4. Intent-specific SQL assembly ───────────────────────────────────────
 
+    // LIST — row-level query
+    if (intent === "LIST") {
+        const selectCols = getSelectColumnsForFocus(analysis.focus, semanticLayer.datasetType, schemaColumns);
+        if (selectCols.length === 0) return null;
+        
+        const selectClause = selectCols.map(c => `"${c}"`).join(", ");
+        const { limit, direction } = getLimitAndDirection(analysis.originalQuestion, 10);
+        
+        let orderByClause = "";
+        const metricCol = getPhysicalColumnName(metricKey, semanticLayer);
+        if (metricCol && schemaColumns.includes(metricCol)) {
+            orderByClause = `ORDER BY "${metricCol}" ${direction} NULLS LAST`;
+        }
+        
+        const limitClause = limit ? `LIMIT ${limit}` : "";
+        
+        return `SELECT ${selectClause} FROM data_table ${whereClause} ${orderByClause} ${limitClause}`
+            .replace(/\s+/g, " ").trim();
+    }
+
     // SUMMARY — single aggregate, no grouping
     if (intent === "SUMMARY" && dimensions.length === 0 && timeReferences.length === 0) {
         return `SELECT ${metricFormula} AS "${metric.name}" FROM data_table ${whereClause}`.trim();
@@ -155,19 +303,24 @@ export function generateTemplatedSql(
 
     // RANKING — top / bottom N per dimension
     if (effectiveIntent === "RANKING" && dimensions.length > 0) {
-        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${sortDir} NULLS LAST LIMIT 10`
+        const { limit, direction } = getLimitAndDirection(analysis.originalQuestion, 10);
+        const limitStr = limit ? `LIMIT ${limit}` : "";
+        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${direction} NULLS LAST ${limitStr}`
             .replace(/\s+/g, " ").trim();
     }
 
     // BREAKDOWN — all groups, no limit
     if (effectiveIntent === "BREAKDOWN" && dimensions.length > 0) {
-        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${sortDir} NULLS LAST`
+        const { direction } = getLimitAndDirection(analysis.originalQuestion, 10);
+        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${direction} NULLS LAST`
             .replace(/\s+/g, " ").trim();
     }
 
     // COMPARISON — compare entities side-by-side
     if (effectiveIntent === "COMPARISON" && dimensions.length > 0) {
-        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${sortDir} NULLS LAST LIMIT 20`
+        const { limit, direction } = getLimitAndDirection(analysis.originalQuestion, 20);
+        const limitStr = limit ? `LIMIT ${limit}` : "";
+        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${direction} NULLS LAST ${limitStr}`
             .replace(/\s+/g, " ").trim();
     }
 

@@ -2,7 +2,7 @@ import { QuestionAnalysis, QuestionFilter } from "../ai/questionTypes.js";
 import { EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { resolvePhysicalColumn } from "../ai/dimensionRegistry.js";
 import { buildWhereClause } from "../ai/filterBuilder.js";
-import { dedupeFilters } from "../ai/entityResolver.js";
+import { dedupeFilters, resolveOrDiscardEntities } from "../ai/entityResolver.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -337,6 +337,12 @@ export function generateComparisonSql(
     analysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer
 ): ComparisonResult | null {
+    // Resolve/discard placeholder entity filters
+    analysis.filters = resolveOrDiscardEntities(
+        analysis.filters,
+        analysis.focus,
+        semanticLayer.dimensions
+    );
 
     // ── 1. Resolve metric ──────────────────────────────────────────────────────
     const metric = resolveMetric(analysis, semanticLayer);
