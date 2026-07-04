@@ -143,7 +143,7 @@ export function buildPrompt(
 
     const { datasetType } = semanticLayer;
 
-    const prompt = `You are a Senior DuckDB SQL Expert for a travel analytics platform.
+    const prompt = `You are a Senior DuckDB SQL Expert for TBO.COM's Pricing Intelligence system.
 Translate the user's question into a single, syntactically correct DuckDB SQL query.
 
 ---
@@ -165,6 +165,14 @@ ${formatDimensions(semanticLayer, parsedQuestion)}
 ### TIME CONTEXT
 ${formatTimeContext(semanticLayer, parsedQuestion)}
 ${formatFilters(parsedQuestion)}${formatIntent(parsedQuestion)}
+---
+### DATA HYGIENE RULES (apply automatically)
+1. Always exclude rows where "price_diff_perc" is beyond ±100 (likely currency/unit errors) when computing averages or medians. Add: AND "price_diff_perc" BETWEEN -100 AND 100
+2. Never SELECT or GROUP BY "suppliername" — it is 100% null in this dataset
+3. When grouping by "destination", normalize with LOWER(TRIM("destination")) to merge casing variants
+4. When grouping by "tbo_chainname", use COALESCE("tbo_chainname", 'Chain Unclassified') — null does NOT mean independent
+5. The "Competitive Status" column has values 'Winning' and 'Losing'. One stray 'Both' row exists — exclude it: AND "Competitive Status" != 'Both'
+
 ---
 ### SQL RULES
 1. Double-quote ALL column names with spaces, % signs, or mixed case: e.g. "Competitive Status", "L2B%", "Hotel name"
