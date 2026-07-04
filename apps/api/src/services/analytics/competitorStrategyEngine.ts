@@ -35,7 +35,9 @@ export function generateCompetitorStrategySql(
     // Let's do a grouped query by APW Bucket to find where we lose to them.
     
     const apwCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("apw"))?.column_name || "apw_bucket_new";
-    const supplierCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("supplier"))?.column_name || "suppliername";
+    const supplierCol = competitorFilter.dimension === "thirdparty" 
+        ? semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("thirdparty"))?.column_name || "thirdparty"
+        : semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("supplier"))?.column_name || "suppliername";
 
     const sql = `
 WITH by_apw AS (

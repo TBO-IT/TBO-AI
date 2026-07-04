@@ -97,11 +97,11 @@ RULES:
         
         logger.info({ parsed }, "LLM Question Parser result");
         
-        // Ensure arrays exist
-        parsed.metrics = parsed.metrics || [];
-        parsed.dimensions = parsed.dimensions || [];
-        parsed.filters = parsed.filters || [];
-        parsed.timeReferences = parsed.timeReferences || [];
+        // Ensure arrays exist and contain no null/undefined elements
+        parsed.metrics = (parsed.metrics || []).filter(Boolean);
+        parsed.dimensions = (parsed.dimensions || []).filter(Boolean);
+        parsed.filters = (parsed.filters || []).filter(Boolean);
+        parsed.timeReferences = (parsed.timeReferences || []).filter(Boolean);
         parsed.originalQuestion = question;
         
         return parsed;

@@ -375,7 +375,8 @@ export function routeQuery(
 
     if (
         (intent === "SUMMARY" || intent === "PERFORMANCE") &&
-        analysis.filters.length > 0
+        analysis.filters.length > 0 &&
+        analysis.dimensions.length === 0
     ) {
 
         logRouterDecision(

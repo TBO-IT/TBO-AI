@@ -298,7 +298,11 @@ export class ChatOrchestrator {
                 // of the simple APW-gap analysis, producing differentiated results.
                 const shouldOverrideCompetitor = competitorContext && (isRecommendation || isNarrative) && routeType === "COMPETITOR_STRATEGY";
                 const packRoutes = new Set(["ROOT_CAUSE", "EXECUTIVE_PRIORITY", "COMPARE_ENTITIES", "MULTI_ANALYSIS"]);
-                if ((isRecommendation || isNarrative) && !packRoutes.has(routeType) && routeType !== "LLM" && (!routeType.includes("COMPETITOR") || shouldOverrideCompetitor)) {
+                
+                // Do NOT override if it's a LIST or RANKING intent (we need the actual list, not RCA)
+                const isListOrRanking = parsedQuestion.intent === "LIST" || parsedQuestion.intent === "RANKING";
+                
+                if ((isRecommendation || isNarrative) && !isListOrRanking && !packRoutes.has(routeType) && routeType !== "LLM" && (!routeType.includes("COMPETITOR") || shouldOverrideCompetitor)) {
                     console.log(
                         `[PRE_ROUTER] ${isRecommendation ? "Recommendation" : "Narrative"} query detected — ` +
                         `overriding route from ${routeType} to ROOT_CAUSE` +
@@ -581,7 +585,7 @@ export class ChatOrchestrator {
 
             // ── SQL Trace Logging for Competitor Filter ────────────────────────
             if (competitorContext) {
-                const lowerSql = sql.toLowerCase();
+                const lowerSql = (sql || "").toLowerCase();
                 if (!lowerSql.includes("thirdparty")) {
                     throw new Error("COMPETITOR_SQL_FILTER_MISSING");
                 }
