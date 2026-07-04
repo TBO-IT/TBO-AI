@@ -114,10 +114,11 @@ export default function AdminDashboardPage() {
                                             {new Date(user.joinedDate).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={\`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
-                                                \${user.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
+                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                                                user.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
                                                 user.role === 'analyst' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                                'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'}\`}>
+                                                'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                                            }`}>
                                                 {user.role}
                                             </span>
                                         </td>
