@@ -40,7 +40,9 @@ const NARRATIVE_PATTERNS: RegExp[] = [
     /\bexecutive\s+takeaway\b/i,
     /\bwhat\s+should\s+executives\s+know\b/i,
     /\bsingle\s+biggest\s+risk\b/i,
-    /\bsingle\s+biggest\s+opportunity\b/i
+    /\bsingle\s+biggest\s+opportunity\b/i,
+    /\bperformance\b/i,
+    /\bdeep\s+dive\b/i
 ];
 
 // ─── Recommendation Signals ───────────────────────────────────────────────────
