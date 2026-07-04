@@ -491,42 +491,71 @@ export class ChatOrchestrator {
                     }
                 }
 
-                // ── LLM (fallback) ─────────────────────────────────────────────
+                // ── LLM (fallback to Agent Loop) ─────────────────────────────────────────────
                 if (routeType === "LLM") {
                     try {
-                        logClaude("Starting LLM SQL generation");
+                        logClaude("Starting Data Analyst Agent loop");
                         const claudeTimer = startTimer();
-                        const { prompt } = buildPrompt(question, semanticLayer, parsedQuestion);
-
-                        // Use the existing anthropicService for the one remaining
-                        // SQL generation use case. This is the ONLY place Claude
-                        // generates SQL — all other paths are deterministic.
-                        const { callClaudeWithStructuredOutput } = await import("./anthropicService.js");
-                        const generated = await callClaudeWithStructuredOutput<GeneratedQueryResponse>(
-                            prompt,
-                            ClaudeOutputSchemas.generatedQuery,
-                            "SQL_GENERATION",
-                            "You are a Senior DuckDB SQL Expert for a travel analytics platform."
+                        
+                        const { runDataAnalystAgent } = await import("./dataAnalystAgent.js");
+                        
+                        const agentResult = await runDataAnalystAgent(
+                            question,
+                            parsedQuestion,
+                            semanticLayer,
+                            metadata,
+                            tempPath
                         );
-                        sql = generated.sql;
-                        explanation = generated.explanation;
-                        logClaude("LLM SQL generation complete", claudeTimer.stop());
+                        
+                        sql = agentResult.sql;
+                        explanation = agentResult.explanation;
+                        
+                        // Because the agent also generates the narrative, we can optionally bypass 
+                        // the final generateNarrative step, but we still need the data for the frontend.
+                        // We will set a special flag or just let it execute normally.
+                        // Actually, let's just let it execute normally so the frontend gets the final data!
+                        
+                        logClaude("Agent loop complete", claudeTimer.stop());
+                        
+                        // We can return early here if we want the Agent's exact narrative!
+                        
+                        // Execute final SQL to populate the table for the frontend
+                        const { executeQuery } = await import("./queryExecutionService.js");
+                        const finalResults = await executeQuery(sql, tempPath).catch(() => []);
+                        
+                        console.log(`[RETURN_PATH] EARLY_RETURN_AGENT_SUCCESS`);
+                        return {
+                            answer: agentResult.narrative,
+                            sql,
+                            explanation,
+                            results: finalResults,
+                            rootCausePack: null,
+                            routeType: "AGENT",
+                            datasetType: semanticLayer.datasetType,
+                            parsedQuestion: {
+                                intent: parsedQuestion.intent,
+                                metrics: parsedQuestion.metrics,
+                                dimensions: parsedQuestion.dimensions,
+                                timeReferences: parsedQuestion.timeReferences
+                            }
+                        };
+
                     } catch (err: any) {
-                        console.error("[ORCHESTRATOR] Claude SQL generation failed — returning deterministic fallback:", err.message);
-                        logClaude(`Claude SQL FAILED: ${err.message}`);
+                        console.error("[ORCHESTRATOR] Agent execution failed — returning deterministic fallback:", err.message);
+                        logClaude(`Agent FAILED: ${err.message}`);
                         // Failover: attempt to use template engine as last resort
                         const fallbackRouting = routeQuery(parsedQuestion, semanticLayer);
                         if (fallbackRouting.route === "TEMPLATE" && fallbackRouting.sql) {
                             sql = fallbackRouting.sql;
-                            explanation = "Fallback: Used template engine after Claude failure.";
+                            explanation = "Fallback: Used template engine after Agent failure.";
                             routeType = "TEMPLATE";
                         } else {
                             recordError();
-                            console.log(`[RETURN_PATH] EARLY_RETURN_LLM_FAILED`);
+                            console.log(`[RETURN_PATH] EARLY_RETURN_AGENT_FAILED`);
                             return {
-                                answer: "I was unable to process this query right now. The AI service is temporarily unavailable. Please try a simpler question or try again later.",
+                                answer: "I was unable to process this query right now. The AI analyst encountered an error. Please try a simpler question or try again later.",
                                 sql: "",
-                                explanation: "Claude API unavailable; no deterministic route available.",
+                                explanation: "Agent loop failed; no deterministic route available.",
                                 results: [],
                                 rootCausePack: null,
                                 routeType: "FAILED",

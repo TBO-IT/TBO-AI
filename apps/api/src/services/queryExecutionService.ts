@@ -133,3 +133,30 @@ export async function executeQuery<T = any>(
     );
     return executeSql<T>(executableSql);
 }
+
+/**
+ * Secure execution wrapper for the autonomous Agent.
+ * Replaces "data_table" and enforces safety guardrails to prevent dataset corruption.
+ */
+export async function executeAgentSql<T = any>(
+    sql: string,
+    csvPath: string
+): Promise<T[]> {
+    const dangerousTokens = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE"];
+    const upperSql = sql.toUpperCase();
+    
+    for (const token of dangerousTokens) {
+        if (upperSql.includes(token)) {
+            throw new Error(`Execution blocked: Query contains restricted keyword '${token}'`);
+        }
+    }
+
+    let finalSql = sql;
+    if (!upperSql.includes("LIMIT")) {
+        // Enforce a strict row limit so Claude doesn't blow up its context window
+        // Remove trailing semicolons before appending LIMIT
+        finalSql = finalSql.replace(/;\s*$/, "") + "\nLIMIT 100;";
+    }
+
+    return executeQuery<T>(finalSql, csvPath);
+}
