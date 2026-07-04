@@ -30,10 +30,17 @@ export function canUseNaturalResponse(
     if (!results || results.length === 0) return false;
 
     // Check if it's a simple query type
-    const simpleIntents = ["LIST", "SUMMARY", "RANKING", "BREAKDOWN"];
-    if (!simpleIntents.includes(analysis.intent)) return false;
+    // We strictly limit this to basic counting/listing to avoid dumping
+    // raw tables for executive queries (which should route to Executive Priority)
+    const simpleIntents = ["LIST", "COUNT"];
+    if (!simpleIntents.includes(analysis.intent)) {
+        // If it's a SUMMARY but only returning 1 row (like a single value lookup), that's fine
+        if (analysis.intent === "SUMMARY" && results.length === 1 && Object.keys(results[0]).length <= 2) {
+            return true;
+        }
+        return false;
+    }
 
-    // We can handle large result sets now by summarizing the top N rows
     return true;
 }
 

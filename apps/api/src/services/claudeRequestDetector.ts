@@ -58,7 +58,7 @@ const RECOMMENDATION_PATTERNS: RegExp[] = [
     /\bopportunit(y|ies)\b/i,
     /\bmitigat(e|ion)\b/i,
     /\baddress(ing)?\b/i,
-    /\bfocus\s+on\b/i,
+    /\bfocus\s+(on|upon)\b/i,
     /\bprioritiz(e|ing|ation)\b/i,
     /\bwin\s+against\b/i,
     /\bbeat\b/i,
@@ -118,7 +118,10 @@ export function isExecutiveQuestion(question: string): boolean {
         /\bwhat\s+should\s+executives\s+know\b/i,
         /\blargest\s+takeaway\b/i,
         /\bsingle\s+biggest\s+risk\b/i,
-        /\bsingle\s+biggest\s+opportunity\b/i
+        /\bsingle\s+biggest\s+opportunity\b/i,
+        /\bhighest\s+roi\b/i,
+        /\bfastest\s+win\b/i,
+        /\bwhat\s+(do|should)\s+(we|i)\s+(need\s+to\s+)?focus\s+(on|upon)\b/i
     ];
     
     const match = EXECUTIVE_PATTERNS.some(p => p.test(q));
@@ -132,17 +135,19 @@ export function isExecutiveQuestion(question: string): boolean {
 export function isExecutivePriorityQuestion(question: string): boolean {
     const q = question.toLowerCase();
     const patterns: RegExp[] = [
-        /focus\s+on/i,
+        /focus\s+(on|upon)/i,
         /highest\s+roi/i,
         /fastest\s+win/i,
-        /hurting\s+us(\s+most)?/i,
+        /hurting\s+(us|me)(\s+the)?(\s+most)?/i,
         /single\s+most\s+important/i,
         /only\s+fix\s+one\s+thing/i,
         /allocate\s+resources/i,
         /leadership\s+should\s+know/i,
         /biggest\s+opportunity/i,
+        /biggest\s+problem/i,
+        /biggest\s+driver/i,
         /highest\s+leverage/i,
-        /what\s+should\s+(we|leadership|i)\s+focus/i,
+        /what\s+should\s+(we|leadership|i)\s+(need\s+to\s+)?focus/i,
         /where\s+should\s+(we|i)\s+allocate/i,
         /what\s+is\s+hurting/i,
         /if\s+we\s+only\s+fix/i,
