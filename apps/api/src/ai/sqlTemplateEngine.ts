@@ -2,7 +2,6 @@ import { QuestionAnalysis, QuestionFilter } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { buildWhereClause, buildFilterCondition } from "./filterBuilder.js";
 import { detectSortDirection as polaritySortDirection } from "./queryPolarity.js";
-import { resolveOrDiscardEntities } from "./entityResolver.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -149,33 +148,6 @@ function getLimitAndDirection(
 }
 
 /**
- * Resolves "_entity" (unclassified named-entity) filters into conditions across
- * all VARCHAR columns in the schema. Used as a safe fallback for proper nouns
- * like city/supplier names that weren't matched to a specific dimension.
- */
-function buildEntityFilterConditions(
-    entityFilters: QuestionFilter[],
-    semanticLayer: EnrichedSemanticLayer
-): string {
-    if (entityFilters.length === 0) return "";
-
-    const stringCols = semanticLayer.allColumns.filter(c =>
-        c.column_type.toUpperCase().includes("VARCHAR") ||
-        c.column_type.toUpperCase().includes("STRING") ||
-        c.column_type.toUpperCase().includes("TEXT")
-    );
-    if (stringCols.length === 0) return "";
-
-    const conditions = entityFilters.map(f => {
-        const safe = String(f.value).replace(/'/g, "''");
-        const colChecks = stringCols.map(c => `"${c.column_name}" ILIKE '%${safe}%'`).join(" OR ");
-        return `(${colChecks})`;
-    });
-
-    return conditions.join(" AND ");
-}
-
-/**
  * Attempts to generate SQL deterministically for simple questions.
  * Returns the SQL string if successful, or null if too complex (needs Claude).
  *
@@ -222,24 +194,11 @@ export function generateTemplatedSql(
     const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
 
     // ── 2. WHERE clause from structured filters ───────────────────────────────
-    const resolvedFilters = resolveOrDiscardEntities(
-        filters,
-        analysis.focus,
-        semanticLayer.dimensions
-    );
-    const typedFilters = resolvedFilters.filter(f => f.dimension !== "_entity");
-    const entityFilters = resolvedFilters.filter(f => f.dimension === "_entity");
-
-    const typedWhere = buildWhereClause(typedFilters, schemaColumns);
-    const entityConditions = buildEntityFilterConditions(entityFilters, semanticLayer);
+    const typedWhere = buildWhereClause(filters, schemaColumns);
 
     let whereClause = "";
-    if (typedWhere && entityConditions) {
-        whereClause = `${typedWhere} AND ${entityConditions}`;
-    } else if (typedWhere) {
+    if (typedWhere) {
         whereClause = typedWhere;
-    } else if (entityConditions) {
-        whereClause = `WHERE ${entityConditions}`;
     }
 
     // Log filter propagation

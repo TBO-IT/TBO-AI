@@ -1,8 +1,6 @@
 import { QuestionAnalysis } from "../ai/questionTypes.js";
 import { EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { buildWhereClause } from "../ai/filterBuilder.js";
-import { resolveOrDiscardEntities } from "../ai/entityResolver.js";
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type TimeGranularity = "MONTH" | "QUARTER" | "YEAR";
@@ -149,38 +147,13 @@ function buildTrendWhereClause(
     // Exclude time filters (handled by DATE_TRUNC) and split entity vs typed
     const TIME_DIMENSIONS = new Set(["month", "year", "quarter", "time"]);
     const typedFilters = analysis.filters.filter(
-        f => !TIME_DIMENSIONS.has(f.dimension) && f.dimension !== "_entity"
+        f => !TIME_DIMENSIONS.has(f.dimension)
     );
-    const entityFilters = analysis.filters.filter(f => f.dimension === "_entity");
 
     const typedWhere = buildWhereClause(typedFilters, schemaColumns);
 
-    // Entity filters → ILIKE across all VARCHAR columns
-    let entityConditions = "";
-    if (entityFilters.length > 0) {
-        const stringCols = semanticLayer.allColumns.filter(c =>
-            c.column_type.toUpperCase().includes("VARCHAR") ||
-            c.column_type.toUpperCase().includes("STRING") ||
-            c.column_type.toUpperCase().includes("TEXT")
-        );
-        if (stringCols.length > 0) {
-            const parts = entityFilters.map(f => {
-                const safe = String(f.value).replace(/'/g, "''");
-                const checks = stringCols
-                    .map(c => `"${c.column_name}" ILIKE '%${safe}%'`)
-                    .join(" OR ");
-                return `(${checks})`;
-            });
-            entityConditions = parts.join(" AND ");
-        }
-    }
-
-    if (typedWhere && entityConditions) {
-        return `${typedWhere} AND ${entityConditions}`;
-    } else if (typedWhere) {
+    if (typedWhere) {
         return typedWhere;
-    } else if (entityConditions) {
-        return `WHERE ${entityConditions}`;
     }
 
     return "";
@@ -210,13 +183,7 @@ export function generateTrendSql(
     analysis: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer
 ): TrendResult | null {
-    // Resolve/discard placeholder entity filters
-    analysis.filters = resolveOrDiscardEntities(
-        analysis.filters,
-        analysis.focus,
-        semanticLayer.dimensions
-    );
-
+    // Filters are already resolved by the LLM parser
     // ── 1. Resolve metric ──────────────────────────────────────────────────────
     const metric = resolveMetric(analysis, semanticLayer);
     if (!metric) {

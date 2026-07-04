@@ -2,7 +2,6 @@ import { QuestionAnalysis, QuestionFilter } from "../ai/questionTypes.js";
 import { EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { resolvePhysicalColumn } from "../ai/dimensionRegistry.js";
 import { buildWhereClause } from "../ai/filterBuilder.js";
-import { resolveOrDiscardEntities } from "../ai/entityResolver.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -350,12 +349,7 @@ export function generateContributionSql(
     semanticLayer: EnrichedSemanticLayer,
     forceDimension?: string
 ): ContributionResult | null {
-    // Resolve/discard placeholder entity filters
-    analysis.filters = resolveOrDiscardEntities(
-        analysis.filters,
-        analysis.focus,
-        semanticLayer.dimensions
-    );
+    // Filters are already resolved by the LLM parser
 
     // ── 1. Resolve metric ──────────────────────────────────────────────────────
     const metric = resolveMetric(analysis, semanticLayer);

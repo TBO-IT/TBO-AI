@@ -2,7 +2,6 @@ import { QuestionAnalysis, QuestionIntent } from "./questionTypes.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { generateTemplatedSql } from "./sqlTemplateEngine.js";
 import { extractComparisonEntities } from "../services/comparisonEngine.js";
-import { isExecutivePriorityQuestion } from "../services/claudeRequestDetector.js";
 import { logger } from "../lib/logger.js";
 
 // ─── Route Types ──────────────────────────────────────────────────────────────
@@ -297,8 +296,8 @@ export function routeQuery(
     const { intent, originalQuestion: question } = analysis;
 
     // ── Priority 0: EXECUTIVE_PRIORITY ───────────────────────────────────────
-    if (intent === "EXECUTIVE_PRIORITY" || isExecutivePriorityQuestion(question)) {
-        logRouterDecision(analysis, "EXECUTIVE_PRIORITY", "EXECUTIVE_PRIORITY_INTENT");
+    if (intent === "EXECUTIVE_PRIORITY") {
+        logRouterDecision(analysis, "EXECUTIVE_PRIORITY", "Intent=EXECUTIVE_PRIORITY");
         return {
             route: "EXECUTIVE_PRIORITY",
             type: "EXECUTIVE_PRIORITY",

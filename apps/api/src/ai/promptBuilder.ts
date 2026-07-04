@@ -1,6 +1,5 @@
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { QuestionAnalysis, QuestionValidationError } from "./questionTypes.js";
-import { analyzeQuestion } from "./questionAnalyzer.js";
 import { validateQuestion } from "./questionValidator.js";
 
 // ─── Token-Efficient Prompt Builder ──────────────────────────────────────────
@@ -127,12 +126,9 @@ function formatIntent(parsedQuestion: QuestionAnalysis): string {
 export function buildPrompt(
     question: string,
     semanticLayer: EnrichedSemanticLayer,
-    parsedQuestion?: QuestionAnalysis
+    parsedQuestion: QuestionAnalysis
 ): { prompt: string; parsedQuestion: QuestionAnalysis } {
     
-    // 1. Use provided analysis or run the analyzer
-    parsedQuestion = parsedQuestion || analyzeQuestion(question);
-
     // 2. Validate against semantic layer
     const validation = validateQuestion(parsedQuestion, semanticLayer);
 

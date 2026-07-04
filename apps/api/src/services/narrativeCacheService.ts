@@ -1,6 +1,6 @@
 import { redis } from "../lib/redis.js";
 import crypto from "crypto";
-import type { ResponseSource } from "./claudeRequestDetector.js";
+import type { ResponseSource } from "./chatOrchestrator.js";
 
 // ─── Narrative Cache Service (v2) ─────────────────────────────────────────────
 //

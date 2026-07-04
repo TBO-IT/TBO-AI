@@ -24,6 +24,9 @@ import {
     downloadDataset
 } from "../services/storageService.js";
 
+import { llmParseQuestion } from "../ai/llmQuestionParser.js";
+import { buildDatasetMetadata } from "../services/metadataService.js";
+
 const router = Router();
 
 router.post(
@@ -95,10 +98,14 @@ router.post(
                     context.schema
                 );
 
+            const metadata = await buildDatasetMetadata(localCsvPath);
+            const parsedQuestion = await llmParseQuestion(question, metadata);
+
             const { prompt } =
                 buildPrompt(
                     question,
-                    semanticLayer
+                    semanticLayer,
+                    parsedQuestion
                 );
 
             return res.json({

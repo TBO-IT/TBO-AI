@@ -2,7 +2,6 @@ import { QuestionAnalysis, QuestionFilter } from "../ai/questionTypes.js";
 import { EnrichedSemanticLayer } from "../ai/semanticLayer.js";
 import { resolvePhysicalColumn } from "../ai/dimensionRegistry.js";
 import { buildWhereClause } from "../ai/filterBuilder.js";
-import { dedupeFilters, resolveOrDiscardEntities } from "../ai/entityResolver.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,9 +93,13 @@ export function extractComparisonEntities(
 ): ComparisonEntities | null {
     const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
 
-    // Deduplicate filters first — prevents duplicate entity detection from
-    // creating false positives (e.g. Affiliate appears twice → only two unique)
-    const filters = dedupeFilters(analysis.filters);
+    const filters = analysis.filters.filter((f, idx, arr) => 
+        idx === arr.findIndex(t => 
+            t.dimension === f.dimension && 
+            t.operator === f.operator && 
+            String(t.value).toLowerCase() === String(f.value).toLowerCase()
+        )
+    );
 
     console.log(
         `[ComparisonEngine] COMPARISON_DEBUG\n` +
@@ -134,21 +137,7 @@ export function extractComparisonEntities(
     // (handled separately in generateComparisonSql — not returned as entities)
 
     // ── Strategy 3: _entity filters ───────────────────────────────────────────
-    const entityFilters = filters.filter(f => f.dimension === "_entity");
-    if (entityFilters.length >= 2) {
-        const left  = String(entityFilters[0].value);
-        const right = String(entityFilters[1].value);
-
-        console.log(
-            `[ComparisonEngine]\n` +
-            `  COMPARISON_DIMENSION: _entity (ILIKE across all VARCHAR columns)\n` +
-            `  LEFT:  ${left}\n` +
-            `  RIGHT: ${right}`
-        );
-
-        // For entity fallback, physicalCol is a sentinel — actual condition uses ILIKE
-        return { dimension: "_entity", physicalCol: "_entity", left, right };
-    }
+    // _entity filters are no longer used since the LLM native parser maps entities accurately
 
     // ── Failure — log diagnostics ──────────────────────────────────────────────
     const filterSummary = filters.map(f => `${f.dimension}=${f.value}`).join(", ") || "(none)";
@@ -338,11 +327,7 @@ export function generateComparisonSql(
     semanticLayer: EnrichedSemanticLayer
 ): ComparisonResult | null {
     // Resolve/discard placeholder entity filters
-    analysis.filters = resolveOrDiscardEntities(
-        analysis.filters,
-        analysis.focus,
-        semanticLayer.dimensions
-    );
+    const baseFilters = analysis.filters;
 
     // ── 1. Resolve metric ──────────────────────────────────────────────────────
     const metric = resolveMetric(analysis, semanticLayer);
@@ -352,7 +337,13 @@ export function generateComparisonSql(
     }
 
     // ── 2. Deduplicate filters ─────────────────────────────────────────────────
-    const deduped = dedupeFilters(analysis.filters);
+    const deduped = analysis.filters.filter((f, idx, arr) => 
+        idx === arr.findIndex(t => 
+            t.dimension === f.dimension && 
+            t.operator === f.operator && 
+            String(t.value).toLowerCase() === String(f.value).toLowerCase()
+        )
+    );
     const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
 
     // ── 3a. Try same-dimension entity comparison (IN-clause path) ──────────────
@@ -406,33 +397,7 @@ export function generateComparisonSql(
         return { sql, explanation };
     }
 
-    // ── 3c. _entity fallback (CTE + ILIKE path) ────────────────────────────────
-    if (entities && entities.dimension === "_entity") {
-        const sideA: ComparisonSide = {
-            label: entities.left,
-            condition: buildEntityIlikeCondition(entities.left, semanticLayer)
-        };
-        const sideB: ComparisonSide = {
-            label: entities.right,
-            condition: buildEntityIlikeCondition(entities.right, semanticLayer)
-        };
-
-        const sharedFilters = deduped.filter(
-            f => f.dimension !== "_entity" && !TIME_DIMS.has(f.dimension)
-        );
-        const sharedWhere = buildWhereClause(sharedFilters, schemaColumns);
-
-        const sql = buildCTESql(sideA, sideB, metric, sharedWhere);
-        const explanation =
-            `Comparing ${metric.name} for "${entities.left}" vs "${entities.right}".`;
-
-        console.log(
-            `[ComparisonEngine] ILIKE CTE SQL generated | ` +
-            `"${entities.left}" vs "${entities.right}"`
-        );
-
-        return { sql, explanation };
-    }
+    // ── 3c. _entity fallback removed ───────────────────────────────────────────
 
     // ── 4. Failure ─────────────────────────────────────────────────────────────
     console.warn(

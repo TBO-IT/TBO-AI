@@ -4,10 +4,8 @@ import { getDatasetSchema } from "./schemaService.js";
 import { getCachedDatasetPath, getCachedSchema, getCachedMetadata } from "./datasetCacheService.js";
 import { buildSemanticLayer } from "../ai/semanticLayer.js";
 import { buildPrompt } from "../ai/promptBuilder.js";
-import { analyzeQuestion } from "../ai/questionAnalyzer.js";
 import { validateQuestion } from "../ai/questionValidator.js";
 import { routeQuery, planExecution } from "../ai/queryRouter.js";
-import { normalizeBusinessSemantics } from "../ai/businessNormalizer.js";
 import { getCachedSql, setCachedSql } from "./queryCacheService.js";
 import { getCachedNarrative, setCachedNarrative, invalidateNarrativeCache } from "./narrativeCacheService.js";
 import { ClaudeOutputSchemas, GeneratedQueryResponse } from "../ai/outputSchemas.js";
@@ -16,7 +14,6 @@ import { executeQuery } from "./queryExecutionService.js";
 import { extractInsights } from "./insightEngine.js";
 import { QuestionValidationError } from "../ai/questionTypes.js";
 import { buildDatasetMetadata } from "./metadataService.js";
-import { resolveEntities, dedupeFilters, resolveOrDiscardEntities } from "../ai/entityResolver.js";
 import { generateTrendSql } from "./trendEngine.js";
 import { generateComparisonSql, extractComparisonEntities } from "./comparisonEngine.js";
 import { generateContributionSql } from "./contributionEngine.js";
@@ -26,8 +23,7 @@ import { buildExecutivePack } from "./insights/executivePackBuilder.js";
 import { executeEntityDrilldown } from "./insights/entityDrilldownEngine.js";
 import { generateAttributedRecommendations } from "./insights/recommendationAttributionEngine.js";
 import { buildClaudeInputPack } from "./claudeInputContract.js";
-import { classifyResponseSource, detectNarrativeRequest, detectRecommendationRequest, isExecutivePriorityQuestion, ResponseSource } from "./claudeRequestDetector.js";
-import { inferDefaultMetric } from "../ai/metricInference.js";
+import { llmParseQuestion } from "../ai/llmQuestionParser.js";
 import { validateEntityExistence, shouldValidateEntityExistence } from "./entityExistenceValidator.js";
 import { validateRecommendationGuardrails } from "./recommendationGuardrails.js";
 import { runExecutivePriorityPipeline } from "./executivePriorityEngine.js";
@@ -48,6 +44,13 @@ import { evidencePlanner } from "../ai/evidence/index.js";
 import { generateNaturalResponse, canUseNaturalResponse } from "./naturalResponseGenerator.js";
 import { renderExecutiveNarrative, renderEnhancedDeterministicNarrative } from "./executiveNarrativeRenderer.js";
 
+export type ResponseSource = "ANALYTICS" | "CLAUDE_NARRATIVE" | "CLAUDE_RECOMMENDATION" | "NATURAL_RESPONSE";
+
+function classifyResponseSource(isRecommendation: boolean, isNarrative: boolean): ResponseSource {
+    if (isRecommendation) return "CLAUDE_RECOMMENDATION";
+    if (isNarrative) return "CLAUDE_NARRATIVE";
+    return "ANALYTICS";
+}
 
 export class ChatOrchestrator {
     static async execute(
@@ -76,15 +79,6 @@ export class ChatOrchestrator {
         console.log(`\n[QUESTION] "${question}"`);
 
         try {
-            setStage("Understanding question...");
-            // ── 0. Early Recommendation Detection ─────────────────────────────
-            // Runs BEFORE route selection. Recommendation queries require a
-            // RootCausePack, so they must be forced to ROOT_CAUSE regardless of
-            // what the question analyzer classifies (e.g. SUMMARY).
-            const isRecommendation = detectRecommendationRequest(question);
-            const isNarrative = detectNarrativeRequest(question);
-            console.log(`[PRE_ROUTER] recommendation=${isRecommendation} | narrative=${isNarrative}`);
-
             setStage("Loading dataset...");
             // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
             const dataset = await getDataset(datasetId);
@@ -112,9 +106,6 @@ export class ChatOrchestrator {
                 )
             ]);
 
-            const entityFilters = resolveEntities(question, metadata);
-
-            console.log("ENTITY FILTERS:", entityFilters);
             console.log("DATASET METADATA:", JSON.stringify(metadata, null, 2));
             console.log(
                 `[SCHEMA_COLUMNS] (${schema.length} cols):`,
@@ -123,40 +114,16 @@ export class ChatOrchestrator {
 
             const semanticLayer = buildSemanticLayer(schema);
             timer.checkpoint("Dataset + schema");
-            console.log(
-                `[SEMANTIC_LAYER] type=${semanticLayer.datasetType} | ` +
-                `dims=[${semanticLayer.dimensions.join(", ")}] | ` +
-                `mappings=${JSON.stringify(semanticLayer.columnMappings)}`
-            );
 
-            setStage("Analyzing query intent...");
-            // ── 2. Question Analysis ───────────────────────────────────────────
-            let parsedQuestion = analyzeQuestion(question);
+            setStage("Analyzing query intent (AI)...");
+            // ── 2. AI-Native Question Analysis ───────────────────────────────────────────
+            const llmAnalysis = await llmParseQuestion(question, metadata);
+            
+            const isRecommendation = llmAnalysis.requiresRecommendation;
+            const isNarrative = llmAnalysis.requiresNarrative;
+            console.log(`[LLM_NLU] recommendation=${isRecommendation} | narrative=${isNarrative}`);
 
-            parsedQuestion = inferDefaultMetric(
-                question,
-                parsedQuestion,
-                semanticLayer
-            );
-
-            // Merge entity-aware filters into the parsed question
-            const existingKeys = new Set(
-                parsedQuestion.filters.map(
-                    f => `${f.dimension}|${f.operator}|${String(f.value).toLowerCase()}`
-                )
-            );
-
-            for (const filter of entityFilters) {
-                const key = `${filter.dimension}|${filter.operator}|${String(filter.value).toLowerCase()}`;
-
-                if (!existingKeys.has(key)) {
-                    parsedQuestion.filters.push(filter);
-                    existingKeys.add(key);
-                }
-            }
-
-            // Normalise business semantics after merging entity filters
-            parsedQuestion = normalizeBusinessSemantics(parsedQuestion);
+            let parsedQuestion = llmAnalysis;
 
             // ── GLOBAL DATA CLEANING ───────────────────────────────────────────
             // If the dataset contains fuzzy_score, filter out rows < 90 automatically.
@@ -165,13 +132,6 @@ export class ChatOrchestrator {
                 parsedQuestion.filters.push({ dimension: "fuzzy_score", operator: ">=", value: 90 });
                 console.log("[DATA_CLEANING] Injected global fuzzy_score >= 90 filter");
             }
-
-            // Resolve or discard unclassified proper noun (_entity) filters
-            parsedQuestion.filters = resolveOrDiscardEntities(
-                parsedQuestion.filters,
-                parsedQuestion.focus,
-                semanticLayer.dimensions
-            );
 
             // ================================
             // New Intelligence Planning Layer
@@ -192,20 +152,10 @@ export class ChatOrchestrator {
             // Existing production flow
             parsedIntent = parsedQuestion.intent;
 
-            const rawFilters = [...parsedQuestion.filters];
-            const resolvedFilters = [...entityFilters];
+            // Existing production flow
+            parsedIntent = parsedQuestion.intent;
 
-            // Merge entity filters and deduplicate to prevent comparison engine
-            // from seeing dozens of duplicate suppliername/destination entries.
-            // This MUST happen before validation so the validator sees the investigation target.
-            const mergedFilters = dedupeFilters([
-                ...parsedQuestion.filters,
-                ...entityFilters
-            ]);
-            parsedQuestion.filters = mergedFilters;
-
-            console.log("MERGED FILTERS:", parsedQuestion.filters);
-            console.log(`[PRE_VALIDATION] dimensions=${parsedQuestion.dimensions.length} | rawFilters=${rawFilters.length} | resolvedFilters=${resolvedFilters.length} | mergedFilters=${mergedFilters.length}`);
+            console.log(`[PRE_VALIDATION] dimensions=${parsedQuestion.dimensions.length} | filters=${parsedQuestion.filters.length}`);
 
             // ── Competitor Detection ─────────────────────────────────────────
             // Runs AFTER entity resolution and filter merging.
@@ -215,12 +165,12 @@ export class ChatOrchestrator {
             competitorContext = detectCompetitorContext(
                 question,
                 metadata,
-                mergedFilters.map(f => ({ dimension: f.dimension, value: f.value }))
+                parsedQuestion.filters.map(f => ({ dimension: f.dimension, value: f.value }))
             );
 
             if (competitorContext) {
                 // Check if we already have a supplier filter for this competitor
-                const alreadyFiltered = mergedFilters.some(
+                const alreadyFiltered = parsedQuestion.filters.some(
                     f => (f.dimension === "supplier" || f.dimension === "thirdparty") &&
                         String(f.value).toLowerCase() === competitorContext!.competitorName.toLowerCase()
                 );
@@ -358,7 +308,7 @@ export class ChatOrchestrator {
                 }
 
                 // Executive priority queries always use EXECUTIVE_PRIORITY route
-                if (isExecutivePriorityQuestion(question) || parsedQuestion.intent === "EXECUTIVE_PRIORITY") {
+                if (parsedQuestion.intent === "EXECUTIVE_PRIORITY") {
                     if (routeType !== "EXECUTIVE_PRIORITY") {
                         console.log(`[PRE_ROUTER] Executive priority query — overriding route from ${routeType} to EXECUTIVE_PRIORITY`);
                     }
@@ -882,7 +832,7 @@ export class ChatOrchestrator {
             let recommendations = null;
 
             if ((routeType === "ROOT_CAUSE" || routeType === "MULTI_ANALYSIS" || routeType === "EXECUTIVE_PRIORITY" || routeType === "COMPETITOR_STRATEGY") && rootCausePack && executivePack) {
-                responseSource = classifyResponseSource(question);
+                responseSource = classifyResponseSource(isRecommendation, isNarrative);
                 claudeInputPack = buildClaudeInputPack(
                     question,
                     rootCausePack,
