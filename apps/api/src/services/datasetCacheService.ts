@@ -26,7 +26,7 @@ function buildSchemaCacheKey(csvPath: string): string {
 }
 
 function buildMetadataCacheKey(datasetId: string): string {
-    return `dataset:metadata:${datasetId}`;
+    return `dataset:metadata:v2:${datasetId}`;
 }
 
 /**

@@ -47,6 +47,17 @@ async function getDistinctValues(
 
 }
 
+async function getDistinctValuesWithFallback(
+    tempPath: string,
+    columnNames: string[]
+): Promise<string[]> {
+    for (const col of columnNames) {
+        const values = await getDistinctValues(tempPath, col);
+        if (values.length > 0) return values;
+    }
+    return [];
+}
+
 export async function buildDatasetMetadata(
     tempPath: string
 ): Promise<DatasetMetadata> {
@@ -59,41 +70,13 @@ export async function buildDatasetMetadata(
         countries,
         apwBuckets
     ] = await Promise.all([
-        getDistinctValues(
-            tempPath,
-            "destination"
-        ),
-
-        getDistinctValues(
-            tempPath,
-            "suppliername"
-        ),
-
-        getDistinctValues(
-            tempPath,
-            "thirdparty"
-        ),
-
-        getDistinctValues(
-            tempPath,
-            "tbo_chainname"
-        ),
-
-        getDistinctValues(
-            tempPath,
-            "tbo_hotelname"
-        ),
-
-        getDistinctValues(
-            tempPath,
-            "country"
-        ),
-
-        getDistinctValues(
-            tempPath,
-            "apw_bucket_new"
-        )
-
+        getDistinctValuesWithFallback(tempPath, ["destination", "Destination"]),
+        getDistinctValuesWithFallback(tempPath, ["suppliername", "supplier", "SupplierName", "Supplier"]),
+        getDistinctValuesWithFallback(tempPath, ["thirdparty", "third_party", "competitor", "ThirdParty"]),
+        getDistinctValuesWithFallback(tempPath, ["tbo_chainname", "chain", "chainname", "Chain"]),
+        getDistinctValuesWithFallback(tempPath, ["tbo_hotelname", "hotel name", "hotel_name", "hotel", "Hotel"]),
+        getDistinctValuesWithFallback(tempPath, ["country", "Country"]),
+        getDistinctValuesWithFallback(tempPath, ["apw_bucket_new", "apw_bucket", "apw", "lead time bucket", "APW"])
     ]);
 
     return {
