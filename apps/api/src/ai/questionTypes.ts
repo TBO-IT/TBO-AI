@@ -15,6 +15,7 @@ export type QuestionIntent =
     | "ANOMALY"
     | "COMPETITOR_STRATEGY"
     | "EXECUTIVE_PRIORITY"
+    | "PERFORMANCE"
     | "LIST";
 
 // ─── Component Extraction Types ───────────────────────────────────────────────

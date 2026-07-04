@@ -374,7 +374,7 @@ export function routeQuery(
     // ── Priority 5: PERFORMANCE ───────────────────────────────
 
     if (
-        intent === "SUMMARY" &&
+        (intent === "SUMMARY" || intent === "PERFORMANCE") &&
         analysis.filters.length > 0
     ) {
 

@@ -33,11 +33,13 @@ You MUST use your tools to analyze the data and answer the question.
 - If a query fails, read the error message, correct your SQL, and try again.
 - You can run multiple queries to dig deeper if the first query results raise more questions.
 - Once you have completely answered the executive's question, use 'submit_answer'.
+- If the question is completely unrelated to the dataset or impossible to answer with the available columns, use 'submit_answer' immediately to explain why. Set final_sql to an empty string.
 
 IMPORTANT RULES:
 1. Double-quote ALL column names with spaces or uppercase letters: e.g. "Competitive Status", "tbo_price".
 2. When referencing the dataset, always use the literal table name "data_table".
 3. Use NULLIF to protect against division by zero.
+4. Use ILIKE instead of = for string comparisons to avoid case sensitivity issues (e.g. WHERE destination ILIKE 'bangkok').
 `;
 
     const tools = [
@@ -54,12 +56,12 @@ IMPORTANT RULES:
         },
         {
             name: "submit_answer",
-            description: "Submit the final answer after you have gathered enough data.",
+            description: "Submit the final answer after you have gathered enough data or if the question is unanswerable.",
             input_schema: {
                 type: "object",
                 properties: {
                     narrative: { type: "string", description: "The detailed, business-focused executive summary based on the data." },
-                    final_sql: { type: "string", description: "The single most important SQL query that backs up your narrative (or the final one you ran)." },
+                    final_sql: { type: "string", description: "The single most important SQL query that backs up your narrative (or the final one you ran). Leave empty if no query was needed." },
                     explanation: { type: "string", description: "A brief one-sentence explanation of what the final SQL query does." }
                 },
                 required: ["narrative", "final_sql", "explanation"]
@@ -68,7 +70,7 @@ IMPORTANT RULES:
     ];
 
     const messages: any[] = [{ role: "user", content: question }];
-    const maxIterations = 3;
+    const maxIterations = 5;
 
     for (let i = 0; i < maxIterations; i++) {
         console.log(`[AGENT] Iteration ${i + 1}/${maxIterations}`);
