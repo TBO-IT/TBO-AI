@@ -99,7 +99,7 @@ router.post(
                 );
 
             const metadata = await buildDatasetMetadata(localCsvPath);
-            const parsedQuestion = await llmParseQuestion(question, metadata);
+            const parsedQuestion = await llmParseQuestion(question, semanticLayer);
 
             const { prompt } =
                 buildPrompt(

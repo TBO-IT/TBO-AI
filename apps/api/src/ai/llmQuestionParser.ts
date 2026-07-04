@@ -2,7 +2,7 @@ import { QuestionAnalysis, QuestionIntent } from "./questionTypes.js";
 import { generateText } from "../services/anthropicClient.js";
 import { DIMENSION_REGISTRY } from "./dimensionRegistry.js";
 import { logger } from "../lib/logger.js";
-import { DatasetMetadata } from "../services/metadataService.js";
+import { EnrichedSemanticLayer } from "./semanticLayer.js";
 
 /**
  * Extended analysis payload returned by the LLM
@@ -33,26 +33,32 @@ function extractJsonBlock(text: string): string {
  */
 export async function llmParseQuestion(
     question: string,
-    metadata: DatasetMetadata
+    semanticLayer: EnrichedSemanticLayer
 ): Promise<LlmAnalysisResult> {
     
-    // Build context strings for Claude to understand the domain
-    const validDimensions = Object.keys(DIMENSION_REGISTRY)
-        .map(k => {
-            const def = DIMENSION_REGISTRY[k];
+    // Build context strings for Claude to understand the domain based on actual schema!
+    const validDimensions = semanticLayer.dimensions.map(dim => {
+        const def = DIMENSION_REGISTRY[dim];
+        if (def) {
             const valid = def.validValues ? `(Valid: ${def.validValues.join(", ")})` : "(Open text)";
-            return `  - ${def.canonicalKey}: ${def.label} ${valid}`;
-        }).join("\n");
+            return `  - ${dim}: ${def.label} ${valid}`;
+        }
+        return `  - ${dim}: (Extracted directly from dataset column)`;
+    }).join("\n");
         
+    const validMetrics = semanticLayer.metricKeys.length > 0 
+        ? semanticLayer.metricKeys.join(", ") 
+        : "(No predefined metrics; dataset relies entirely on open text queries)";
+
     const systemPrompt = `You are an expert NLP parser for a travel analytics platform.
 Your ONLY job is to extract business intent, metrics, dimensions, and filters from the user's natural language query.
 You MUST output raw, valid JSON exactly matching the schema provided below. Do not add any conversational text.
 
-AVAILABLE DIMENSIONS:
+AVAILABLE DIMENSIONS FOR THIS DATASET:
 ${validDimensions}
 
-AVAILABLE METRICS (examples):
-win_rate, searches, bookings, total_sales, l2b
+AVAILABLE METRICS FOR THIS DATASET:
+${validMetrics}
 
 AVAILABLE INTENTS:
 ROOT_CAUSE (e.g. "why did X drop?"), TREND ("how is X trending over time?"), PERFORMANCE ("show me performance of X"), COMPARISON ("compare X and Y"), CONTRIBUTION ("what drove the increase in X?"), COMPETITOR_STRATEGY ("what is Expedia doing?"), EXECUTIVE_PRIORITY ("what should I focus on?").
@@ -96,6 +102,7 @@ RULES:
         parsed.dimensions = parsed.dimensions || [];
         parsed.filters = parsed.filters || [];
         parsed.timeReferences = parsed.timeReferences || [];
+        parsed.originalQuestion = question;
         
         return parsed;
     } catch (e) {
