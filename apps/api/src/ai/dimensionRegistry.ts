@@ -48,7 +48,8 @@ const DIMENSION_BUSINESS_PROPS: Record<string, { label: string, validValues?: st
         label: "Competitive Status",
         validValues: ["Winning", "Losing", "Equal"]
     },
-    thirdparty: { label: "Competitor" }
+    thirdparty: { label: "Competitor" },
+    fuzzy_score: { label: "Fuzzy Score" }
 };
 
 /**

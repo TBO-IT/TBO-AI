@@ -91,7 +91,9 @@ const DIMENSION_MATCHERS: DimensionMatcher[] = [
         canonicalKey: "apw",
         matches: ["apw_bucket", "apw_bucket_new", "apw", "advanced purchase window", "purchase window", "lead time bucket"]
     },
-    { canonicalKey: "thirdparty", matches: ["thirdparty", "third_party", "competitor"] }
+    { canonicalKey: "thirdparty", matches: ["thirdparty", "third_party", "competitor"] },
+    { canonicalKey: "competitive_status", matches: ["competitive status", "competitive_status"] },
+    { canonicalKey: "fuzzy_score", matches: ["fuzzy score", "fuzzy_score"] }
 ];
 
 function mapDimensions(schema: DatasetColumn[]): {
@@ -107,6 +109,7 @@ function mapDimensions(schema: DatasetColumn[]): {
 
     schema.forEach(col => {
         const normCol = norm(col.column_name);
+        let matched = false;
         for (const matcher of DIMENSION_MATCHERS) {
             // Normalise all matcher strings the same way
             if (matcher.matches.map(norm).includes(normCol)) {
@@ -114,8 +117,16 @@ function mapDimensions(schema: DatasetColumn[]): {
                     dimensions.push(matcher.canonicalKey);
                 }
                 columnMappings[col.column_name] = matcher.canonicalKey;
+                matched = true;
                 break;
             }
+        }
+        
+        if (!matched) {
+            if (!dimensions.includes(normCol)) {
+                dimensions.push(normCol);
+            }
+            columnMappings[col.column_name] = normCol;
         }
     });
 
