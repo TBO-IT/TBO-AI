@@ -12,7 +12,6 @@ export default function SupplierDeepDivePage() {
     const datasetId = searchParams.get("datasetId") || "";
 
     const [data, setData] = useState<DeepDiveData | null>(null);
-    const [meta, setMeta] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -26,7 +25,6 @@ export default function SupplierDeepDivePage() {
             try {
                 const result = await getSupplierDeepDive(id, datasetId || "demo");
                 setData(result.data);
-                setMeta(result.meta);
             } catch (err) {
                 console.error(err);
                 setError("Failed to load supplier profile");

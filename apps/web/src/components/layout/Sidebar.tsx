@@ -3,7 +3,6 @@ import { useAuth, useUser } from "@clerk/clerk-react";
 import {
     MessageSquare,
     Database,
-    FileText,
     Search as SearchIcon,
     Settings,
     LogOut,
