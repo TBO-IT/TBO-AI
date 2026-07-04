@@ -441,26 +441,29 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
         }
 
         return res.json({
-            id: supplierName,
-            name: supplierName,
-            type: "SUPPLIER",
-            metrics: {
-                winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
-                priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
-                volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
-                totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
-            },
-            topHotels: topHotelsData,
-            opportunityAssessment: {
-                level: "HIGH",
-                primaryOpportunity: "Strong pricing advantage detected in European capitals. Increase marketing spend for these regions.",
-            },
-            trendData: {
-                winRate: trendWinRate,
-                priceGap: trendPriceGap,
-                apw: trendApw
-            },
-            distribution: distribution
+            meta: null,
+            data: {
+                id: supplierName,
+                name: supplierName,
+                type: "SUPPLIER",
+                metrics: {
+                    winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
+                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
+                    volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
+                    totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
+                },
+                topHotels: topHotelsData,
+                opportunityAssessment: {
+                    level: "HIGH",
+                    primaryOpportunity: "Strong pricing advantage detected in European capitals. Increase marketing spend for these regions.",
+                },
+                trendData: {
+                    winRate: trendWinRate,
+                    priceGap: trendPriceGap,
+                    apw: trendApw
+                },
+                distribution: distribution
+            }
         });
     } catch (error) {
         logger.error({ err: error }, "Failed to fetch supplier deep dive");
