@@ -87,33 +87,7 @@ export default function ChainDeepDivePage() {
                 </div>
             </div>
 
-            {/* Meta Alerts */}
-            {meta && (
-                <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {meta.outliersDropped && (meta.outliersDropped.magnitude > 0 || meta.outliersDropped.percentage > 0) && (
-                        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 p-4 rounded-xl flex items-start gap-3">
-                            <AlertTriangle className="h-5 w-5 mt-0.5" />
-                            <div>
-                                <h4 className="font-semibold text-sm">Outliers Automatically Removed</h4>
-                                <p className="text-xs mt-1">
-                                    {meta.outliersDropped.magnitude} absolute magnitude outliers and {meta.outliersDropped.percentage} relative percentage outliers were dropped to ensure data integrity.
-                                </p>
-                            </div>
-                        </div>
-                    )}
-                    {meta.knownLimitations && meta.knownLimitations.length > 0 && (
-                        <div className="bg-slate-500/10 border border-slate-500/20 text-slate-600 dark:text-slate-400 p-4 rounded-xl flex items-start gap-3">
-                            <Activity className="h-5 w-5 mt-0.5" />
-                            <div>
-                                <h4 className="font-semibold text-sm">Data Limitations</h4>
-                                <ul className="text-xs mt-1 list-disc pl-4 space-y-1">
-                                    {meta.knownLimitations.map((l: string, i: number) => <li key={i}>{l}</li>)}
-                                </ul>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
+
             {/* Key Metrics */}
             <div className="mb-10">
                 <h3 className="text-sm font-semibold tracking-wide uppercase text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">

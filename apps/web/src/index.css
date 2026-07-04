@@ -45,12 +45,32 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Glassmorphism Utility ── */
+.glass-panel {
+  @apply bg-white/60 dark:bg-[#060912]/60 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.3)];
+}
+
+/* ── Modern Mesh Gradients ── */
 body {
-  @apply bg-[#f8f9fb] text-slate-900;
+  @apply text-slate-900 min-h-screen relative;
+  background-color: #f8fafc;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(27, 77, 142, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(245, 166, 35, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(27, 77, 142, 0.1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(245, 166, 35, 0.12) 0px, transparent 50%);
+  background-attachment: fixed;
 }
 
 .dark body {
-  @apply bg-[#0a0e1a] text-slate-100;
+  @apply text-slate-100;
+  background-color: #03050a;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(27, 77, 142, 0.25) 0px, transparent 60%),
+    radial-gradient(at 100% 0%, rgba(245, 166, 35, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(27, 77, 142, 0.2) 0px, transparent 60%),
+    radial-gradient(at 0% 100%, rgba(245, 166, 35, 0.15) 0px, transparent 50%);
+  background-attachment: fixed;
 }
 
 /* ── Scrollbar ── */

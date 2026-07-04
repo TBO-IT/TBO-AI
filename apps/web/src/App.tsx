@@ -16,8 +16,6 @@ import AppLayout from "./layouts/AppLayout";
 import CopilotPage from "./pages/CopilotPage";
 import UploadPage from "./pages/UploadPage";
 import DatasetsPage from "./pages/DatasetsPage";
-import ReportsPage from "./pages/ReportsPage";
-import ReportDetailPage from "./pages/ReportDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
 import HotelDeepDivePage from "./pages/HotelDeepDivePage";
@@ -57,8 +55,6 @@ function AppContent() {
                         <Route path="/copilot" element={<CopilotPage />} />
                         <Route path="/datasets" element={<DatasetsPage />} />
                         <Route path="/datasets/upload" element={<UploadPage />} />
-                        <Route path="/reports" element={<ReportsPage />} />
-                        <Route path="/reports/:id" element={<ReportDetailPage />} />
                         <Route path="/deep-dives" element={<DeepDivesIndexPage />} />
                         <Route path="/deep-dives/hotel/:id" element={<HotelDeepDivePage />} />
                         <Route path="/deep-dives/supplier/:id" element={<SupplierDeepDivePage />} />

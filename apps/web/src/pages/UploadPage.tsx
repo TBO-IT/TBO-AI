@@ -15,14 +15,19 @@ export default function UploadPage() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selected = e.target.files?.[0];
         if (selected) {
-            if (selected.name.endsWith(".csv")) {
-                setFile(selected);
-                setError("");
-                setDatasetId("");
-            } else {
+            if (!selected.name.endsWith(".csv")) {
                 setError("Only CSV files are supported.");
                 setFile(null);
+                return;
             }
+            if (selected.size > 50 * 1024 * 1024) {
+                setError("File size exceeds the 50MB limit. Please upload a smaller dataset.");
+                setFile(null);
+                return;
+            }
+            setFile(selected);
+            setError("");
+            setDatasetId("");
         }
     };
 

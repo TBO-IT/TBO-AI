@@ -21,7 +21,6 @@ import { motion, AnimatePresence } from "framer-motion";
 const NAV_ITEMS = [
     { to: "/copilot", label: "Copilot", icon: MessageSquare, description: "Ask questions" },
     { to: "/datasets", label: "Datasets", icon: Database, description: "Manage data" },
-    { to: "/reports", label: "Reports", icon: FileText, description: "Saved reports" },
     { to: "/deep-dives", label: "Deep Dives", icon: SearchIcon, description: "Entity analysis" },
 ];
 
@@ -36,12 +35,12 @@ export default function Sidebar() {
         <aside
             className={cn(
                 "flex flex-col h-full border-r transition-all duration-250 ease-out select-none",
-                "bg-[#060912] text-slate-300 border-slate-800/60",
+                "glass-panel text-slate-800 dark:text-slate-300",
                 collapsed ? "w-[68px]" : "w-[240px]"
             )}
         >
             {/* ── Brand ── */}
-            <div className="flex items-center h-[60px] px-4 border-b border-slate-800/60">
+            <div className="flex items-center h-[60px] px-4 border-b border-black/10 dark:border-white/10">
                 <div className="relative flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-brand-blue to-brand-blue-dark flex items-center justify-center">
                     <Sparkles className="h-4 w-4 text-white" />
                     <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-brand-orange border-2 border-[#060912]" />
@@ -77,8 +76,8 @@ export default function Sidebar() {
                             className={cn(
                                 "relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150",
                                 isActive
-                                    ? "bg-white/[0.08] text-white"
-                                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]",
+                                    ? "bg-slate-900/5 dark:bg-white/10 text-brand-blue-dark dark:text-white"
+                                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5",
                                 collapsed && "justify-center px-0"
                             )}
                             title={collapsed ? item.label : undefined}
@@ -115,7 +114,7 @@ export default function Sidebar() {
                     onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
                     className={cn(
                         "flex items-center w-full gap-2 px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-150 cursor-pointer border",
-                        "text-slate-400 border-slate-800/60 hover:text-slate-200 hover:bg-white/[0.04]",
+                        "text-slate-500 dark:text-slate-400 border-black/10 dark:border-white/10 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5",
                         collapsed && "justify-center px-0 border-transparent"
                     )}
                     title={collapsed ? "Search (⌘K)" : undefined}
@@ -124,7 +123,7 @@ export default function Sidebar() {
                     {!collapsed && (
                         <div className="flex items-center justify-between flex-1">
                             <span>Search...</span>
-                            <kbd className="hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-slate-700 bg-slate-800 px-1 font-mono text-[9px] font-medium text-slate-400">
+                            <kbd className="hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-1 font-mono text-[9px] font-medium text-slate-500 dark:text-slate-400">
                                 <span className="text-[10px]">⌘</span>K
                             </kbd>
                         </div>
@@ -133,15 +132,15 @@ export default function Sidebar() {
             </div>
 
             {/* ── Bottom Section ── */}
-            <div className="px-2.5 pb-2 space-y-0.5 border-t border-slate-800/60 pt-2">
+            <div className="px-2.5 pb-2 space-y-0.5 border-t border-black/10 dark:border-white/10 pt-2">
                 {/* Settings Toggle */}
                 <NavLink
                     to="/settings"
                     className={cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150",
                         location.pathname.startsWith("/settings")
-                            ? "bg-white/[0.08] text-white"
-                            : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]",
+                            ? "bg-slate-900/5 dark:bg-white/10 text-brand-blue-dark dark:text-white"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5",
                         collapsed && "justify-center px-0"
                     )}
                     title={collapsed ? "Settings" : undefined}
