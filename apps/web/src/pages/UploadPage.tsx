@@ -47,8 +47,10 @@ export default function UploadPage() {
             }
         } catch (err: any) {
             console.error(err);
+            const errData = err.response?.data?.error;
+            const errMsg = typeof errData === "string" ? errData : (errData?.message || JSON.stringify(errData));
             setError(
-                err.response?.data?.error ||
+                errMsg ||
                 "Failed to upload the dataset. Please check backend server status."
             );
         } finally {

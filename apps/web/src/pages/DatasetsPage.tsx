@@ -20,7 +20,9 @@ export default function DatasetsPage() {
             setDatasets(data);
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || "Failed to load datasets. Please check server connection.");
+            const errData = err.response?.data?.error;
+            const errMsg = typeof errData === "string" ? errData : (errData?.message || JSON.stringify(errData));
+            setError(errMsg || "Failed to load datasets. Please check server connection.");
         } finally {
             setLoading(false);
         }
