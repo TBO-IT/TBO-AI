@@ -14,7 +14,7 @@ just change const SQL_CACHE_VERSION = "v2" or one more than whatever number is t
 */
 // TTL of 7 days for SQL cache since schemas rarely change
 const CACHE_TTL = 60 * 60 * 24 * 7;
-const SQL_CACHE_VERSION = "v2";
+const SQL_CACHE_VERSION = "v3";
 // A short hash of all metric formulas. When metricRegistry.ts changes,
 // this hash changes, automatically busting all stale SQL cache entries.
 const METRIC_VERSION = crypto

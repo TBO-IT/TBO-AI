@@ -1,4 +1,3 @@
-import React from 'react';
 import { cn } from '../../lib/utils';
 
 export interface MatrixData {
@@ -29,20 +28,6 @@ export function HeatmapMatrix({ matrix }: { matrix: MatrixData }) {
 
     if (min === Infinity) min = 0;
     if (max === -Infinity) max = 1;
-
-    // Helper to get color intensity
-    const getColor = (val: number | undefined | null) => {
-        if (val === undefined || val === null) return 'bg-slate-50 dark:bg-slate-800/20 text-slate-400';
-        
-        // Simple linear interpolation for opacity between 0.1 and 0.9
-        const range = max - min === 0 ? 1 : max - min;
-        const normalized = (val - min) / range;
-        
-        // Use an emerald scale for positive values
-        // We'll just map the alpha channel
-        const alpha = 0.1 + (normalized * 0.8);
-        return `bg-emerald-500 text-slate-900 font-medium`;
-    };
 
     const getStyle = (val: number | undefined | null) => {
         if (val === undefined || val === null) return {};

@@ -1,8 +1,6 @@
-import React from 'react';
 import {
     BarChart, Bar, LineChart, Line, AreaChart, Area,
-    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    Cell
+    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 
 export type ChartType = 'bar' | 'line' | 'area';
