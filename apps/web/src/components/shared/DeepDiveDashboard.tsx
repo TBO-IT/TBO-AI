@@ -112,7 +112,7 @@ export default function DeepDiveDashboard({ data, children }: DeepDiveDashboardP
                 </div>
 
                 {/* Price Gap Distribution */}
-                <div className="col-span-2">
+                <div className="col-span-3">
                     <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-5 h-full">
                         <div className="flex items-center gap-1.5 mb-6">
                             <h3 className="text-[13px] font-semibold tracking-wide uppercase text-slate-400">Price Gap Distribution</h3>
@@ -154,34 +154,6 @@ export default function DeepDiveDashboard({ data, children }: DeepDiveDashboardP
                             <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500"></div> Losing {'>'} 10%</div>
                         </div>
                     </div>
-                </div>
-
-                {/* Key Insights */}
-                <div className="col-span-1">
-                    {data.insights && (
-                        <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-5 h-full">
-                            <h3 className="text-[13px] font-semibold tracking-wide uppercase text-slate-400 mb-6">Key Insights</h3>
-                            <div className="space-y-4">
-                                {data.insights.map((insight, idx) => (
-                                    <div key={idx} className="flex items-start gap-3">
-                                        <div className="mt-0.5 flex-shrink-0">
-                                            {insight.toLowerCase().includes('declined') || insight.toLowerCase().includes('weak') || insight.toLowerCase().includes('trailing') ? (
-                                                <TrendingDown className="h-4 w-4 text-red-400" />
-                                            ) : insight.toLowerCase().includes('improved') || insight.toLowerCase().includes('growth') || insight.toLowerCase().includes('positive') || insight.toLowerCase().includes('outperforming') ? (
-                                                <TrendingUp className="h-4 w-4 text-emerald-400" />
-                                            ) : (
-                                                <AlertCircle className="h-4 w-4 text-amber-400" />
-                                            )}
-                                        </div>
-                                        <p className="text-sm text-slate-300 leading-relaxed">{insight}</p>
-                                    </div>
-                                ))}
-                            </div>
-                            <button className="mt-8 text-xs font-medium text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
-                                View all insights &rarr;
-                            </button>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
