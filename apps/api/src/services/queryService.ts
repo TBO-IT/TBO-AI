@@ -1,12 +1,9 @@
-import duckdb from "duckdb";
+import { db } from "./queryExecutionService.js";
 import { logger } from "../lib/logger.js";
 
 export async function runQuery<T>(
     sql: string
 ): Promise<T[]> {
-
-    const db =
-        new duckdb.Database(":memory:");
 
     const conn =
         db.connect();
@@ -18,14 +15,12 @@ export async function runQuery<T>(
 
             (err, rows) => {
                 conn.close(() => {
-                    db.close(() => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
 
-                        resolve(rows as T[]);
-                    });
+                    resolve(rows as T[]);
                 });
             }
         );

@@ -1,5 +1,19 @@
 import duckdb from "duckdb";
 
+// Use a singleton DuckDB instance for the entire application to prevent OOM
+// Creating a new Database(":memory:") for every query creates isolated buffer pools
+// that each try to grab 80% of system RAM.
+export const db = new duckdb.Database(":memory:");
+
+// Initialize database with safe memory and thread limits for constrained environments like Render
+db.exec("PRAGMA memory_limit='512MB'; PRAGMA threads=4;", (err) => {
+    if (err) {
+        console.error("[DUCKDB_INIT] Failed to set pragmas:", err);
+    } else {
+        console.log("[DUCKDB_INIT] Initialized singleton instance with 512MB memory limit.");
+    }
+});
+
 /**
  * Converts any BigInt values in a row to Number so that JSON.stringify works.
  * DuckDB returns BIGINT columns as native JS BigInt which is not JSON-serializable.
@@ -15,41 +29,23 @@ function sanitizeRows<T>(rows: any[]): T[] {
 }
 
 /**
- * Raw SQL executor — runs any SQL string directly against an in-memory DuckDB instance.
+ * Raw SQL executor — runs any SQL string directly against the singleton DuckDB instance.
  */
-export async function executeSql<T = any>(
-    sql: string
-): Promise<T[]> {
-
-    const db =
-        new duckdb.Database(":memory:");
-
-    const conn =
-        db.connect();
-
-    return new Promise(
-        (resolve, reject) => {
-
-            conn.all(
-                sql,
-
-                (err, rows) => {
-
-                    if (err) {
-                        reject(err);
-                        return;
-                    }
-
-                    resolve(
-                        sanitizeRows<T>(rows)
-                    );
-
-                }
-            );
-
-        }
-    );
-
+export async function executeSql<T = any>(sql: string): Promise<T[]> {
+    return new Promise((resolve, reject) => {
+        const conn = db.connect();
+        
+        conn.all(sql, (err, rows) => {
+            // ALWAYS close the connection to prevent memory leaks
+            conn.close();
+            
+            if (err) {
+                reject(err);
+                return;
+            }
+            resolve(sanitizeRows<T>(rows));
+        });
+    });
 }
 
 /**

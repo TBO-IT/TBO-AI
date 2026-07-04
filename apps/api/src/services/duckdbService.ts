@@ -186,10 +186,11 @@ async function detectType(conn: duckdb.Connection, src: string): Promise<Dataset
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+import { db } from "./queryExecutionService.js";
+
 export async function analyzeCsv(filePath: string): Promise<DatasetSummary> {
     const normalizedPath = filePath.replaceAll("\\", "/");
 
-    const db = new duckdb.Database(":memory:");
     const conn = db.connect();
 
     // All CSV reads use ignore_errors=true to handle encoding issues
@@ -218,8 +219,6 @@ export async function analyzeCsv(filePath: string): Promise<DatasetSummary> {
 
     } finally {
         conn.close();
-        // Close the database itself to release any OS-level file handles
-        db.close();
     }
 }
 

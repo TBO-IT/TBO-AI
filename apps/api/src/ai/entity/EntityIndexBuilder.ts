@@ -47,13 +47,14 @@ async function distinctValues(
 
 }
 
+import { db } from "../../services/queryExecutionService.js";
+
 export async function buildEntityIndex(
     filePath: string
 ): Promise<EntityIndex> {
 
     const normalized = filePath.replaceAll("\\", "/");
 
-    const db = new duckdb.Database(":memory:");
     const conn = db.connect();
 
     const src = `read_csv_auto('${normalized}', ignore_errors=true)`;
@@ -96,7 +97,6 @@ export async function buildEntityIndex(
     } finally {
 
         conn.close();
-        db.close();
 
     }
 
