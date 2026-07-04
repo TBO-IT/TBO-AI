@@ -33,9 +33,7 @@ export function canUseNaturalResponse(
     const simpleIntents = ["LIST", "SUMMARY", "RANKING", "BREAKDOWN"];
     if (!simpleIntents.includes(analysis.intent)) return false;
 
-    // If results are too many rows, might be complex
-    if (results.length > 100) return false;
-
+    // We can handle large result sets now by summarizing the top N rows
     return true;
 }
 
@@ -90,10 +88,11 @@ function generateCountResponse(
 
     if (typeof value === "number") {
         const filters = describeFilters(analysis.filters);
-        return `There ${value === 1 ? "is" : "are"} ${value.toLocaleString()} ${filters} in your dataset.`;
+        const condition = filters !== "records" ? ` matching your criteria (${filters})` : "";
+        return `We currently have **${value.toLocaleString()}** records${condition} in the dataset.`;
     }
 
-    return `Found ${results.length} records matching your query.`;
+    return `Based on your query, we found **${results.length.toLocaleString()}** matching records.`;
 }
 
 /**
@@ -121,7 +120,9 @@ function generateStatusResponse(
 
         if (total > 0) {
             const winRate = ((winning / total) * 100).toFixed(1);
-            return `Of ${total.toLocaleString()} hotels, ${winning.toLocaleString()} are winning (${winRate}%) and ${losing.toLocaleString()} are losing.`;
+            return `Based on the latest data, **${winRate}%** of the ${total.toLocaleString()} entities are currently winning against competitors.\n\n` +
+                   `- **Winning:** ${winning.toLocaleString()}\n` +
+                   `- **Losing:** ${losing.toLocaleString()}`;
         }
     }
 
@@ -155,11 +156,17 @@ function generateRankingResponse(
         const label = row[labelField];
         const value = Number(row[valueField]);
         const suffix = valueField.includes("rate") || valueField.includes("perc") ? "%" : "";
-        return `${idx + 1}. ${label}: ${value.toLocaleString()}${suffix}`;
+        return `| **${idx + 1}. ${label}** | ${value.toLocaleString()}${suffix} |`;
     });
 
-    const dimension = analysis.dimensions[0] || "item";
-    return `Top 5 by ${dimension}:\n${items.join("\n")}`;
+    const dimension = analysis.dimensions[0] || "entities";
+    const recordCountText = results.length > 5 ? `Out of **${results.length.toLocaleString()}** ${dimension}s analyzed, ` : "";
+    
+    return `${recordCountText}here are the top 5 you should focus on:\n\n` +
+           `| ${dimension.charAt(0).toUpperCase() + dimension.slice(1)} | Value |\n` +
+           `|---|---|\n` +
+           `${items.join("\n")}\n\n` +
+           `*Note: This ranking is based on ${valueField.replace(/_/g, " ")}.*`;
 }
 
 /**
@@ -240,20 +247,31 @@ function generateComparisonResponse(
  * Summarize results as a bullet list (last resort)
  */
 function summarizeResults(results: Record<string, unknown>[]): string {
-    if (results.length === 0) return "No data found.";
+    if (results.length === 0) return "We couldn't find any data matching your criteria.";
 
     const firstRow = results[0];
-    const keys = Object.keys(firstRow).slice(0, 3);
+    const keys = Object.keys(firstRow).slice(0, 4);
 
-    const bits = results.slice(0, 5).map(row => {
-        return keys.map(k => `${k}: ${row[k]}`).join(", ");
+    const tableHeader = `| ${keys.map(k => k.replace(/_/g, " ").toUpperCase()).join(" | ")} |\n` +
+                        `| ${keys.map(() => "---").join(" | ")} |`;
+                        
+    const tableRows = results.slice(0, 10).map(row => {
+        return `| ${keys.map(k => {
+            const val = row[k];
+            if (typeof val === "number") return val.toLocaleString(undefined, { maximumFractionDigits: 2 });
+            return val;
+        }).join(" | ")} |`;
     });
 
-    if (results.length > 5) {
-        return bits.join("\n") + `\n... and ${results.length - 5} more`;
+    const output = `We analyzed **${results.length.toLocaleString()}** records. Here is a summary of the top results:\n\n` +
+                   `${tableHeader}\n` +
+                   `${tableRows.join("\n")}`;
+
+    if (results.length > 10) {
+        return output + `\n\n*Displaying the top 10 rows out of ${results.length.toLocaleString()} total.*`;
     }
 
-    return bits.join("\n");
+    return output;
 }
 
 /**

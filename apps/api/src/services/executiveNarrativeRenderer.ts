@@ -277,7 +277,7 @@ function renderStatisticalSummary(results: Record<string, unknown>[]): string {
     const numericCols = cols.filter(c => typeof results[0][c] === "number");
     if (numericCols.length === 0) return "";
 
-    const lines = ["\n### Statistical Summary\n"];
+    const lines = ["\n### Statistical Overview\n"];
 
     for (const col of numericCols.slice(0, 4)) {
         const values = results
@@ -292,23 +292,20 @@ function renderStatisticalSummary(results: Record<string, unknown>[]): string {
         const median = sorted.length % 2 === 0
             ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
             : sorted[Math.floor(sorted.length / 2)];
-        const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
-        const stddev = Math.sqrt(variance);
+        const stddev = Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length);
         const min = sorted[0];
         const max = sorted[sorted.length - 1];
 
-        // Concentration: top 3 share
         const topN = Math.min(3, values.length);
         const topValues = [...values].sort((a, b) => b - a).slice(0, topN);
         const topShare = sum > 0 ? (topValues.reduce((a, b) => a + b, 0) / sum) * 100 : 0;
 
-        lines.push(`**${col}:** Mean ${fmtNum(mean)} | Median ${fmtNum(median)} | Std Dev ${fmtNum(stddev)} | Range [${fmtNum(min)} – ${fmtNum(max)}]`);
+        lines.push(`- **${col.replace(/_/g, " ")}**: Averages at ${fmtNum(mean)} with a median of ${fmtNum(median)}. The data ranges from ${fmtNum(min)} to ${fmtNum(max)}.`);
 
         if (topShare > 60 && values.length > 5) {
-            lines.push(`  ⚠️ *Top ${topN} entities control ${fmtPct(topShare)} — high concentration*`);
+            lines.push(`  - *Note: We observed high concentration here, with the top ${topN} entities driving ${fmtPct(topShare)} of the total volume.*`);
         }
 
-        // Outliers (>2σ from mean)
         const outliers = results.filter(r => {
             const v = Number(r[col]);
             return isFinite(v) && Math.abs(v - mean) > 2 * stddev;
@@ -319,9 +316,9 @@ function renderStatisticalSummary(results: Record<string, unknown>[]): string {
             if (dimCol) {
                 const outlierNames = outliers
                     .slice(0, 3)
-                    .map(o => `${o[dimCol]} (${fmtNum(Number(o[col]))})`)
+                    .map(r => `${r[dimCol]} (${fmtNum(Number(r[col]))})`)
                     .join(", ");
-                lines.push(`  📊 *Outliers (>2σ):* ${outlierNames}`);
+                lines.push(`  - *Significant outliers detected:* ${outlierNames}`);
             }
         }
     }
@@ -331,31 +328,30 @@ function renderStatisticalSummary(results: Record<string, unknown>[]): string {
 
 // ─── Data Table Renderer ──────────────────────────────────────────────────────
 
-function renderDataTable(results: Record<string, unknown>[], maxRows: number = 10): string {
+function renderDataTable(results: Record<string, unknown>[], limit = 10): string {
     if (!results || results.length === 0) return "";
 
-    const cols = Object.keys(results[0]);
-    const displayRows = results.slice(0, maxRows);
+    const headers = Object.keys(results[0]).slice(0, 5);
+    const lines = ["\n### Top Entities\n"];
 
-    const lines = [
-        "\n### Data\n",
-        `| ${cols.join(" | ")} |`,
-        `| ${cols.map(() => "---").join(" | ")} |`
-    ];
+    lines.push(`| ${headers.map(h => h.replace(/_/g, " ")).join(" | ")} |`);
+    lines.push(`| ${headers.map(() => "---").join(" | ")} |`);
 
-    for (const row of displayRows) {
-        const cells = cols.map(c => {
-            const v = row[c];
-            if (typeof v === "number") {
-                return Number.isInteger(v) ? v.toLocaleString() : fmtNum(v);
-            }
-            return String(v ?? "");
+    let count = 0;
+    for (const row of results) {
+        if (count >= limit) break;
+        const rowData = headers.map(h => {
+            const val = row[h];
+            return typeof val === "number"
+                ? (Number.isInteger(val) ? val.toLocaleString() : fmtNum(val))
+                : String(val ?? "");
         });
-        lines.push(`| ${cells.join(" | ")} |`);
+        lines.push(`| ${rowData.join(" | ")} |`);
+        count++;
     }
 
-    if (results.length > maxRows) {
-        lines.push(`\n*Showing top ${maxRows} of ${results.length} results.*`);
+    if (results.length > limit) {
+        lines.push(`\n*Showing top ${limit} out of ${results.length.toLocaleString()} total records analyzed.*`);
     }
 
     return lines.join("\n") + "\n";
@@ -579,20 +575,20 @@ export function renderEnhancedDeterministicNarrative(
 
     const sections: string[] = [];
 
-    // Statistical summary (the key intelligence upgrade)
-    sections.push(renderStatisticalSummary(queryResults));
-
-    // Data table
-    sections.push(renderDataTable(queryResults, 10));
-
-    // Legacy insights (enhanced in insightEngine.ts)
+    // Insights (enhanced in insightEngine.ts)
     if (insights.length > 0 && insights[0] !== "No data available for insights.") {
-        sections.push("\n### Key Observations\n");
+        sections.push("\n### Analyst Observations\n");
         for (const insight of insights) {
             sections.push(`- ${insight}`);
         }
         sections.push("");
     }
 
-    return sections.filter(Boolean).join("\n");
+    // Statistical summary
+    sections.push(renderStatisticalSummary(queryResults));
+
+    // Data table
+    sections.push(renderDataTable(queryResults, 10));
+
+    return "Based on a comprehensive review of the dataset, here is what we found:\n" + sections.filter(Boolean).join("\n");
 }
