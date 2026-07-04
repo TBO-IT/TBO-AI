@@ -49,6 +49,7 @@ export async function executeSql<T = any>(sql: string): Promise<T[]> {
 }
 
 import crypto from "crypto";
+import fs from "fs/promises";
 
 const materializedTables = new Set<string>();
 
@@ -58,7 +59,15 @@ const materializedTables = new Set<string>();
  */
 async function ensureMaterialized(csvPath: string): Promise<string> {
     const normalizedPath = csvPath.replace(/\\/g, "/");
-    const hash = crypto.createHash("md5").update(normalizedPath).digest("hex");
+    let mtime = 0;
+    try {
+        const stat = await fs.stat(normalizedPath);
+        mtime = stat.mtimeMs;
+    } catch (e) {
+        console.warn(`[DUCKDB_CACHE] Could not stat ${normalizedPath}, falling back to path-only hash`);
+    }
+    
+    const hash = crypto.createHash("md5").update(`${normalizedPath}_${mtime}`).digest("hex");
     const tableName = `ds_${hash}`;
 
     if (materializedTables.has(tableName)) {
