@@ -61,7 +61,19 @@ AVAILABLE METRICS FOR THIS DATASET:
 ${validMetrics}
 
 AVAILABLE INTENTS:
-ROOT_CAUSE (e.g. "why did X drop?"), TREND ("how is X trending over time?"), PERFORMANCE ("show me performance of X"), COMPARISON ("compare X and Y"), CONTRIBUTION ("what drove the increase in X?"), COMPETITOR_STRATEGY ("what is Expedia doing?"), EXECUTIVE_PRIORITY ("what should I focus on?").
+- ROOT_CAUSE: (e.g. "why did X drop?", "what caused the decline in Bangkok?")
+- TREND: ("how is X trending?", "win rate over time")
+- RANKING: ("which is the best/worst X?", "top 5 destinations", "bottom chains by win rate", "which destination is the worst?")
+- LIST: ("show me hotels in Dubai", "list suppliers with price diff < 3")
+- SUMMARY: ("give me a summary of Dubai", "overview of our performance")
+- PERFORMANCE: ("show me the performance of Pattaya" — only when asked about a named entity with no ranking intent)
+- COMPARISON: ("compare X and Y")
+- CONTRIBUTION: ("what drove the increase in X?")
+- COMPETITOR_STRATEGY: ("what is Expedia doing?", "how can I win against Otilla?")
+- EXECUTIVE_PRIORITY: ("what should I focus on?", "what are my top priorities?")
+
+COMPOUND QUESTION RULE:
+If the question combines a ranking/list with a recommendation (e.g. "which is the worst destination and what should I do to improve it?"), use RANKING as the intent AND set requiresRecommendation=true. Do NOT use EXECUTIVE_PRIORITY for this pattern.
 
 JSON SCHEMA TO RETURN:
 {
@@ -82,10 +94,14 @@ JSON SCHEMA TO RETURN:
 }
 
 RULES:
-1. "filters" should contain any explicit constraints the user mentions. Use "ILIKE" for open-text names (like hotel or city names) and "=" for strict buckets (like APW).
-2. "requiresNarrative" and "requiresRecommendation" determine if we should generate an AI summary AFTER the SQL query executes.
-3. Be robust against typos. Map entities to the correct dimensions intelligently.
-4. Output ONLY valid JSON. No markdown ticks, no preamble.`;
+1. "filters" should contain ALL explicit constraints. Use "ILIKE" for open-text entity names (hotel name, destination, chain, competitor). Use "=" for exact categorical values (APW buckets, competitive status).
+2. APW filter values must use EXACT bucket strings: '< 10 days', '11-30 days', '31-45 days', '46-60 days', '61-90 days', '90+ days'. Map natural language like "31-45" or "31-45 days" to the correct bucket.
+3. Competitive status values: 'Winning', 'Losing', 'Equal'. If the user says "losing destinations" add filter {dimension:"competitive_status", operator:"=", value:"Losing"}.
+4. For multi-filter questions ("win rate of marriott chain in dubai in apw 31-45"), extract ALL filters: chain=Marriott, destination=Dubai, apw=31-45 days.
+5. For multi-part questions ("show me worst hotels AND the APW to focus on AND the worst competitor"), set intent to the primary analytical type (RANKING or LIST) and set requiresNarrative=true. The "dimensions" array should list all dimensions the user wants analyzed: e.g. ["hotel", "apw", "thirdparty"].
+6. "requiresNarrative" = true if the answer needs explanation. "requiresRecommendation" = true if the user asks 'what should I do', 'how to improve', or 'what action to take'.
+7. Be robust against typos. Map "marriot" → Marriott, "dubai" → Dubai, "31 45" → "31-45 days", etc.
+8. Output ONLY valid JSON. No markdown ticks, no preamble.`;
 
     const userPrompt = `Parse this user question into the JSON schema: "${question}"`;
 

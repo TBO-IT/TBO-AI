@@ -20,26 +20,73 @@ export async function runDataAnalystAgent(
     metadata: DatasetMetadata,
     tempPath: string
 ): Promise<AgentResult> {
-    const systemPrompt = `You are a Senior Data Analyst AI for an executive analytics platform.
-You have access to a DuckDB dataset representing travel metrics (competitiveness, pricing, conversions).
-The user is a senior executive asking a complex business question.
+    const schemaDetails = semanticLayer.allColumns.map(c => `  "${c.column_name}" (${c.column_type})`).join("\n");
 
-DATASET: data_table
-AVAILABLE COLUMNS:
-${semanticLayer.allColumns.map(c => `  "${c.column_name}" (${c.column_type})`).join("\n")}
+    // Build a compact column reference showing the most important semantics
+    const schemaLower = semanticLayer.allColumns.map(c => c.column_name.toLowerCase());
+    const hasCompetitiveStatus = schemaLower.some(c => c.includes("competitive") || c.includes("status"));
+    const competitiveStatusNote = hasCompetitiveStatus
+        ? `\n- "Competitive Status" column contains: 'Winning', 'Losing', 'Equal'`
+        : "";
+    const hasApw = schemaLower.some(c => c.includes("apw"));
+    const apwNote = hasApw
+        ? `\n- APW bucket column contains values like: '< 10 days', '11-30 days', '31-45 days', '46-60 days', '61-90 days', '90+ days'`
+        : "";
+    const hasPriceDiff = schemaLower.some(c => c.includes("price_diff"));
+    const priceDiffNote = hasPriceDiff
+        ? `\n- price_diff_perc: percentage difference between TBO price and competitor price. Negative = TBO is cheaper (good). Positive = TBO is more expensive (losing).`
+        : "";
+    const hotelCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("tbo_hotelname") || c.column_name.toLowerCase().includes("hotelname"))?.column_name || "tbo_hotelname";
+    const chainCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("chainname") || c.column_name.toLowerCase().includes("chain"))?.column_name || "tbo_chainname";
+    const destCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase() === "destination" || c.column_name.toLowerCase().includes("destination"))?.column_name || "destination";
+    const supplierCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("thirdparty") && !c.column_name.toLowerCase().includes("price") && !c.column_name.toLowerCase().includes("hotel"))?.column_name || "thirdparty";
+    const apwCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("apw"))?.column_name || "apw_bucket_new";
+    const statusCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("competitive") || c.column_name.toLowerCase().includes("status"))?.column_name || "Competitive Status";
+    const priceDiffCol = semanticLayer.allColumns.find(c => c.column_name.toLowerCase().includes("price_diff"))?.column_name || "price_diff_perc";
 
-You MUST use your tools to analyze the data and answer the question.
-- Use 'execute_sql' to run DuckDB SQL queries against 'data_table' to investigate.
-- If a query fails, read the error message, correct your SQL, and try again.
-- You can run multiple queries to dig deeper if the first query results raise more questions.
-- Once you have completely answered the executive's question, use 'submit_answer'.
-- If the question is completely unrelated to the dataset or impossible to answer with the available columns, use 'submit_answer' immediately to explain why. Set final_sql to an empty string.
+    const systemPrompt = `You are a Senior Data Analyst AI for an executive travel analytics platform.
+You answer complex business questions by running DuckDB SQL queries against a competitiveness dataset.
 
-IMPORTANT RULES:
-1. Double-quote ALL column names with spaces or uppercase letters: e.g. "Competitive Status", "tbo_price".
-2. When referencing the dataset, always use the literal table name "data_table".
-3. Use NULLIF to protect against division by zero.
-4. Use ILIKE instead of = for string comparisons to avoid case sensitivity issues (e.g. WHERE destination ILIKE 'bangkok').
+DATASET TABLE: data_table
+COLUMNS:
+${schemaDetails}
+
+KEY COLUMN SEMANTICS:
+- "${destCol}": Destination/city name (e.g. 'Dubai', 'Bangkok', 'Pattaya')
+- "${hotelCol}": TBO hotel name
+- "${chainCol}": Hotel chain name (e.g. 'Marriott', 'Hilton')
+- "${supplierCol}": Competitor/third-party OTA name (e.g. 'Booking.com', 'Expedia')
+- "${apwCol}": Advance Purchase Window bucket${apwNote}
+- "${statusCol}": Competitive status${competitiveStatusNote}${priceDiffNote}
+
+WIN RATE FORMULA:
+Win rate = percentage of rows where "Competitive Status" = 'Winning'.
+SQL: COUNT(CASE WHEN "${statusCol}" ILIKE 'Winning' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0) AS win_rate_pct
+
+PRICE ADVANTAGE FORMULA:
+AVG("${priceDiffCol}") — negative means TBO is cheaper (competitive advantage), positive means TBO is more expensive.
+
+CRITICAL SQL RULES:
+1. ALWAYS double-quote column names that have spaces or mixed case: e.g. "Competitive Status", "tbo_hotelname".
+2. Use ILIKE for all string comparisons (case-insensitive): WHERE "${destCol}" ILIKE '%Dubai%'
+3. Use NULLIF to prevent division by zero.
+4. Table name is always "data_table" (no schema prefix).
+5. For "losing" destinations/hotels: WHERE "${statusCol}" ILIKE 'Losing'
+6. For APW filters: WHERE "${apwCol}" = '31-45 days' (exact bucket string, not a number)
+
+MULTI-PART QUESTION STRATEGY:
+If the question has multiple sub-questions (e.g. "worst hotels AND worst APW AND worst competitor"), run SEPARATE SQL queries for each sub-question rather than one mega-query. Present all findings in a single cohesive narrative.
+
+Example patterns:
+- Worst hotels in losing destinations → SELECT "${hotelCol}", COUNT(*) as total, AVG("${priceDiffCol}") as avg_price_diff FROM data_table WHERE "${statusCol}" ILIKE 'Losing' GROUP BY "${hotelCol}" ORDER BY avg_price_diff DESC LIMIT 10
+- APW with most losing rows → SELECT "${apwCol}", COUNT(*) as losing_count FROM data_table WHERE "${statusCol}" ILIKE 'Losing' GROUP BY "${apwCol}" ORDER BY losing_count DESC LIMIT 5  
+- Competitor hurting most → SELECT "${supplierCol}", COUNT(*) as head_to_head_losses, AVG("${priceDiffCol}") as avg_price_gap FROM data_table WHERE "${statusCol}" ILIKE 'Losing' GROUP BY "${supplierCol}" ORDER BY head_to_head_losses DESC LIMIT 5
+
+RESPONSE FORMAT:
+Structure your final answer as a clear executive report with:
+- Bold headers for each sub-question answered
+- Key numbers highlighted
+- Actionable recommendations at the end
 `;
 
     const tools = [
@@ -70,7 +117,7 @@ IMPORTANT RULES:
     ];
 
     const messages: any[] = [{ role: "user", content: question }];
-    const maxIterations = 5;
+    const maxIterations = 8;
 
     for (let i = 0; i < maxIterations; i++) {
         console.log(`[AGENT] Iteration ${i + 1}/${maxIterations}`);

@@ -299,10 +299,14 @@ export class ChatOrchestrator {
                 const shouldOverrideCompetitor = competitorContext && (isRecommendation || isNarrative) && routeType === "COMPETITOR_STRATEGY";
                 const packRoutes = new Set(["ROOT_CAUSE", "EXECUTIVE_PRIORITY", "COMPARE_ENTITIES", "MULTI_ANALYSIS"]);
                 
-                // Do NOT override if it's a LIST or RANKING intent (we need the actual list, not RCA)
-                const isListOrRanking = parsedQuestion.intent === "LIST" || parsedQuestion.intent === "RANKING";
+                // Do NOT override if it's a pure LIST intent (we need the actual data table).
+                // RANKING with requiresRecommendation=true DOES need ROOT_CAUSE so the
+                // recommendation engine has a pack to work from (e.g. "which is worst and what should I do?").
+                const isPureListNoRec = parsedQuestion.intent === "LIST" && !isRecommendation;
+                const isPureRankingNoRec = parsedQuestion.intent === "RANKING" && !isRecommendation;
+                const skipOverride = isPureListNoRec || isPureRankingNoRec;
                 
-                if ((isRecommendation || isNarrative) && !isListOrRanking && !packRoutes.has(routeType) && routeType !== "LLM" && (!routeType.includes("COMPETITOR") || shouldOverrideCompetitor)) {
+                if ((isRecommendation || isNarrative) && !skipOverride && !packRoutes.has(routeType) && routeType !== "LLM" && (!routeType.includes("COMPETITOR") || shouldOverrideCompetitor)) {
                     console.log(
                         `[PRE_ROUTER] ${isRecommendation ? "Recommendation" : "Narrative"} query detected — ` +
                         `overriding route from ${routeType} to ROOT_CAUSE` +

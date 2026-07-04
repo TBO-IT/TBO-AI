@@ -372,17 +372,22 @@ export function routeQuery(
     }
 
     // ── Priority 5: PERFORMANCE ───────────────────────────────
+    // PERFORMANCE is strictly for entity-scoped scorecards: "show me performance of Bangkok".
+    // Multi-filter analytical lookups ("win rate of marriott in dubai in apw 31-45") must NOT
+    // go here — they need the TEMPLATE/SUMMARY path for a simple aggregation query.
+    // Only fire PERFORMANCE when there is exactly ONE entity filter (a named destination,
+    // hotel, supplier, or chain) and the intent is PERFORMANCE (not SUMMARY).
+    const isEntityScorecardQuery =
+        intent === "PERFORMANCE" &&
+        analysis.filters.length === 1 &&
+        analysis.dimensions.length === 0;
 
-    if (
-        (intent === "SUMMARY" || intent === "PERFORMANCE") &&
-        analysis.filters.length > 0 &&
-        analysis.dimensions.length === 0
-    ) {
+    if (isEntityScorecardQuery) {
 
         logRouterDecision(
             analysis,
             "PERFORMANCE",
-            "SUMMARY_PERFORMANCE"
+            "SINGLE_ENTITY_SCORECARD"
         );
 
         return {

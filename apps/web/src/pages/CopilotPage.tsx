@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Sparkles, Cpu, Loader2, Database, ChevronDown, BookmarkPlus, Copy, Check } from "lucide-react";
+import { Send, Sparkles, Cpu, Loader2, Database, ChevronDown, BookmarkPlus, Copy, Check, Trash2 } from "lucide-react";
+import { useChatHistory } from "../context/ChatHistoryContext";
+import type { ChatMessage } from "../context/ChatHistoryContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
@@ -11,15 +13,8 @@ import { ExecutiveKPICard, RecommendationCard } from "../components/ExecutiveCar
 
 // ── Types ──
 
-interface Message {
-    id: string;
-    role: "user" | "assistant";
-    content: string;
-    timestamp: Date;
-    /** Structured sections from the backend ExecutivePack */
-    sections?: Record<string, string>;
-    stage?: string;
-}
+// Re-export ChatMessage as Message alias for backwards compat within this file
+type Message = ChatMessage;
 
 // ── Formatted Text Renderer ──
 // Imported from ChatPage
@@ -216,7 +211,7 @@ function SectionCard({ title, content, defaultOpen = false }: { title: string; c
 
 export default function CopilotPage() {
     const { getToken } = useAuth();
-    const [messages, setMessages] = useState<Message[]>([]);
+    const { messages, upsertMessage, updateMessageContent, clearHistory } = useChatHistory();
     const [input, setInput] = useState("");
     const [datasets, setDatasets] = useState<Dataset[]>([]);
     const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
@@ -263,21 +258,21 @@ export default function CopilotPage() {
             id: Date.now().toString(),
             role: "user",
             content: currentInput,
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(),
         };
-        setMessages(prev => [...prev, userMessage]);
+        upsertMessage(userMessage);
         setInput("");
         setIsThinking(true);
         setLoadingStage("Analyzing your data…");
 
         const assistantId = (Date.now() + 1).toString();
-        setMessages(prev => [...prev, {
+        upsertMessage({
             id: assistantId,
             role: "assistant",
             content: "",
             stage: "Analyzing your data…",
-            timestamp: new Date(),
-        }]);
+            timestamp: new Date().toISOString(),
+        });
 
         try {
             const token = await getToken();
@@ -336,16 +331,12 @@ export default function CopilotPage() {
                         if (eventType === "status") {
                             if (data.stage) {
                                 setLoadingStage(data.stage);
-                                setMessages(prev => prev.map(msg =>
-                                    msg.id === assistantId ? { ...msg, stage: data.stage } : msg
-                                ));
+                                updateMessageContent(assistantId, rawContent, undefined, data.stage);
                             }
                         } else if (eventType === "token") {
                             rawContent += data.text;
                             const sections = parseExecutiveResponse(rawContent);
-                            setMessages(prev => prev.map(msg =>
-                                msg.id === assistantId ? { ...msg, content: rawContent, sections: sections || undefined, stage: undefined } : msg
-                            ));
+                            updateMessageContent(assistantId, rawContent, sections || undefined, undefined);
                         } else if (eventType === "complete") {
                             let finalAns = rawContent;
                             if (data.response?.answer) finalAns = data.response.answer;
@@ -357,9 +348,7 @@ export default function CopilotPage() {
 
                             rawContent = finalAns;
                             const sections = parseExecutiveResponse(rawContent);
-                            setMessages(prev => prev.map(msg =>
-                                msg.id === assistantId ? { ...msg, content: rawContent, sections: sections || undefined, stage: undefined } : msg
-                            ));
+                            updateMessageContent(assistantId, rawContent, sections || undefined, undefined);
                             break;
                         } else if (eventType === "error") {
                             throw new Error(data.message || "Streaming error");
@@ -391,9 +380,7 @@ export default function CopilotPage() {
                 errorContent = `Internal Processing Error:\n${err.message}`;
             }
 
-            setMessages(prev => prev.map(msg =>
-                msg.id === assistantId ? { ...msg, content: errorContent, sections: undefined, stage: undefined } : msg
-            ));
+            updateMessageContent(assistantId, errorContent, undefined, undefined);
         } finally {
             setIsThinking(false);
             setLoadingStage("Analyzing your data…");
@@ -412,7 +399,7 @@ export default function CopilotPage() {
         try {
             setSavingReportId(msg.id);
             // Derive a title from the preceding user question, or fall back
-            const msgIndex = messages.findIndex(m => m.id === msg.id);
+            const msgIndex = messages.findIndex((m: Message) => m.id === msg.id);
             const userMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
             const title = userMsg?.content.slice(0, 100) || "Executive Report";
 
@@ -520,7 +507,17 @@ export default function CopilotPage() {
                     setIsOpen={setIsDropdownOpen}
                     onSelect={(ds) => { setSelectedDataset(ds); setIsDropdownOpen(false); }}
                 />
-                <StatusBadge />
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={clearHistory}
+                        title="Clear conversation"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/40 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-200 dark:hover:border-red-800/40 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-all cursor-pointer"
+                    >
+                        <Trash2 className="h-3 w-3" />
+                        <span>Clear</span>
+                    </button>
+                    <StatusBadge />
+                </div>
             </header>
 
             {/* Messages */}

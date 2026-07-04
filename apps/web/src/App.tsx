@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { setupAuthInterceptor } from "./api/authInterceptor";
 import { ThemeProvider } from "./context/ThemeContext";
+import { ChatHistoryProvider } from "./context/ChatHistoryContext";
 import AppLayout from "./layouts/AppLayout";
 
 // ── Pages ──
@@ -84,7 +85,9 @@ export default function App() {
     return (
         <QueryClientProvider client={queryClient}>
             <ThemeProvider>
-                <AppContent />
+                <ChatHistoryProvider>
+                    <AppContent />
+                </ChatHistoryProvider>
             </ThemeProvider>
         </QueryClientProvider>
     );

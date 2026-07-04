@@ -176,20 +176,24 @@ export function generateTemplatedSql(
         }
     }
 
-    if (metrics.length !== 1) return null;
+    if (metrics.length === 0) return null;
 
-    const metricKey = metrics[0];
-    const metric = semanticLayer.metrics.find(m =>
-        m.name.toLowerCase().replace(/\s+/g, "_") === metricKey ||
-        m.name.toLowerCase().includes(metricKey.replace(/_/g, " "))
-    );
+    // Resolve all requested metrics
+    const resolvedMetrics = metrics.map(metricKey => {
+        return semanticLayer.metrics.find(m =>
+            m.name.toLowerCase().replace(/\s+/g, "_") === metricKey ||
+            m.name.toLowerCase().includes(metricKey.replace(/_/g, " "))
+        );
+    }).filter(Boolean) as typeof semanticLayer.metrics;
 
-    if (!metric) {
-        logger.warn({ metricKey }, "Template engine metric not found in semantic layer");
+    if (resolvedMetrics.length === 0) {
+        logger.warn({ metrics }, "Template engine metrics not found in semantic layer");
         return null;
     }
 
-    const metricFormula = metric.formula;
+    const primaryMetric = resolvedMetrics[0];
+    const metricSelects = resolvedMetrics.map(m => `${m.formula} AS "${m.name}"`).join(", ");
+    
     const sortDir = detectSortDirection(analysis.originalQuestion);
     const schemaColumns = semanticLayer.allColumns.map(c => c.column_name);
 
@@ -241,7 +245,7 @@ export function generateTemplatedSql(
         const { limit, direction } = getLimitAndDirection(analysis.originalQuestion, 10);
         
         let orderByClause = "";
-        const metricCol = getPhysicalColumnName(metricKey, semanticLayer);
+        const metricCol = getPhysicalColumnName(primaryMetric.name.toLowerCase().replace(/\s+/g, "_"), semanticLayer);
         if (metricCol && schemaColumns.includes(metricCol)) {
             orderByClause = `ORDER BY "${metricCol}" ${direction} NULLS LAST`;
         }
@@ -254,7 +258,7 @@ export function generateTemplatedSql(
 
     // SUMMARY — single aggregate, no grouping
     if (intent === "SUMMARY" && dimensions.length === 0 && timeReferences.length === 0) {
-        return `SELECT ${metricFormula} AS "${metric.name}" FROM data_table ${whereClause}`.trim();
+        return `SELECT ${metricSelects} FROM data_table ${whereClause}`.trim();
     }
 
     // SUMMARY with dimensions — treat as BREAKDOWN (e.g. "suppliers where Winning")
@@ -264,14 +268,14 @@ export function generateTemplatedSql(
     if (effectiveIntent === "RANKING" && dimensions.length > 0) {
         const { limit, direction } = getLimitAndDirection(analysis.originalQuestion, 10);
         const limitStr = limit ? `LIMIT ${limit}` : "";
-        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${direction} NULLS LAST ${limitStr}`
+        return `SELECT ${selectDims}${metricSelects} FROM data_table ${whereClause} ${groupBy} ORDER BY "${primaryMetric.name}" ${direction} NULLS LAST ${limitStr}`
             .replace(/\s+/g, " ").trim();
     }
 
     // BREAKDOWN — all groups, no limit
     if (effectiveIntent === "BREAKDOWN" && dimensions.length > 0) {
         const { direction } = getLimitAndDirection(analysis.originalQuestion, 10);
-        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${direction} NULLS LAST`
+        return `SELECT ${selectDims}${metricSelects} FROM data_table ${whereClause} ${groupBy} ORDER BY "${primaryMetric.name}" ${direction} NULLS LAST`
             .replace(/\s+/g, " ").trim();
     }
 
@@ -279,7 +283,7 @@ export function generateTemplatedSql(
     if (effectiveIntent === "COMPARISON" && dimensions.length > 0) {
         const { limit, direction } = getLimitAndDirection(analysis.originalQuestion, 20);
         const limitStr = limit ? `LIMIT ${limit}` : "";
-        return `SELECT ${selectDims}${metricFormula} AS "${metric.name}" FROM data_table ${whereClause} ${groupBy} ORDER BY "${metric.name}" ${direction} NULLS LAST ${limitStr}`
+        return `SELECT ${selectDims}${metricSelects} FROM data_table ${whereClause} ${groupBy} ORDER BY "${primaryMetric.name}" ${direction} NULLS LAST ${limitStr}`
             .replace(/\s+/g, " ").trim();
     }
 
