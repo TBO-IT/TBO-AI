@@ -46,6 +46,7 @@ import { objectiveSelector } from "../ai/objectives/index.js";
 import { analysisPlanner } from "../ai/planning/index.js";
 import { evidencePlanner } from "../ai/evidence/index.js";
 import { generateNaturalResponse, canUseNaturalResponse } from "./naturalResponseGenerator.js";
+import { renderExecutiveNarrative, renderEnhancedDeterministicNarrative } from "./executiveNarrativeRenderer.js";
 
 
 export class ChatOrchestrator {
@@ -94,24 +95,27 @@ export class ChatOrchestrator {
             // Use cached dataset path to avoid redundant downloads
             tempPath = await getCachedDatasetPath(datasetId, dataset.storagePath);
 
-            // Use cached metadata (includes schema, sample rows, stats)
-            const metadata = await getCachedMetadata(
-                datasetId,
-                tempPath,
-                () => buildDatasetMetadata(tempPath)
-            );
+            setStage("Analyzing dataset schema and metadata...");
+            
+            // Use cached metadata and schema in parallel
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            const safeTempPath = tempPath!;
+            const [metadata, schema] = await Promise.all([
+                getCachedMetadata(
+                    datasetId,
+                    safeTempPath,
+                    () => buildDatasetMetadata(safeTempPath)
+                ),
+                getCachedSchema(
+                    safeTempPath,
+                    () => getDatasetSchema(safeTempPath)
+                )
+            ]);
 
             const entityFilters = resolveEntities(question, metadata);
 
             console.log("ENTITY FILTERS:", entityFilters);
             console.log("DATASET METADATA:", JSON.stringify(metadata, null, 2));
-
-            setStage("Analyzing dataset schema...");
-            // Use cached schema
-            const schema = await getCachedSchema(
-                tempPath,
-                () => getDatasetSchema(tempPath)
-            );
             console.log(
                 `[SCHEMA_COLUMNS] (${schema.length} cols):`,
                 schema.map(c => `${c.column_name}(${c.column_type})`).join(" | ")
@@ -395,7 +399,22 @@ export class ChatOrchestrator {
                     explanation = "Executive priority pack will be built from multi-dimensional contribution analysis.";
                 }
                 else if (routeType === "PERFORMANCE") {
-
+                    // Entity-scoped performance scorecard
+                    const entityFilters = parsedQuestion.filters.filter(f => f.operator === "=" || f.operator === "ILIKE");
+                    if (entityFilters.length === 0) {
+                        console.warn("[ORCHESTRATOR] PERFORMANCE route requested but no entity filters found. Falling back to LLM.");
+                        routeType = "LLM";
+                    } else {
+                        // Scope analysis to the primary entity
+                        const dim = entityFilters[0].dimension;
+                        const result = generateContributionSql(parsedQuestion, semanticLayer, dim);
+                        if (result) {
+                            sql = result.sql;
+                            explanation = `Analyzing performance scorecard for ${dim} = ${entityFilters[0].value}`;
+                        } else {
+                            routeType = "LLM";
+                        }
+                    }
                 }
 
                 // ── COMPETITOR STRATEGY ────────────────────────────────────────
@@ -519,7 +538,7 @@ export class ChatOrchestrator {
                     try {
                         logClaude("Starting LLM SQL generation");
                         const claudeTimer = startTimer();
-                        const { prompt } = buildPrompt(question, semanticLayer);
+                        const { prompt } = buildPrompt(question, semanticLayer, parsedQuestion);
 
                         // Use the existing anthropicService for the one remaining
                         // SQL generation use case. This is the ONLY place Claude
@@ -964,7 +983,7 @@ export class ChatOrchestrator {
                         }
                     } catch (err: any) {
                         console.error(`[CLAUDE_CALL] FAILED: ${err.message}`);
-                        narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                        narrative = renderExecutiveNarrative({ question, routeType, executivePack: executivePack || {} as any, rootCausePack: rootCausePack || null, queryResults });
                         responseSource = "ANALYTICS";
                         console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS_FALLBACK_REC | preview="${narrative.slice(0, 100)}"`);
                     }
@@ -998,7 +1017,7 @@ export class ChatOrchestrator {
                         console.log(`[NARRATIVE_VALUE_SET] source=CLAUDE_NARRATIVE | claudeUsed=${narResult.claudeUsed} | preview="${narrative.slice(0, 100)}"`);
                     } catch (err: any) {
                         console.error(`[CLAUDE_CALL] FAILED: ${err.message}`);
-                        narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                        narrative = renderExecutiveNarrative({ question, routeType, executivePack: executivePack || {} as any, rootCausePack: rootCausePack || null, queryResults });
                         responseSource = "ANALYTICS";
                         console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS_FALLBACK_NAR | preview="${narrative.slice(0, 100)}"`);
                     }
@@ -1051,11 +1070,11 @@ export class ChatOrchestrator {
                             responseSource = "NATURAL_RESPONSE";
                             console.log(`[NARRATIVE_VALUE_SET] source=NATURAL_RESPONSE | queryType=${naturalResult.queryType} | preview="${narrative.slice(0, 100)}"`);
                         } else {
-                            narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                            narrative = executivePack ? renderExecutiveNarrative({ question, routeType, executivePack, rootCausePack: rootCausePack || null, queryResults, competitorName: competitorContext?.competitorName }) : renderEnhancedDeterministicNarrative(question, queryResults, extractInsights(queryResults));
                             console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS | fallback to deterministic | preview="${narrative.slice(0, 100)}"`);
                         }
                     } else {
-                        narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                        narrative = executivePack ? renderExecutiveNarrative({ question, routeType, executivePack, rootCausePack: rootCausePack || null, queryResults, competitorName: competitorContext?.competitorName }) : renderEnhancedDeterministicNarrative(question, queryResults, extractInsights(queryResults));
                         console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS | preview="${narrative.slice(0, 100)}"`);
                     }
                 }
@@ -1137,51 +1156,7 @@ export class ChatOrchestrator {
 
 // ─── Deterministic narrative builder ─────────────────────────────────────────
 
-/**
- * Generates a clean factual narrative from raw query results.
- * Used for all deterministic routes (TEMPLATE, TREND, COMPARISON, CONTRIBUTION, ROOT_CAUSE).
- * No Claude involved.
- */
-function buildDeterministicNarrative(
-    question: string,
-    queryResults: Record<string, unknown>[],
-    insights: string[]
-): string {
-    if (!queryResults || queryResults.length === 0) {
-        return "No data found for this query.";
-    }
-
-    if (queryResults.length === 1) {
-        const row = queryResults[0];
-        const facts = Object.entries(row).map(([k, v]) => {
-            const formatted = typeof v === "number"
-                ? (Number.isInteger(v) ? v.toString() : v.toFixed(2))
-                : String(v ?? "");
-            return `- **${k}**: ${formatted}`;
-        }).join("\n");
-        return `Based on the data, here is the summary for your query:\n\n${facts}`;
-    }
-
-    let narrative = `Here are the top results for your query: "${question}".\n\n`;
-
-    const topRows = queryResults.slice(0, 5).map((row, idx) => {
-        const entries = Object.entries(row).map(([k, v]) => {
-            const formatted = typeof v === "number"
-                ? (Number.isInteger(v) ? v.toString() : v.toFixed(2))
-                : String(v ?? "");
-            return `${k}: ${formatted}`;
-        });
-        return `${idx + 1}. ${entries.join(" | ")}`;
-    }).join("\n");
-
-    narrative += `${topRows}\n`;
-
-    if (insights.length > 0 && insights[0] !== "No data available for insights.") {
-        narrative += `\n**Key Observations:**\n` + insights.map(i => `- ${i}`).join("\n");
-    }
-
-    return narrative;
-}
+// Deprecated: Replaced by renderEnhancedDeterministicNarrative in executiveNarrativeRenderer.ts
 
 // ─── Recommendation narrative builder ────────────────────────────────────────
 

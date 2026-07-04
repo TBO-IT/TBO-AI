@@ -166,25 +166,23 @@ function extractMetricChange(
     if (rows.length === 0) return null;
     const first = rows[0];
 
-    // With the new SQL we explicitly provide "Overall Metric Change"
+    // With the new SQL we explicitly provide "Overall Metric Change", "Overall Current Value", "Overall Prior Value"
     const overallChangeKey = findCol(first, COLS.overallMetricChange);
+    const overallCurrentKey = Object.keys(first).find(k => k.toLowerCase().includes("overall current value"));
+    const overallPriorKey = Object.keys(first).find(k => k.toLowerCase().includes("overall prior value"));
+
     if (overallChangeKey) {
-        // We no longer have explicit "Current" vs "Prior" columns because the SQL engine 
-        // doesn't output the full Cartesian product. The orchestrator / trend handles that.
-        // Wait, the orchestrator just extracts "Metric Delta" per row.
-        // But what about the OVERALL current/prior values? 
-        // If we don't have them, we can't fully populate MetricChange, but we CAN populate direction and absoluteChange.
-
         const absoluteChange = toNum(first[overallChangeKey]);
+        const currentValue = overallCurrentKey ? toNum(first[overallCurrentKey]) : 0;
+        const priorValue = overallPriorKey ? toNum(first[overallPriorKey]) : 0;
 
-        // Let's just mock the current/prior period labels if they aren't provided by the column headers.
         return {
             currentPeriod: "Current",
             priorPeriod: "Prior",
-            currentValue: 0, // We don't have this readily available without a dedicated query
-            priorValue: 0,
+            currentValue,
+            priorValue,
             absoluteChange: +absoluteChange.toFixed(4),
-            relativeChangePct: 0,
+            relativeChangePct: priorValue ? +(absoluteChange / priorValue * 100).toFixed(2) : 0,
             direction: absoluteChange > 0.001 ? "increase"
                 : absoluteChange < -0.001 ? "decline"
                     : "flat"

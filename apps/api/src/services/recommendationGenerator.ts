@@ -121,6 +121,13 @@ export function buildRecommendationPrompt(pack: ClaudeInputPack): string {
     const oppsText = (ep.topOpportunities ?? []).map(o => `  • ${o.title}: ${o.explanation}`).join("\n");
     const driversText = (ep.topDrivers ?? []).map(d => `  • ${d.name}: ${d.metricDelta} percentage points`).join("\n");
 
+    // ── Executive Intelligence Context ──────────────────────────────────────
+    const scenariosText = (ep.scenarios ?? []).map(s => `  • ${s.type}: ${s.description}`).join("\n");
+    const tradeoffsText = (ep.tradeoffs ?? []).map(t => `  • ${t.title}: ${t.explanation}`).join("\n");
+    const confidenceText = ep.confidenceAssessment ? `${ep.confidenceAssessment.confidence} - ${ep.confidenceAssessment.rationale}` : "N/A";
+    const leadershipMessageText = ep.leadershipMessage || "N/A";
+    const keyTakeawayText = ep.keyTakeaway || "N/A";
+
     // ── Competitor Context Section ─────────────────────────────────────────
     const competitorSection = pack.competitorName
         ? `\nCOMPETITOR CONTEXT:\n` +
@@ -153,10 +160,23 @@ SUPPORTING EVIDENCE (Do NOT generate recommendations directly from these unless 
 RISKS:
 ${risksText || "  • None"}
 OPPORTUNITIES:
-${oppsText || "  • None"}
+${oppsText || '  • None'}
 TOP DRIVERS:
-${driversText || "  • None"}
+${driversText || '  • None'}
 
+STRATEGIC CONTEXT (Incorporate into rationale):
+  Confidence: ${confidenceText}
+  Leadership Message: ${leadershipMessageText}
+  Key Takeaway: ${keyTakeawayText}
+  
+SCENARIOS:
+${scenariosText || '  • None'}
+
+TRADEOFFS TO CONSIDER:
+${tradeoffsText || '  • None'}
+
+CRITICAL INSTRUCTION:
+Your primary output MUST be a strict markdown document matching the REQUIRED MARKDOWN STRUCTURE perfectly.
 TOTAL DATA POINTS: ${pack.totalRows}
 
 Generate 3 strategic recommendations based ONLY on the data above.

@@ -48,19 +48,17 @@ export async function executeEntityDrilldown(
         ]
     };
 
-    const drilldowns: DrilldownInsight[] = [];
-    
     // We want to drill down into the other dimensions
     const drilldownDims = ["hotel", "chain", "supplier", "destination"]
         .filter(dim => dim !== targetDimension && semanticLayer?.dimensions?.some((d: string) => d.toLowerCase() === dim.toLowerCase()));
 
-    for (const dim of drilldownDims) {
+    const drilldownResults = await Promise.all(drilldownDims.map(async (dim) => {
         const result = generateContributionSql(drilldownAnalysis, semanticLayer, dim);
-        if (!result) continue;
+        if (!result) return null;
 
         try {
             const rows = await executeQuery(result.sql, csvPath);
-            if (rows.length === 0) continue;
+            if (rows.length === 0) return null;
 
             // We manually parse the top negative contributor from the rows.
             // generateContributionSql returns "Weighted Contribution" sorted DESC by absolute value.
@@ -87,7 +85,7 @@ export async function executeEntityDrilldown(
                 const name = String(topRow[nameKey] ?? "");
                 const metricDelta = Number(topRow["Metric Delta"]) || 0;
 
-                drilldowns.push({
+                return {
                     entityType: dim.toUpperCase(),
                     name,
                     impactScore: maxImpact,
@@ -96,13 +94,17 @@ export async function executeEntityDrilldown(
                         : isNegativeDrilldown 
                             ? `${name} reduced ${metricName} by ${Math.abs(metricDelta).toFixed(2)} percentage points, making it the largest negative driver within ${primaryTarget.name}`
                             : `${name} increased ${metricName} by ${metricDelta.toFixed(2)} percentage points, making it the largest positive driver within ${primaryTarget.name}`
-                });
+                } as DrilldownInsight;
             }
 
         } catch (err: any) {
             console.error(`[DRILLDOWN_FAILURE] dimension=${dim} sql=${result.sql.slice(0, 100)}... error=${err.message || err}`);
         }
-    }
+        
+        return null;
+    }));
+
+    const drilldowns = drilldownResults.filter(Boolean) as DrilldownInsight[];
 
     if (drilldownDims.length > 0 && drilldowns.length === 0) {
         console.error("[CRITICAL] ALL_DRILLDOWNS_FAILED");

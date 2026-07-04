@@ -126,11 +126,12 @@ function formatIntent(parsedQuestion: QuestionAnalysis): string {
  */
 export function buildPrompt(
     question: string,
-    semanticLayer: EnrichedSemanticLayer
+    semanticLayer: EnrichedSemanticLayer,
+    parsedQuestion?: QuestionAnalysis
 ): { prompt: string; parsedQuestion: QuestionAnalysis } {
     
-    // 1. Analyze the question
-    const parsedQuestion = analyzeQuestion(question);
+    // 1. Use provided analysis or run the analyzer
+    parsedQuestion = parsedQuestion || analyzeQuestion(question);
 
     // 2. Validate against semantic layer
     const validation = validateQuestion(parsedQuestion, semanticLayer);

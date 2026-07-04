@@ -81,6 +81,11 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
         .map(r => `  • ${r.targetName}: ${r.expectedImpact}`)
         .join("\n");
 
+    // ── Executive Intelligence Context ──────────────────────────────────────
+    const scenariosText = (ep.scenarios ?? []).map(s => `  • ${s.type}: ${s.description}`).join("\n");
+    const tradeoffsText = (ep.tradeoffs ?? []).map(t => `  • ${t.title}: ${t.explanation}`).join("\n");
+    const confidenceText = ep.confidenceAssessment ? `${ep.confidenceAssessment.confidence} - ${ep.confidenceAssessment.rationale}` : "N/A";
+
     const warnings = pack.validationErrors.length > 0
         ? `\nDATA QUALITY WARNINGS:\n${pack.validationErrors.map(e => `  ⚠ ${e}`).join("\n")}\n`
         : "";
@@ -116,6 +121,15 @@ ${newActionsText || "  • None identified."}
 
 SUPPORTING TARGETS (for Key Drivers rows):
 ${supportingTargetsText || "  • None identified."}
+
+STRATEGIC CONTEXT:
+  Confidence: ${confidenceText}
+
+SCENARIOS:
+${scenariosText || '  • None'}
+
+TRADEOFFS TO CONSIDER:
+${tradeoffsText || '  • None'}
 
 TOTAL DATA POINTS: ${pack.totalRows}
 ${warnings}

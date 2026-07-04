@@ -189,16 +189,16 @@ function extractNamedEntityFilters(originalQuestion: string): QuestionFilter[] {
         currentChunk = [];
     };
 
-    for (const token of tokens) {
-        const clean = token.replace(/[^a-zA-Z0-9\s]/g, "");
+    for (let i = 0; i < tokens.length; i++) {
+        const clean = tokens[i].replace(/[^a-zA-Z0-9\s]/g, "");
         if (!clean) continue;
 
-        if (STOP_WORDS.has(clean.toLowerCase())) {
+        if (STOP_WORDS.has(clean.toLowerCase()) && currentChunk.length === 0) {
             flush();
             continue;
         }
 
-        const isCapitalized = /^[A-Z][a-z]/.test(clean);
+        const isCapitalized = /^[A-Z][a-zA-Z]*$/.test(clean);
         const isAcronym = /^[A-Z]{2,}$/.test(clean);
         const skipAcronyms = new Set(["ROI", "APW", "CEO", "CRO", "SQL", "TBO"]);
 
@@ -208,6 +208,17 @@ function extractNamedEntityFilters(originalQuestion: string): QuestionFilter[] {
                 continue;
             }
             currentChunk.push(clean);
+        } else if (currentChunk.length > 0) {
+            // Check if this is a connector word (de, del, la, of, the) and the NEXT word is capitalized
+            const connectors = new Set(["de", "del", "la", "las", "los", "of", "the", "and"]);
+            const nextClean = (i + 1 < tokens.length) ? tokens[i + 1].replace(/[^a-zA-Z0-9\s]/g, "") : "";
+            const nextIsCapitalized = /^[A-Z][a-zA-Z]*$/.test(nextClean) || /^[A-Z]{2,}$/.test(nextClean);
+
+            if (connectors.has(clean.toLowerCase()) && nextIsCapitalized) {
+                currentChunk.push(clean);
+            } else {
+                flush();
+            }
         } else {
             flush();
         }

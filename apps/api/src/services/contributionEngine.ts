@@ -307,6 +307,8 @@ function buildTwoPeriodSql(
         `        ) * 100,`,
         `        4`,
         `    ) AS "Contribution %",`,
+        `    ROUND(v.overall_current_metric, 4) AS "Overall Current Value",`,
+        `    ROUND(v.overall_prior_metric, 4) AS "Overall Prior Value",`,
         `    ROUND(v.overall_current_metric - v.overall_prior_metric, 4) AS "Overall Metric Change"`,
         `FROM current_period c`,
         `FULL OUTER JOIN prior_period p USING (dimension_value)`,
