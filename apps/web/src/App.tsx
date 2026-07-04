@@ -22,6 +22,8 @@ import HotelDeepDivePage from "./pages/HotelDeepDivePage";
 import SupplierDeepDivePage from "./pages/SupplierDeepDivePage";
 import ChainDeepDivePage from "./pages/ChainDeepDivePage";
 import DeepDivesIndexPage from "./pages/DeepDivesIndexPage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
+import AdminRoute from "./components/auth/AdminRoute";
 
 // ── Query Client ──
 const queryClient = new QueryClient({
@@ -61,6 +63,10 @@ function AppContent() {
                         <Route path="/deep-dives/chain/:id" element={<ChainDeepDivePage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/profile" element={<ProfilePage />} />
+
+                        <Route element={<AdminRoute />}>
+                            <Route path="/admin" element={<AdminDashboardPage />} />
+                        </Route>
 
                         {/* Redirects */}
                         <Route path="/" element={<Navigate to="/copilot" replace />} />

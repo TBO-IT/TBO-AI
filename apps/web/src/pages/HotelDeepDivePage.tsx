@@ -5,13 +5,13 @@ import PageShell from "../components/layout/PageShell";
 import MetricCard from "../components/shared/MetricCard";
 import DeepDiveDashboard from "../components/shared/DeepDiveDashboard";
 import { getHotelDeepDive, type DeepDiveData } from "../api/deepDiveApi";
+import { ProgressiveLoader } from "../components/shared/ProgressiveLoader";
 
 export default function HotelDeepDivePage() {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
-    const datasetId = searchParams.get("datasetId") || "";
-
-    const [data, setData] = useState<DeepDiveData | null>(null);
+    const datasetId = searchParams.get("datasetId");
+    const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -38,7 +38,7 @@ export default function HotelDeepDivePage() {
     if (loading) {
         return (
             <PageShell>
-                <div className="flex items-center justify-center py-20 text-slate-400">Loading profile...</div>
+                <ProgressiveLoader />
             </PageShell>
         );
     }

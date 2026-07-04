@@ -5,6 +5,7 @@ import {
     Database,
     Search as SearchIcon,
     Settings,
+    Shield,
     LogOut,
     Sun,
     Moon,
@@ -14,10 +15,11 @@ import {
 } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { cn } from "../../lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getProfile } from "../../api/profileApi";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
     { to: "/copilot", label: "Copilot", icon: MessageSquare, description: "Ask questions" },
     { to: "/datasets", label: "Datasets", icon: Database, description: "Manage data" },
     { to: "/deep-dives", label: "Deep Dives", icon: SearchIcon, description: "Entity analysis" },
@@ -29,6 +31,19 @@ export default function Sidebar() {
     const { theme, toggleTheme } = useTheme();
     const location = useLocation();
     const [collapsed, setCollapsed] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        if (user) {
+            getProfile().then(profile => {
+                setIsAdmin(profile.role === 'admin');
+            }).catch(console.error);
+        }
+    }, [user]);
+
+    const NAV_ITEMS = isAdmin 
+        ? [...BASE_NAV_ITEMS, { to: "/admin", label: "Admin", icon: Shield, description: "Manage users" }]
+        : BASE_NAV_ITEMS;
 
     return (
         <aside
