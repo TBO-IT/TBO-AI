@@ -46,7 +46,18 @@ RULES:
 8. Never use abbreviations "pt", "pts", or "pp". Always use "percentage points" explicitly.
 9. For flat metrics (0.00 change), write "[Metric Name] remained stable".
 10. Enforce the EXACT response structure below. Do not add extra headings or change their order.
-11. Reduce output tokens by increasing information density.`;
+11. Reduce output tokens by increasing information density.
+12. VISUALIZATIONS: If the user specifically asks for a visualization (chart, graph, heatmap, matrix) OR if the data is better represented visually, output a JSON code block with language "chart" like this:
+\`\`\`chart
+{
+  "type": "bar", // can be "bar", "line", "area", or "matrix"
+  "title": "Chart Title",
+  "data": [ {"name": "Entity A", "value": 45} ],
+  "xAxisKey": "name",
+  "series": [ {"key": "value", "name": "Metric Name", "color": "#3b82f6"} ]
+}
+\`\`\`
+For 2D cross-tab requests (e.g. "destination vs chain"), use \`type: "matrix"\` and format data appropriately.`;
 
 // ─── Public: buildNarrativePrompt ─────────────────────────────────────────────
 

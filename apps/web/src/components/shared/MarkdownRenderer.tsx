@@ -1,6 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "../../lib/utils";
+import { HeatmapMatrix } from "./HeatmapMatrix";
+import { DynamicChart } from "./DynamicChart";
 
 export function MarkdownRenderer({ text, className }: { text: string; className?: string }) {
     if (!text) return null;
@@ -57,6 +59,30 @@ export function MarkdownRenderer({ text, className }: { text: string; className?
                     code: ({ node, className, children, ...props }: any) => {
                         const match = /language-(\w+)/.exec(className || "");
                         const isInline = !match && !className;
+                        
+                        if (!isInline && match && match[1] === 'chart') {
+                            try {
+                                const strContent = String(children).trim();
+                                const config = JSON.parse(strContent);
+                                
+                                if (config.type === 'matrix') {
+                                    return <HeatmapMatrix matrix={config.data} />;
+                                }
+                                
+                                return <DynamicChart config={config} />;
+                            } catch (e) {
+                                console.error("Failed to parse chart JSON:", e);
+                                // Fallback to raw JSON if it fails
+                                return (
+                                    <div className="my-4 rounded-xl overflow-hidden ring-1 ring-slate-200 dark:ring-slate-800 shadow-sm border-red-500 border">
+                                        <pre className="p-4 bg-slate-50 dark:bg-[#0c1021] overflow-x-auto text-sm font-mono text-slate-800 dark:text-slate-200">
+                                            <code className={className} {...props}>{children}</code>
+                                        </pre>
+                                    </div>
+                                );
+                            }
+                        }
+
                         return isInline ? (
                             <code className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm font-mono" {...props}>
                                 {children}

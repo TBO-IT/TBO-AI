@@ -27,9 +27,25 @@ export async function runExecutivePriorityPipeline(
     csvPath: string,
     competitorContext?: CompetitorContext
 ): Promise<ExecutivePriorityResult> {
-    const availableDims = ["hotel", "chain", "supplier", "destination", "apw"].filter(dim =>
+    let availableDims = ["hotel", "chain", "supplier", "destination", "apw"].filter(dim =>
         semanticLayer.dimensions.some(d => d.toLowerCase() === dim.toLowerCase())
     );
+
+    // If the user explicitly asks for a particular dimension (like supplier), we should restrict our search.
+    // However, if parsedQuestion.dimensions is empty, we fall back to all available dimensions.
+    if (parsedQuestion.focus) {
+        const focusDim = parsedQuestion.focus.toLowerCase();
+        if (availableDims.includes(focusDim)) {
+            availableDims = [focusDim];
+        }
+    } else if (parsedQuestion.dimensions && parsedQuestion.dimensions.length > 0) {
+        // Find dimensions that are valid in the semantic layer and requested by the user
+        const requestedDims = parsedQuestion.dimensions.map(d => d.toLowerCase());
+        const filteredDims = availableDims.filter(dim => requestedDims.includes(dim));
+        if (filteredDims.length > 0) {
+            availableDims = filteredDims;
+        }
+    }
 
     const sqlStatements: string[] = [];
     const explanations: string[] = [];

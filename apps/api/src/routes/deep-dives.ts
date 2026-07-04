@@ -4,6 +4,7 @@ import { currentUser } from "../middleware/currentUser.js";
 import { getDataset } from "../services/datasetService.js";
 import { executeQuery } from "../services/queryExecutionService.js";
 import { downloadDataset } from "../services/storageService.js";
+import { getDatasetContext } from "../services/metadataService.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -46,8 +47,11 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
             segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
         };
 
+        let metaContext: any = null;
+
         if (datasetId !== "demo" && dataset?.storagePath) {
             const localPath = await downloadDataset(dataset.storagePath);
+            metaContext = await getDatasetContext(localPath);
             
             // Validate existence
             const countRes = await executeQuery<{ count: number }>(
@@ -213,6 +217,8 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
         }
             
         return res.json({
+            meta: metaContext,
+            data: {
                 id: hotelName,
                 name: hotelName,
                 type: "HOTEL",
@@ -233,6 +239,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
                     apw: trendApw
                 },
                 distribution: distribution
+            }
         });
     } catch (error) {
         logger.error({ err: error }, "Failed to fetch hotel deep dive");
@@ -500,8 +507,11 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
             segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
         };
 
+        let metaContext: any = null;
+
         if (datasetId !== "demo" && dataset?.storagePath) {
             const localPath = await downloadDataset(dataset.storagePath);
+            metaContext = await getDatasetContext(localPath);
             
             // Validate existence
             const countRes = await executeQuery<{ count: number }>(
@@ -668,30 +678,110 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
         }
             
         return res.json({
-            id: chainName,
-            name: chainName,
-            type: "CHAIN",
-            metrics: {
-                winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
-                priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
-                volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
-                totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
-            },
-            topProperties: topPropertiesData,
-            opportunityAssessment: {
-                level: "MEDIUM",
-                primaryOpportunity: "Significant growth potential in Dubai market through targeted weekend promotions.",
-            },
-            trendData: {
-                winRate: trendWinRate,
-                priceGap: trendPriceGap,
-                apw: trendApw
-            },
-            distribution: distribution
+            meta: metaContext,
+            data: {
+                id: chainName,
+                name: chainName,
+                type: "CHAIN",
+                metrics: {
+                    winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
+                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
+                    volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
+                    totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
+                },
+                topProperties: topPropertiesData,
+                opportunityAssessment: {
+                    level: "MEDIUM",
+                    primaryOpportunity: "Significant growth potential in Dubai market through targeted weekend promotions.",
+                },
+                trendData: {
+                    winRate: trendWinRate,
+                    priceGap: trendPriceGap,
+                    apw: trendApw
+                },
+                distribution: distribution
+            }
         });
     } catch (error) {
         logger.error({ err: error }, "Failed to fetch chain deep dive");
         return res.status(500).json({ error: "Failed to fetch deep dive data" });
+    }
+});
+
+// GET /deep-dives/cross-tab
+router.get("/cross-tab", requireAuth(), currentUser, async (req: any, res) => {
+    try {
+        const { datasetId, dimA, dimB, metric } = req.query;
+        if (!datasetId || !dimA || !dimB) {
+            return res.status(400).json({ error: "datasetId, dimA, and dimB are required" });
+        }
+
+        let dataset: any = null;
+        if (datasetId !== "demo") {
+            dataset = await getDataset(datasetId as string);
+            if (!dataset || !dataset.storagePath) {
+                return res.status(404).json({ error: "Dataset not found" });
+            }
+        }
+
+        const localPath = datasetId === "demo" ? "uploads/demo.csv" : await downloadDataset(dataset.storagePath);
+        
+        // Use the crossTabEngine
+        const { generateCrossTabSql } = await import("../services/analytics/crossTabEngine.js");
+        const { getCachedSchema } = await import("../services/datasetCacheService.js");
+        const { getDatasetSchema } = await import("../services/schemaService.js");
+        const { buildSemanticLayer } = await import("../ai/semanticLayer.js");
+
+        const schema = await getCachedSchema(localPath, async () => await getDatasetSchema(localPath));
+        const semanticLayer = buildSemanticLayer(schema);
+
+        // Dummy parsed question to pass filters/metrics
+        const parsedQuestion: any = {
+            metrics: metric ? [metric] : [],
+            dimensions: [dimA, dimB],
+            filters: []
+        };
+
+        const queryPlan = generateCrossTabSql(parsedQuestion, semanticLayer, dimA as string, dimB as string, metric as string);
+        if (!queryPlan) {
+            return res.status(400).json({ error: "Invalid dimensions or metric" });
+        }
+
+        const rawResults = await executeQuery<any>(queryPlan.sql, localPath);
+
+        // Transform flat results into MatrixData format
+        const rowsSet = new Set<string>();
+        const colsSet = new Set<string>();
+        const matrixData: Record<string, Record<string, number>> = {};
+
+        const metricNameMatch = queryPlan.sql.match(/AS "(.*?)"$/m);
+        const metricLabel = metricNameMatch ? metricNameMatch[1] : (metric as string || "Metric");
+
+        for (const row of rawResults) {
+            const rowVal = String(row[dimA as string]);
+            const colVal = String(row[dimB as string]);
+            const val = Number(row[metricLabel]);
+
+            rowsSet.add(rowVal);
+            colsSet.add(colVal);
+
+            if (!matrixData[rowVal]) matrixData[rowVal] = {};
+            matrixData[rowVal][colVal] = val;
+        }
+
+        return res.json({
+            data: {
+                dimA: dimA as string,
+                dimB: dimB as string,
+                metricLabel,
+                rows: Array.from(rowsSet).sort(),
+                cols: Array.from(colsSet).sort(),
+                data: matrixData
+            }
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Failed to generate cross tab");
+        return res.status(500).json({ error: "Failed to generate cross tab" });
     }
 });
 

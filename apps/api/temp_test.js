@@ -3,55 +3,41 @@ import duckdb from "duckdb";
 const db = new duckdb.Database(':memory:');
 const file = 'uploads/testdata.csv';
 
-db.all(`SELECT * FROM read_csv_auto('${file}') LIMIT 1`, (err, res) => {
-    if (err) console.error("SELECT error:", err);
-    const schema = Object.keys(res?.[0] || {});
-    console.log("Schema:", schema);
-    
-    const dateCol = schema.find((c) => ['search_date', 'scraped_date', 'date'].includes(c.toLowerCase()));
-    console.log("Found dateCol:", dateCol);
-    
-    if (dateCol) {
-        const hasApwNew = schema.includes('apw_bucket_new');
-        
-        const apwSelect = hasApwNew 
-            ? `
-                AVG(CASE WHEN apw_bucket_new = '< 10 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d10,
-                AVG(CASE WHEN apw_bucket_new = '10-15 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d15,
-                AVG(CASE WHEN apw_bucket_new = '15-30 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d30,
-                AVG(CASE WHEN apw_bucket_new = '31-45 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d45,
-                AVG(CASE WHEN apw_bucket_new = '46-60 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d60,
-                AVG(CASE WHEN (apw_bucket_new = '60+ days' OR apw_bucket_new = '> 60 days') AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d90
-            `
-            : `
-                AVG(CASE WHEN CAST(apw AS INTEGER) < 10 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d10,
-                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 10 AND 15 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d15,
-                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 16 AND 30 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d30,
-                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 31 AND 45 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d45,
-                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 46 AND 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d60,
-                AVG(CASE WHEN CAST(apw AS INTEGER) > 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d90
-            `;
+const getContext = `
+        WITH stats AS (
+            SELECT 
+                destination,
+                percentile_cont(0.25) WITHIN GROUP (ORDER BY TRY_CAST(thirdparty_price AS DOUBLE)) as q1,
+                percentile_cont(0.75) WITHIN GROUP (ORDER BY TRY_CAST(thirdparty_price AS DOUBLE)) as q3
+            FROM read_csv_auto('${file}', ignore_errors=true)
+            GROUP BY destination
+        ),
+        iqr_bounds AS (
+            SELECT 
+                destination,
+                q1,
+                q3,
+                (q3 - q1) as iqr,
+                q3 + (5 * (q3 - q1)) as upper_bound
+            FROM stats
+        ),
+        raw_data AS (
+            SELECT 
+                d.*, 
+                i.upper_bound,
+                (TRY_CAST(price_diff_perc AS DOUBLE) IS NOT NULL AND abs(TRY_CAST(price_diff_perc AS DOUBLE)) > 100) as is_perc_outlier,
+                (TRY_CAST(thirdparty_price AS DOUBLE) IS NOT NULL AND i.upper_bound IS NOT NULL AND TRY_CAST(thirdparty_price AS DOUBLE) > i.upper_bound) as is_iqr_outlier
+            FROM read_csv_auto('${file}', ignore_errors=true) d
+            LEFT JOIN iqr_bounds i ON d.destination = i.destination
+        )
+        SELECT 
+            COUNT(*) as total_rows,
+            SUM(CASE WHEN is_perc_outlier THEN 1 ELSE 0 END) as perc_outliers,
+            SUM(CASE WHEN is_iqr_outlier THEN 1 ELSE 0 END) as iqr_outliers
+        FROM raw_data
+`;
 
-        const query = `
-            WITH data_table AS (
-                SELECT * FROM read_csv_auto('${file}')
-            ),
-            weekly AS (
-                SELECT 
-                    date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE)) as week,
-                    AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
-                    AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
-                    ${apwSelect}
-                FROM data_table
-                GROUP BY week
-                ORDER BY week ASC
-            )
-            SELECT * FROM weekly WHERE week IS NOT NULL LIMIT 10
-        `;
-        
-        db.all(query, (err2, res2) => {
-            if (err2) console.error("Query error:", err2);
-            console.log("Trend Data Result:", res2);
-        });
-    }
+db.all(getContext, (err, res) => {
+    if (err) console.error("Error:", err);
+    console.log("Context Results:", res);
 });

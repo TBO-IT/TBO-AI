@@ -38,17 +38,26 @@ export interface DeepDiveData {
     topProperties?: Array<{ name: string; winRate: number; share: number }>;
 }
 
-export async function getHotelDeepDive(id: string, datasetId: string): Promise<DeepDiveData> {
+export interface DeepDiveResponse {
+    meta?: {
+        outliersDropped: { magnitude: number; percentage: number };
+        knownLimitations: string[];
+        dateRange: { min: string; max: string };
+    };
+    data: DeepDiveData;
+}
+
+export async function getHotelDeepDive(id: string, datasetId: string): Promise<DeepDiveResponse> {
     const response = await api.get(`/deep-dives/hotel/${encodeURIComponent(id)}?datasetId=${datasetId}`);
     return response.data;
 }
 
-export async function getSupplierDeepDive(id: string, datasetId: string): Promise<DeepDiveData> {
+export async function getSupplierDeepDive(id: string, datasetId: string): Promise<DeepDiveResponse> {
     const response = await api.get(`/deep-dives/supplier/${encodeURIComponent(id)}?datasetId=${datasetId}`);
     return response.data;
 }
 
-export async function getChainDeepDive(id: string, datasetId: string): Promise<DeepDiveData> {
+export async function getChainDeepDive(id: string, datasetId: string): Promise<DeepDiveResponse> {
     const response = await api.get(`/deep-dives/chain/${encodeURIComponent(id)}?datasetId=${datasetId}`);
     return response.data;
 }

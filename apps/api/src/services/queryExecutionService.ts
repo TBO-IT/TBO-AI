@@ -62,9 +62,45 @@ export async function executeQuery<T = any>(
     csvPath: string
 ): Promise<T[]> {
     const normalizedPath = csvPath.replace(/\\/g, "/");
+    
+    // Rule 3: Dual Outlier Audits
+    // a. abs(price_diff_perc) <= 100
+    // b. thirdparty_price <= Q3 + 5*IQR per destination
+    const cleanDataSubquery = `
+        (
+            WITH stats AS (
+                SELECT 
+                    destination,
+                    percentile_cont(0.25) WITHIN GROUP (ORDER BY TRY_CAST(thirdparty_price AS DOUBLE)) as q1,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY TRY_CAST(thirdparty_price AS DOUBLE)) as q3
+                FROM read_csv_auto('${normalizedPath}', ignore_errors=true)
+                GROUP BY destination
+            ),
+            iqr_bounds AS (
+                SELECT 
+                    destination,
+                    q1,
+                    q3,
+                    (q3 - q1) as iqr,
+                    q3 + (5 * (q3 - q1)) as upper_bound
+                FROM stats
+            ),
+            raw_data AS (
+                SELECT d.*, i.upper_bound
+                FROM read_csv_auto('${normalizedPath}', ignore_errors=true) d
+                LEFT JOIN iqr_bounds i ON d.destination = i.destination
+            )
+            SELECT *
+            FROM raw_data
+            WHERE 
+                (TRY_CAST(price_diff_perc AS DOUBLE) IS NULL OR abs(TRY_CAST(price_diff_perc AS DOUBLE)) <= 100)
+                AND (TRY_CAST(thirdparty_price AS DOUBLE) IS NULL OR upper_bound IS NULL OR TRY_CAST(thirdparty_price AS DOUBLE) <= upper_bound)
+        )
+    `;
+
     const executableSql = sql.replace(
         /\bdata_table\b/gi,
-        `read_csv_auto('${normalizedPath}', ignore_errors=true)`
+        cleanDataSubquery
     );
     return executeSql<T>(executableSql);
 }
