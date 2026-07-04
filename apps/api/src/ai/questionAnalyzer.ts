@@ -136,7 +136,8 @@ const STOP_WORDS = new Set([
     "between", "across", "over", "under", "above", "below", "during",
     "top", "bottom", "best", "worst", "high", "low", "last", "this", "next",
     "give", "list", "tell", "find", "get", "if", "roi", "apw",
-    "me", "my", "we", "us", "our", "i", "you", "he", "she", "they", "it", "them", "their", "your"
+    "me", "my", "we", "us", "our", "i", "you", "he", "she", "they", "it", "them", "their", "your",
+    "leadership", "focus", "priority", "important", "first", "allocate", "resources"
 ]);
 
 const TIME_COMPARISON_TERMS = new Set([

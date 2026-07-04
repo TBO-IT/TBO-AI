@@ -94,7 +94,7 @@ function formatTimeContext(
 
 function formatFilters(parsedQuestion: QuestionAnalysis): string {
     if (!parsedQuestion?.filters.length) return "";
-    return `\n---\n### FILTER VALUES DETECTED\nThe user is specifically asking about: ${parsedQuestion.filters.map(f => `"${f}"`).join(", ")}\nApply these as WHERE clause filters on the appropriate dimension column.\n`;
+    return `\n---\n### FILTER VALUES DETECTED\nThe user is specifically asking about: ${parsedQuestion.filters.map(f => `"${f.value}"`).join(", ")}\nApply these as WHERE clause filters on the appropriate dimension column. If a value does not logically match the contents of any available column, IGNORE IT.\n`;
 }
 
 function formatIntent(parsedQuestion: QuestionAnalysis): string {
