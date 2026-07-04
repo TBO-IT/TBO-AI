@@ -1,6 +1,7 @@
 import { getDataset } from "./datasetService.js";
 import { downloadDataset } from "./storageService.js";
 import { getDatasetSchema } from "./schemaService.js";
+import { getCachedDatasetPath, getCachedSchema, getCachedMetadata } from "./datasetCacheService.js";
 import { buildSemanticLayer } from "../ai/semanticLayer.js";
 import { buildPrompt } from "../ai/promptBuilder.js";
 import { analyzeQuestion } from "../ai/questionAnalyzer.js";
@@ -44,6 +45,7 @@ import { logger } from "../lib/logger.js";
 import { objectiveSelector } from "../ai/objectives/index.js";
 import { analysisPlanner } from "../ai/planning/index.js";
 import { evidencePlanner } from "../ai/evidence/index.js";
+import { generateNaturalResponse, canUseNaturalResponse } from "./naturalResponseGenerator.js";
 
 
 export class ChatOrchestrator {
@@ -89,9 +91,15 @@ export class ChatOrchestrator {
                 throw new Error("Dataset not found or does not have a storage path.");
             }
 
-            tempPath = await downloadDataset(dataset.storagePath);
+            // Use cached dataset path to avoid redundant downloads
+            tempPath = await getCachedDatasetPath(datasetId, dataset.storagePath);
 
-            const metadata = await buildDatasetMetadata(tempPath);
+            // Use cached metadata (includes schema, sample rows, stats)
+            const metadata = await getCachedMetadata(
+                datasetId,
+                tempPath,
+                () => buildDatasetMetadata(tempPath)
+            );
 
             const entityFilters = resolveEntities(question, metadata);
 
@@ -99,7 +107,11 @@ export class ChatOrchestrator {
             console.log("DATASET METADATA:", JSON.stringify(metadata, null, 2));
 
             setStage("Analyzing dataset schema...");
-            const schema = await getDatasetSchema(tempPath);
+            // Use cached schema
+            const schema = await getCachedSchema(
+                tempPath,
+                () => getDatasetSchema(tempPath)
+            );
             console.log(
                 `[SCHEMA_COLUMNS] (${schema.length} cols):`,
                 schema.map(c => `${c.column_name}(${c.column_type})`).join(" | ")
@@ -262,9 +274,8 @@ export class ChatOrchestrator {
 
             console.log(`[ANALYSIS] intent=${parsedQuestion.intent} | metrics=[${parsedQuestion.metrics}] | dims=[${parsedQuestion.dimensions}] | filters=${parsedQuestion.filters.length}`);
 
-            // SQL cache bypass — disable to force fresh routing during development
-            // const cachedSql = await getCachedSql(semanticLayer.datasetType, question.toLowerCase().trim());
-            const cachedSql = null;
+            // SQL cache enabled for latency optimization
+            const cachedSql = await getCachedSql(semanticLayer.datasetType, question.toLowerCase().trim());
 
             if (cachedSql) {
                 sql = cachedSql;
@@ -1031,8 +1042,22 @@ export class ChatOrchestrator {
                     }
                 } else {
                     console.log(`[NARRATIVE_REQUEST] source=ANALYTICS | deterministic`);
-                    narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
-                    console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS | preview="${narrative.slice(0, 100)}"`);
+
+                    // Try natural response first for simple queries (faster, more conversational)
+                    if (canUseNaturalResponse(parsedQuestion, queryResults)) {
+                        const naturalResult = generateNaturalResponse(parsedQuestion, queryResults);
+                        if (!naturalResult.requiresClaude && naturalResult.response) {
+                            narrative = naturalResult.response;
+                            responseSource = "NATURAL_RESPONSE";
+                            console.log(`[NARRATIVE_VALUE_SET] source=NATURAL_RESPONSE | queryType=${naturalResult.queryType} | preview="${narrative.slice(0, 100)}"`);
+                        } else {
+                            narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                            console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS | fallback to deterministic | preview="${narrative.slice(0, 100)}"`);
+                        }
+                    } else {
+                        narrative = buildDeterministicNarrative(question, queryResults, extractInsights(queryResults));
+                        console.log(`[NARRATIVE_VALUE_SET] source=ANALYTICS | preview="${narrative.slice(0, 100)}"`);
+                    }
                 }
                 timer.checkpoint("Narrative Generation");
                 await setCachedNarrative(datasetId, question.toLowerCase().trim(), sql, narrative, responseSource);

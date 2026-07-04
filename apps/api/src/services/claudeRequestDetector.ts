@@ -13,7 +13,7 @@
 //   ROOT_CAUSE + "what should we do" → Claude recommendations
 // ───────────────────────────────────────────────────────────────────────────────
 
-export type ResponseSource = "ANALYTICS" | "CLAUDE_NARRATIVE" | "CLAUDE_RECOMMENDATION";
+export type ResponseSource = "ANALYTICS" | "CLAUDE_NARRATIVE" | "CLAUDE_RECOMMENDATION" | "NATURAL_RESPONSE";
 
 // ─── Narrative Signals ────────────────────────────────────────────────────────
 
