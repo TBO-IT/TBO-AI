@@ -101,7 +101,64 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
             riskAssessment: {
                 level: "HIGH",
                 primaryRisk: "Price competitiveness declining on weekend check-ins against Booking.com.",
-            }
+            },
+            trendData: {
+                winRate: [
+                    { date: "Apr 6", current: 46, market: 50 },
+                    { date: "Apr 13", current: 48, market: 49 },
+                    { date: "Apr 20", current: 44, market: 48 },
+                    { date: "Apr 27", current: 47, market: 50 },
+                    { date: "May 4", current: 43, market: 49 },
+                    { date: "May 11", current: 41, market: 47 },
+                    { date: "May 18", current: 40, market: 47 },
+                    { date: "May 25", current: 42, market: 46 },
+                    { date: "Jun 1", current: 39, market: 45 },
+                    { date: "Jun 8", current: 41, market: 45 },
+                    { date: "Jun 15", current: 44, market: 46 },
+                    { date: "Jun 22", current: 43, market: 45 },
+                    { date: "Jun 29", current: 38, market: 44 },
+                ],
+                priceGap: [
+                    { date: "Apr 6", current: 8.2, market: 3.1 },
+                    { date: "Apr 13", current: 9.1, market: 3.4 },
+                    { date: "Apr 20", current: 7.8, market: 3.2 },
+                    { date: "Apr 27", current: 8.5, market: 3.5 },
+                    { date: "May 4", current: 7.2, market: 3.0 },
+                    { date: "May 11", current: 6.9, market: 2.8 },
+                    { date: "May 18", current: 7.5, market: 3.1 },
+                    { date: "May 25", current: 8.1, market: 3.3 },
+                    { date: "Jun 1", current: 6.3, market: 2.5 },
+                    { date: "Jun 8", current: 6.8, market: 2.7 },
+                    { date: "Jun 15", current: 7.6, market: 2.9 },
+                    { date: "Jun 22", current: 7.4, market: 2.8 },
+                    { date: "Jun 29", current: 6.1, market: 2.6 },
+                ],
+                apw: [
+                    { date: "Apr 6", d10: 50, d15: 45, d30: 42, d45: 60, d60: 25, d90: 52 },
+                    { date: "Apr 13", d10: 48, d15: 46, d30: 40, d45: 55, d60: 22, d90: 48 },
+                    { date: "Apr 20", d10: 45, d15: 42, d30: 38, d45: 52, d60: 20, d90: 45 },
+                    { date: "Apr 27", d10: 49, d15: 47, d30: 41, d45: 58, d60: 24, d90: 50 },
+                    { date: "May 4", d10: 42, d15: 40, d30: 35, d45: 50, d60: 18, d90: 42 },
+                    { date: "May 11", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
+                    { date: "May 18", d10: 44, d15: 42, d30: 37, d45: 52, d60: 20, d90: 44 },
+                    { date: "May 25", d10: 46, d15: 45, d30: 39, d45: 55, d60: 22, d90: 47 },
+                    { date: "Jun 1", d10: 41, d15: 39, d30: 34, d45: 49, d60: 18, d90: 41 },
+                    { date: "Jun 8", d10: 43, d15: 41, d30: 36, d45: 51, d60: 19, d90: 43 },
+                    { date: "Jun 15", d10: 48, d15: 46, d30: 40, d45: 56, d60: 23, d90: 49 },
+                    { date: "Jun 22", d10: 45, d15: 43, d30: 38, d45: 54, d60: 21, d90: 46 },
+                    { date: "Jun 29", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
+                ]
+            },
+            distribution: {
+                winMargin: { avg: 6.2, median: 4.1 },
+                lossMargin: { avg: -8.7, median: -6.3 },
+                segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
+            },
+            insights: [
+                "Weekend performance declined by 4.2pp vs previous period",
+                "46-60 days APW bucket showing weakest performance (21% win rate)",
+                "Average loss margin improved by 1.1pp"
+            ]
         });
     } catch (error) {
         logger.error({ err: error }, "Failed to fetch hotel deep dive");
@@ -305,8 +362,65 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
             topProperties: topPropertiesData,
             opportunityAssessment: {
                 level: "MEDIUM",
-                primaryOpportunity: "Chain-wide volume is strong but win rate on weekends is trailing. Consider targeted weekend promotions.",
-            }
+                primaryOpportunity: "Significant growth potential in Dubai market through targeted weekend promotions.",
+            },
+            trendData: {
+                winRate: [
+                    { date: "Apr 6", current: 46, market: 50 },
+                    { date: "Apr 13", current: 48, market: 49 },
+                    { date: "Apr 20", current: 44, market: 48 },
+                    { date: "Apr 27", current: 47, market: 50 },
+                    { date: "May 4", current: 43, market: 49 },
+                    { date: "May 11", current: 41, market: 47 },
+                    { date: "May 18", current: 40, market: 47 },
+                    { date: "May 25", current: 42, market: 46 },
+                    { date: "Jun 1", current: 39, market: 45 },
+                    { date: "Jun 8", current: 41, market: 45 },
+                    { date: "Jun 15", current: 44, market: 46 },
+                    { date: "Jun 22", current: 43, market: 45 },
+                    { date: "Jun 29", current: 38, market: 44 },
+                ],
+                priceGap: [
+                    { date: "Apr 6", current: 8.2, market: 3.1 },
+                    { date: "Apr 13", current: 9.1, market: 3.4 },
+                    { date: "Apr 20", current: 7.8, market: 3.2 },
+                    { date: "Apr 27", current: 8.5, market: 3.5 },
+                    { date: "May 4", current: 7.2, market: 3.0 },
+                    { date: "May 11", current: 6.9, market: 2.8 },
+                    { date: "May 18", current: 7.5, market: 3.1 },
+                    { date: "May 25", current: 8.1, market: 3.3 },
+                    { date: "Jun 1", current: 6.3, market: 2.5 },
+                    { date: "Jun 8", current: 6.8, market: 2.7 },
+                    { date: "Jun 15", current: 7.6, market: 2.9 },
+                    { date: "Jun 22", current: 7.4, market: 2.8 },
+                    { date: "Jun 29", current: 6.1, market: 2.6 },
+                ],
+                apw: [
+                    { date: "Apr 6", d10: 50, d15: 45, d30: 42, d45: 60, d60: 25, d90: 52 },
+                    { date: "Apr 13", d10: 48, d15: 46, d30: 40, d45: 55, d60: 22, d90: 48 },
+                    { date: "Apr 20", d10: 45, d15: 42, d30: 38, d45: 52, d60: 20, d90: 45 },
+                    { date: "Apr 27", d10: 49, d15: 47, d30: 41, d45: 58, d60: 24, d90: 50 },
+                    { date: "May 4", d10: 42, d15: 40, d30: 35, d45: 50, d60: 18, d90: 42 },
+                    { date: "May 11", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
+                    { date: "May 18", d10: 44, d15: 42, d30: 37, d45: 52, d60: 20, d90: 44 },
+                    { date: "May 25", d10: 46, d15: 45, d30: 39, d45: 55, d60: 22, d90: 47 },
+                    { date: "Jun 1", d10: 41, d15: 39, d30: 34, d45: 49, d60: 18, d90: 41 },
+                    { date: "Jun 8", d10: 43, d15: 41, d30: 36, d45: 51, d60: 19, d90: 43 },
+                    { date: "Jun 15", d10: 48, d15: 46, d30: 40, d45: 56, d60: 23, d90: 49 },
+                    { date: "Jun 22", d10: 45, d15: 43, d30: 38, d45: 54, d60: 21, d90: 46 },
+                    { date: "Jun 29", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
+                ]
+            },
+            distribution: {
+                winMargin: { avg: 6.2, median: 4.1 },
+                lossMargin: { avg: -8.7, median: -6.3 },
+                segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
+            },
+            insights: [
+                "Overall chain volume grew by 8.4% month-over-month",
+                "Pricing strategy in APAC region showing strong positive returns",
+                "Luxury tier properties outperforming mid-scale by 12pp"
+            ]
         });
     } catch (error) {
         logger.error({ err: error }, "Failed to fetch chain deep dive");

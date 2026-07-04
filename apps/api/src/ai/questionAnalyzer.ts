@@ -589,7 +589,7 @@ function detectPrimaryBusinessObject(
     if (/\bsuppliers?\b|\bvendors?\b|\bproviders?\b|\botas?\b/.test(q)) return "supplier";
     if (/\bhotels?\b|\bproperties\b|\bproperty\b/.test(q)) return "hotel";
     if (/\bdestinations?\b|\bmarkets?\b|\blocations?\b|\bcities\b|\bcity\b|\bregions?\b/.test(q)) return "destination";
-    if (/\bcompetitors?\b|\bthird\s+part(y|ies)\b|\bthird-part(y|ies)\b/.test(q)) return "competitor";
+    if (/\bcompetitors?\b|\bthird\s+part(y|ies)\b|\bthird-part(y|ies)\b/.test(q)) return "thirdparty";
     if (/\bapw\b|\blead\s+time\b|\bpurchase\s+window\b/.test(q)) return "apw";
 
     // 2. Lookup well-known entities in TBO dataset
@@ -601,7 +601,7 @@ function detectPrimaryBusinessObject(
     if (chainKeywords.some(kw => q.includes(kw))) return "chain";
     if (destKeywords.some(kw => q.includes(kw))) return "destination";
     if (supplierKeywords.some(kw => q.includes(kw))) return "supplier";
-    if (competitorKeywords.some(kw => q.includes(kw))) return "competitor";
+    if (competitorKeywords.some(kw => q.includes(kw))) return "thirdparty";
 
     // 3. Fallback to parsed dimensions
     if (dimensions.includes("hotel")) return "hotel";
@@ -617,7 +617,7 @@ function detectPrimaryBusinessObject(
         if (f.dimension === "chain") return "chain";
         if (f.dimension === "destination" || f.dimension === "city" || f.dimension === "country") return "destination";
         if (f.dimension === "apw") return "apw";
-        if (f.dimension === "thirdparty") return "competitor";
+        if (f.dimension === "thirdparty") return "thirdparty";
     }
 
     return null;

@@ -16,10 +16,20 @@ export interface DeepDiveData {
         volumeShare: MetricData;
         totalQueries: MetricData;
     };
+    trendData?: {
+        winRate: Array<{ date: string; current: number; market: number }>;
+        priceGap: Array<{ date: string; current: number; market: number }>;
+        apw: Array<{ date: string; d10: number; d15: number; d30: number; d45: number; d60: number; d90: number }>;
+    };
+    distribution?: {
+        winMargin: { avg: number; median: number };
+        lossMargin: { avg: number; median: number };
+        segments: { winHigh: number; winLow: number; within: number; lossLow: number; lossHigh: number };
+    };
+    insights?: string[];
     // specific to hotels
     topSuppliers?: Array<{ name: string; winRate: number; share: number }>;
     riskAssessment?: { level: string; primaryRisk: string };
-    
     // specific to suppliers
     topHotels?: Array<{ name: string; winRate: number; share: number }>;
     opportunityAssessment?: { level: string; primaryOpportunity: string };

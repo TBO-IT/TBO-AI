@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from "react-router-dom";
 import { ChevronLeft, AlertTriangle, Building, Activity, LineChart, Target, ShieldAlert, Link as LinkIcon } from "lucide-react";
 import PageShell from "../components/layout/PageShell";
 import MetricCard from "../components/shared/MetricCard";
+import DeepDiveDashboard from "../components/shared/DeepDiveDashboard";
 import { getChainDeepDive, type DeepDiveData } from "../api/deepDiveApi";
 
 export default function ChainDeepDivePage() {
@@ -136,46 +137,50 @@ export default function ChainDeepDivePage() {
                 </div>
             </div>
 
-            {/* Top Properties */}
-            {data.topProperties && data.topProperties.length > 0 && (
-                <div>
-                    <h3 className="text-sm font-semibold tracking-wide uppercase text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
-                        <Target className="h-4 w-4" /> Top Properties
-                    </h3>
-                    <div className="bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800/80 overflow-hidden">
-                        <table className="w-full text-left text-[13px]">
-                            <thead>
-                                <tr className="border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/20 text-slate-500 dark:text-slate-400">
-                                    <th className="font-medium py-3 px-5">Property Name</th>
-                                    <th className="font-medium py-3 px-5">Win Rate</th>
-                                    <th className="font-medium py-3 px-5 text-right">Volume Share</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.topProperties.map((prop, idx) => (
-                                    <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/40 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
-                                        <td className="py-3 px-5 font-medium text-slate-900 dark:text-white flex items-center gap-2">
-                                            <Building className="h-3.5 w-3.5 text-slate-400" />
-                                            {prop.name}
-                                        </td>
-                                        <td className="py-3 px-5 text-slate-600 dark:text-slate-300">
-                                            <span className="font-medium">{prop.winRate}%</span>
-                                        </td>
-                                        <td className="py-3 px-5 text-right">
-                                            <div className="flex items-center justify-end gap-3">
-                                                <span className="font-medium text-slate-600 dark:text-slate-300">{prop.share}%</span>
-                                                <div className="w-24 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                                                    <div className="h-full bg-accent rounded-full" style={{ width: `${prop.share}%` }} />
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+            {/* Advanced Dashboard & Top Properties */}
+            <DeepDiveDashboard data={data}>
+                {data.topProperties && data.topProperties.length > 0 && (
+                    <div className="h-full">
+                        <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-5 h-full">
+                            <h3 className="text-[13px] font-semibold tracking-wide uppercase text-slate-400 mb-6 flex items-center gap-2">
+                                <Target className="h-4 w-4" /> Top Properties (Distribution)
+                            </h3>
+                            <div className="overflow-hidden">
+                                <table className="w-full text-left text-[13px]">
+                                    <thead>
+                                        <tr className="border-b border-slate-800/80 text-slate-400">
+                                            <th className="font-medium py-3 px-2">Property Name</th>
+                                            <th className="font-medium py-3 px-2">Win Rate</th>
+                                            <th className="font-medium py-3 px-2 text-right">Volume Share</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {data.topProperties.map((property, idx) => (
+                                            <tr key={idx} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
+                                                <td className="py-3 px-2 font-medium text-white flex items-center gap-2">
+                                                    <Building className="h-3.5 w-3.5 text-slate-400" />
+                                                    {property.name}
+                                                </td>
+                                                <td className="py-3 px-2 text-slate-300">
+                                                    <span className="font-medium">{property.winRate}%</span>
+                                                </td>
+                                                <td className="py-3 px-2 text-right">
+                                                    <div className="flex items-center justify-end gap-3">
+                                                        <span className="font-medium text-slate-300">{property.share}%</span>
+                                                        <div className="w-16 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${property.share}%` }} />
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </DeepDiveDashboard>
         </PageShell>
     );
 }
