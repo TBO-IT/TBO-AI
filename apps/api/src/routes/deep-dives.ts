@@ -37,9 +37,27 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
             { name: "Hotelbeds", winRate: 25.4, share: 10 },
         ];
 
+        let trendWinRate: any[] = [];
+        let trendPriceGap: any[] = [];
+        let trendApw: any[] = [];
+        let distribution = {
+            winMargin: { avg: 6.2, median: 4.1 },
+            lossMargin: { avg: -8.7, median: -6.3 },
+            segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
+        };
+
         if (datasetId !== "demo" && dataset?.storagePath) {
             const localPath = await downloadDataset(dataset.storagePath);
             
+            // Validate existence
+            const countRes = await executeQuery<{ count: number }>(
+                `SELECT COUNT(*) as count FROM data_table WHERE tbo_hotelname ILIKE '%${hotelName.replace(/'/g, "''")}%'`, 
+                localPath
+            );
+            if (Number(countRes[0]?.count || 0) === 0) {
+                return res.status(404).json({ error: `Hotel '${hotelName}' not found in dataset.` });
+            }
+
             // Get total dataset row count for volume share
             const totalRes = await executeQuery<{ total: number }>(
                 `SELECT COUNT(*) as total FROM data_table`, 
@@ -85,75 +103,117 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
                 winRate: Number(Number(s.winRate).toFixed(1)),
                 share: Number(((Number(s.volume) / totalQueriesVal) * 100).toFixed(1))
             }));
-        }
 
+            try {
+                // Check if scraped_date exists
+                const schema = await executeQuery<{ column_name: string }>(`DESCRIBE data_table`, localPath);
+                const hasDate = schema.some(c => c.column_name.toLowerCase() === 'scraped_date');
+                
+                if (hasDate) {
+                    const trendSql = `
+                        SELECT 
+                            scraped_date as date,
+                            AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as current,
+                            AVG(CAST(price_diff_perc AS DOUBLE)) as gap
+                        FROM data_table
+                        WHERE tbo_hotelname ILIKE '%${hotelName.replace(/'/g, "''")}%'
+                        GROUP BY scraped_date
+                        ORDER BY scraped_date ASC
+                    `;
+                    const trendRes = await executeQuery<any>(trendSql, localPath);
+                    trendRes.forEach(r => {
+                        trendWinRate.push({ date: r.date, current: Number(Number(r.current).toFixed(1)), market: 50 });
+                        trendPriceGap.push({ date: r.date, current: Number(Number(r.gap).toFixed(1)), market: 3.0 });
+                    });
+                    
+                    const apwSql = `
+                        SELECT 
+                            scraped_date as date,
+                            AVG(CASE WHEN apw_bucket_new = '< 10 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d10,
+                            AVG(CASE WHEN apw_bucket_new = '10-15 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d15,
+                            AVG(CASE WHEN apw_bucket_new = '15-30 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d30,
+                            AVG(CASE WHEN apw_bucket_new = '31-45 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d45,
+                            AVG(CASE WHEN apw_bucket_new = '46-60 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d60,
+                            AVG(CASE WHEN apw_bucket_new = '60+ days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d90
+                        FROM data_table
+                        WHERE tbo_hotelname ILIKE '%${hotelName.replace(/'/g, "''")}%'
+                        GROUP BY scraped_date
+                        ORDER BY scraped_date ASC
+                    `;
+                    const apwRes = await executeQuery<any>(apwSql, localPath);
+                    trendApw = apwRes.map(r => ({
+                        date: r.date,
+                        d10: Number(Number(r.d10).toFixed(1)),
+                        d15: Number(Number(r.d15).toFixed(1)),
+                        d30: Number(Number(r.d30).toFixed(1)),
+                        d45: Number(Number(r.d45).toFixed(1)),
+                        d60: Number(Number(r.d60).toFixed(1)),
+                        d90: Number(Number(r.d90).toFixed(1))
+                    }));
+                }
+            } catch (e) {
+                logger.error({ err: e }, "Trend data error:");
+            }
+
+            try {
+                const distSql = `
+                    SELECT 
+                        AVG(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as avg_win,
+                        MEDIAN(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as med_win,
+                        AVG(CASE WHEN CAST(price_diff_perc AS DOUBLE) < 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as avg_loss,
+                        MEDIAN(CASE WHEN CAST(price_diff_perc AS DOUBLE) < 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as med_loss,
+                        
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 10 THEN 1 END) as win_high,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 2 AND CAST(price_diff_perc AS DOUBLE) <= 10 THEN 1 END) as win_low,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) >= -2 AND CAST(price_diff_perc AS DOUBLE) <= 2 THEN 1 END) as within,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) < -2 AND CAST(price_diff_perc AS DOUBLE) >= -10 THEN 1 END) as loss_low,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) < -10 THEN 1 END) as loss_high,
+                        COUNT(*) as total
+                    FROM data_table
+                    WHERE tbo_hotelname ILIKE '%${hotelName.replace(/'/g, "''")}%'
+                `;
+                const distRes = await executeQuery<any>(distSql, localPath);
+                if (distRes.length > 0 && distRes[0].total > 0) {
+                    const r = distRes[0];
+                    const t = Number(r.total);
+                    distribution = {
+                        winMargin: { avg: Number(Number(r.avg_win || 0).toFixed(1)), median: Number(Number(r.med_win || 0).toFixed(1)) },
+                        lossMargin: { avg: Number(Number(r.avg_loss || 0).toFixed(1)), median: Number(Number(r.med_loss || 0).toFixed(1)) },
+                        segments: {
+                            winHigh: Math.round((Number(r.win_high) / t) * 100),
+                            winLow: Math.round((Number(r.win_low) / t) * 100),
+                            within: Math.round((Number(r.within) / t) * 100),
+                            lossLow: Math.round((Number(r.loss_low) / t) * 100),
+                            lossHigh: Math.round((Number(r.loss_high) / t) * 100),
+                        }
+                    };
+                }
+            } catch (e) {
+                logger.error({ err: e }, "Distribution error:");
+            }
+        }
+            
         return res.json({
-            id: hotelName,
-            name: hotelName,
-            type: "HOTEL",
-            metrics: {
-                winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
-                priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
-                volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
-                totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
-            },
-            topSuppliers: topSuppliersData,
-            riskAssessment: {
-                level: "HIGH",
-                primaryRisk: "Price competitiveness declining on weekend check-ins against Booking.com.",
-            },
-            trendData: {
-                winRate: [
-                    { date: "Apr 6", current: 46, market: 50 },
-                    { date: "Apr 13", current: 48, market: 49 },
-                    { date: "Apr 20", current: 44, market: 48 },
-                    { date: "Apr 27", current: 47, market: 50 },
-                    { date: "May 4", current: 43, market: 49 },
-                    { date: "May 11", current: 41, market: 47 },
-                    { date: "May 18", current: 40, market: 47 },
-                    { date: "May 25", current: 42, market: 46 },
-                    { date: "Jun 1", current: 39, market: 45 },
-                    { date: "Jun 8", current: 41, market: 45 },
-                    { date: "Jun 15", current: 44, market: 46 },
-                    { date: "Jun 22", current: 43, market: 45 },
-                    { date: "Jun 29", current: 38, market: 44 },
-                ],
-                priceGap: [
-                    { date: "Apr 6", current: 8.2, market: 3.1 },
-                    { date: "Apr 13", current: 9.1, market: 3.4 },
-                    { date: "Apr 20", current: 7.8, market: 3.2 },
-                    { date: "Apr 27", current: 8.5, market: 3.5 },
-                    { date: "May 4", current: 7.2, market: 3.0 },
-                    { date: "May 11", current: 6.9, market: 2.8 },
-                    { date: "May 18", current: 7.5, market: 3.1 },
-                    { date: "May 25", current: 8.1, market: 3.3 },
-                    { date: "Jun 1", current: 6.3, market: 2.5 },
-                    { date: "Jun 8", current: 6.8, market: 2.7 },
-                    { date: "Jun 15", current: 7.6, market: 2.9 },
-                    { date: "Jun 22", current: 7.4, market: 2.8 },
-                    { date: "Jun 29", current: 6.1, market: 2.6 },
-                ],
-                apw: [
-                    { date: "Apr 6", d10: 50, d15: 45, d30: 42, d45: 60, d60: 25, d90: 52 },
-                    { date: "Apr 13", d10: 48, d15: 46, d30: 40, d45: 55, d60: 22, d90: 48 },
-                    { date: "Apr 20", d10: 45, d15: 42, d30: 38, d45: 52, d60: 20, d90: 45 },
-                    { date: "Apr 27", d10: 49, d15: 47, d30: 41, d45: 58, d60: 24, d90: 50 },
-                    { date: "May 4", d10: 42, d15: 40, d30: 35, d45: 50, d60: 18, d90: 42 },
-                    { date: "May 11", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
-                    { date: "May 18", d10: 44, d15: 42, d30: 37, d45: 52, d60: 20, d90: 44 },
-                    { date: "May 25", d10: 46, d15: 45, d30: 39, d45: 55, d60: 22, d90: 47 },
-                    { date: "Jun 1", d10: 41, d15: 39, d30: 34, d45: 49, d60: 18, d90: 41 },
-                    { date: "Jun 8", d10: 43, d15: 41, d30: 36, d45: 51, d60: 19, d90: 43 },
-                    { date: "Jun 15", d10: 48, d15: 46, d30: 40, d45: 56, d60: 23, d90: 49 },
-                    { date: "Jun 22", d10: 45, d15: 43, d30: 38, d45: 54, d60: 21, d90: 46 },
-                    { date: "Jun 29", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
-                ]
-            },
-            distribution: {
-                winMargin: { avg: 6.2, median: 4.1 },
-                lossMargin: { avg: -8.7, median: -6.3 },
-                segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
-            },
+                id: hotelName,
+                name: hotelName,
+                type: "HOTEL",
+                metrics: {
+                    winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
+                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
+                    volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
+                    totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
+                },
+                topSuppliers: topSuppliersData,
+                riskAssessment: {
+                    level: "HIGH",
+                    primaryRisk: "Price competitiveness declining on weekend check-ins against Booking.com.",
+                },
+                trendData: {
+                    winRate: trendWinRate,
+                    priceGap: trendPriceGap,
+                    apw: trendApw
+                },
+                distribution: distribution,
             insights: [
                 "Weekend performance declined by 4.2pp vs previous period",
                 "46-60 days APW bucket showing weakest performance (21% win rate)",
@@ -298,9 +358,27 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
             { name: "Hilton Rome", winRate: 40.4, share: 4 },
         ];
 
+        let trendWinRate: any[] = [];
+        let trendPriceGap: any[] = [];
+        let trendApw: any[] = [];
+        let distribution = {
+            winMargin: { avg: 6.2, median: 4.1 },
+            lossMargin: { avg: -8.7, median: -6.3 },
+            segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
+        };
+
         if (datasetId !== "demo" && dataset?.storagePath) {
             const localPath = await downloadDataset(dataset.storagePath);
             
+            // Validate existence
+            const countRes = await executeQuery<{ count: number }>(
+                `SELECT COUNT(*) as count FROM data_table WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'`, 
+                localPath
+            );
+            if (Number(countRes[0]?.count || 0) === 0) {
+                return res.status(404).json({ error: `Chain '${chainName}' not found in dataset.` });
+            }
+
             // Get total dataset row count for volume share
             const totalRes = await executeQuery<{ total: number }>(
                 `SELECT COUNT(*) as total FROM data_table`, 
@@ -342,13 +420,101 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
             `;
             const propsRes = await executeQuery<{ name: string, volume: number, winRate: number }>(propSql, localPath);
             
-            topPropertiesData = propsRes.map(p => ({
+            topPropertiesData = propsRes.map((p: any) => ({
                 name: p.name,
                 winRate: Number(Number(p.winRate).toFixed(1)),
                 share: Number(((Number(p.volume) / totalQueriesVal) * 100).toFixed(1))
             }));
-        }
 
+            try {
+                // Check if scraped_date exists
+                const schema = await executeQuery<{ column_name: string }>(`DESCRIBE data_table`, localPath);
+                const hasDate = schema.some(c => c.column_name.toLowerCase() === 'scraped_date');
+                
+                if (hasDate) {
+                    const trendSql = `
+                        SELECT 
+                            scraped_date as date,
+                            AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as current,
+                            AVG(CAST(price_diff_perc AS DOUBLE)) as gap
+                        FROM data_table
+                        WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'
+                        GROUP BY scraped_date
+                        ORDER BY scraped_date ASC
+                    `;
+                    const trendRes = await executeQuery<any>(trendSql, localPath);
+                    trendRes.forEach(r => {
+                        trendWinRate.push({ date: r.date, current: Number(Number(r.current).toFixed(1)), market: 50 });
+                        trendPriceGap.push({ date: r.date, current: Number(Number(r.gap).toFixed(1)), market: 3.0 });
+                    });
+                    
+                    const apwSql = `
+                        SELECT 
+                            scraped_date as date,
+                            AVG(CASE WHEN apw_bucket_new = '< 10 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d10,
+                            AVG(CASE WHEN apw_bucket_new = '10-15 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d15,
+                            AVG(CASE WHEN apw_bucket_new = '15-30 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d30,
+                            AVG(CASE WHEN apw_bucket_new = '31-45 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d45,
+                            AVG(CASE WHEN apw_bucket_new = '46-60 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d60,
+                            AVG(CASE WHEN apw_bucket_new = '60+ days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as d90
+                        FROM data_table
+                        WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'
+                        GROUP BY scraped_date
+                        ORDER BY scraped_date ASC
+                    `;
+                    const apwRes = await executeQuery<any>(apwSql, localPath);
+                    trendApw = apwRes.map(r => ({
+                        date: r.date,
+                        d10: Number(Number(r.d10).toFixed(1)),
+                        d15: Number(Number(r.d15).toFixed(1)),
+                        d30: Number(Number(r.d30).toFixed(1)),
+                        d45: Number(Number(r.d45).toFixed(1)),
+                        d60: Number(Number(r.d60).toFixed(1)),
+                        d90: Number(Number(r.d90).toFixed(1))
+                    }));
+                }
+            } catch (e) {
+                logger.error({ err: e }, "Trend data error:");
+            }
+
+            try {
+                const distSql = `
+                    SELECT 
+                        AVG(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as avg_win,
+                        MEDIAN(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as med_win,
+                        AVG(CASE WHEN CAST(price_diff_perc AS DOUBLE) < 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as avg_loss,
+                        MEDIAN(CASE WHEN CAST(price_diff_perc AS DOUBLE) < 0 THEN CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as med_loss,
+                        
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 10 THEN 1 END) as win_high,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) > 2 AND CAST(price_diff_perc AS DOUBLE) <= 10 THEN 1 END) as win_low,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) >= -2 AND CAST(price_diff_perc AS DOUBLE) <= 2 THEN 1 END) as within,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) < -2 AND CAST(price_diff_perc AS DOUBLE) >= -10 THEN 1 END) as loss_low,
+                        COUNT(CASE WHEN CAST(price_diff_perc AS DOUBLE) < -10 THEN 1 END) as loss_high,
+                        COUNT(*) as total
+                    FROM data_table
+                    WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'
+                `;
+                const distRes = await executeQuery<any>(distSql, localPath);
+                if (distRes.length > 0 && distRes[0].total > 0) {
+                    const r = distRes[0];
+                    const t = Number(r.total);
+                    distribution = {
+                        winMargin: { avg: Number(Number(r.avg_win || 0).toFixed(1)), median: Number(Number(r.med_win || 0).toFixed(1)) },
+                        lossMargin: { avg: Number(Number(r.avg_loss || 0).toFixed(1)), median: Number(Number(r.med_loss || 0).toFixed(1)) },
+                        segments: {
+                            winHigh: Math.round((Number(r.win_high) / t) * 100),
+                            winLow: Math.round((Number(r.win_low) / t) * 100),
+                            within: Math.round((Number(r.within) / t) * 100),
+                            lossLow: Math.round((Number(r.loss_low) / t) * 100),
+                            lossHigh: Math.round((Number(r.loss_high) / t) * 100),
+                        }
+                    };
+                }
+            } catch (e) {
+                logger.error({ err: e }, "Distribution error:");
+            }
+        }
+            
         return res.json({
             id: chainName,
             name: chainName,
@@ -365,57 +531,11 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
                 primaryOpportunity: "Significant growth potential in Dubai market through targeted weekend promotions.",
             },
             trendData: {
-                winRate: [
-                    { date: "Apr 6", current: 46, market: 50 },
-                    { date: "Apr 13", current: 48, market: 49 },
-                    { date: "Apr 20", current: 44, market: 48 },
-                    { date: "Apr 27", current: 47, market: 50 },
-                    { date: "May 4", current: 43, market: 49 },
-                    { date: "May 11", current: 41, market: 47 },
-                    { date: "May 18", current: 40, market: 47 },
-                    { date: "May 25", current: 42, market: 46 },
-                    { date: "Jun 1", current: 39, market: 45 },
-                    { date: "Jun 8", current: 41, market: 45 },
-                    { date: "Jun 15", current: 44, market: 46 },
-                    { date: "Jun 22", current: 43, market: 45 },
-                    { date: "Jun 29", current: 38, market: 44 },
-                ],
-                priceGap: [
-                    { date: "Apr 6", current: 8.2, market: 3.1 },
-                    { date: "Apr 13", current: 9.1, market: 3.4 },
-                    { date: "Apr 20", current: 7.8, market: 3.2 },
-                    { date: "Apr 27", current: 8.5, market: 3.5 },
-                    { date: "May 4", current: 7.2, market: 3.0 },
-                    { date: "May 11", current: 6.9, market: 2.8 },
-                    { date: "May 18", current: 7.5, market: 3.1 },
-                    { date: "May 25", current: 8.1, market: 3.3 },
-                    { date: "Jun 1", current: 6.3, market: 2.5 },
-                    { date: "Jun 8", current: 6.8, market: 2.7 },
-                    { date: "Jun 15", current: 7.6, market: 2.9 },
-                    { date: "Jun 22", current: 7.4, market: 2.8 },
-                    { date: "Jun 29", current: 6.1, market: 2.6 },
-                ],
-                apw: [
-                    { date: "Apr 6", d10: 50, d15: 45, d30: 42, d45: 60, d60: 25, d90: 52 },
-                    { date: "Apr 13", d10: 48, d15: 46, d30: 40, d45: 55, d60: 22, d90: 48 },
-                    { date: "Apr 20", d10: 45, d15: 42, d30: 38, d45: 52, d60: 20, d90: 45 },
-                    { date: "Apr 27", d10: 49, d15: 47, d30: 41, d45: 58, d60: 24, d90: 50 },
-                    { date: "May 4", d10: 42, d15: 40, d30: 35, d45: 50, d60: 18, d90: 42 },
-                    { date: "May 11", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
-                    { date: "May 18", d10: 44, d15: 42, d30: 37, d45: 52, d60: 20, d90: 44 },
-                    { date: "May 25", d10: 46, d15: 45, d30: 39, d45: 55, d60: 22, d90: 47 },
-                    { date: "Jun 1", d10: 41, d15: 39, d30: 34, d45: 49, d60: 18, d90: 41 },
-                    { date: "Jun 8", d10: 43, d15: 41, d30: 36, d45: 51, d60: 19, d90: 43 },
-                    { date: "Jun 15", d10: 48, d15: 46, d30: 40, d45: 56, d60: 23, d90: 49 },
-                    { date: "Jun 22", d10: 45, d15: 43, d30: 38, d45: 54, d60: 21, d90: 46 },
-                    { date: "Jun 29", d10: 40, d15: 38, d30: 33, d45: 48, d60: 17, d90: 40 },
-                ]
+                winRate: trendWinRate,
+                priceGap: trendPriceGap,
+                apw: trendApw
             },
-            distribution: {
-                winMargin: { avg: 6.2, median: 4.1 },
-                lossMargin: { avg: -8.7, median: -6.3 },
-                segments: { winHigh: 17, winLow: 28, within: 22, lossLow: 20, lossHigh: 13 }
-            },
+            distribution: distribution,
             insights: [
                 "Overall chain volume grew by 8.4% month-over-month",
                 "Pricing strategy in APAC region showing strong positive returns",
