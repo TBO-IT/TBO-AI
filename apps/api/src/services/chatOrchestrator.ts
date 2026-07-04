@@ -87,7 +87,7 @@ export class ChatOrchestrator {
 
             setStage("Loading dataset...");
             // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
-            const dataset = await getDataset(datasetId, userId);
+            const dataset = await getDataset(datasetId);
             if (!dataset || !dataset.storagePath) {
                 throw new Error("Dataset not found or does not have a storage path.");
             }
@@ -157,6 +157,14 @@ export class ChatOrchestrator {
 
             // Normalise business semantics after merging entity filters
             parsedQuestion = normalizeBusinessSemantics(parsedQuestion);
+
+            // ── GLOBAL DATA CLEANING ───────────────────────────────────────────
+            // If the dataset contains fuzzy_score, filter out rows < 90 automatically.
+            const hasFuzzyScore = schema.some(c => c.column_name.toLowerCase() === "fuzzy_score");
+            if (hasFuzzyScore) {
+                parsedQuestion.filters.push({ dimension: "fuzzy_score", operator: ">=", value: 90 });
+                console.log("[DATA_CLEANING] Injected global fuzzy_score >= 90 filter");
+            }
 
             // Resolve or discard unclassified proper noun (_entity) filters
             parsedQuestion.filters = resolveOrDiscardEntities(

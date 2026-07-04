@@ -20,7 +20,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
 
         let dataset: any = null;
         if (datasetId !== "demo") {
-            dataset = await getDataset(datasetId as string, req.user.id);
+            dataset = await getDataset(datasetId as string);
             if (!dataset) {
                 return res.status(404).json({ error: "Dataset not found" });
             }
@@ -121,7 +121,7 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
 
         let dataset: any = null;
         if (datasetId !== "demo") {
-            dataset = await getDataset(datasetId as string, req.user.id);
+            dataset = await getDataset(datasetId as string);
             if (!dataset) {
                 return res.status(404).json({ error: "Dataset not found" });
             }
@@ -223,7 +223,7 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
 
         let dataset: any = null;
         if (datasetId !== "demo") {
-            dataset = await getDataset(datasetId as string, req.user.id);
+            dataset = await getDataset(datasetId as string);
             if (!dataset) {
                 return res.status(404).json({ error: "Dataset not found" });
             }

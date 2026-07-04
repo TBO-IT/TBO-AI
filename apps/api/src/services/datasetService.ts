@@ -64,13 +64,11 @@ export async function markFailed(
 }
 
 export async function getDataset(
-    datasetId: string,
-    userId : string
+    datasetId: string
 ) {
     return prisma.dataset.findFirst({
         where: {
-            id: datasetId,
-            userId
+            id: datasetId
         },
         
     });

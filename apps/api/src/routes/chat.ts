@@ -25,7 +25,7 @@ router.post(
             });
         }
 
-        const dataset = await getDataset(datasetId, req.user!.id);
+        const dataset = await getDataset(datasetId);
         if (!dataset) {
             throw new NotFoundError("Dataset not found.");
         }

@@ -60,11 +60,7 @@ router.post(
             }
 
             // This route is a developer prompt test; dataset ownership still requires userId.
-            const dataset =
-                await getDataset(
-                    datasetId,
-                    (req as any).user?.id
-                );
+            const dataset = await getDataset(datasetId);
 
             if (!dataset) {
 

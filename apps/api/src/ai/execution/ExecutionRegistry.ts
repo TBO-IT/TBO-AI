@@ -100,6 +100,11 @@ export const DIMENSION_PHYSICAL_MAPPINGS: Record<string, PhysicalDimensionMappin
         canonicalKey: "thirdparty",
         physicalColumns: ["thirdparty", "third_party", "competitor"],
         filterType: "exact"
+    },
+    fuzzy_score: {
+        canonicalKey: "fuzzy_score",
+        physicalColumns: ["fuzzy_score", "Fuzzy Score", "fuzzy score"],
+        filterType: "exact"
     }
 };
 

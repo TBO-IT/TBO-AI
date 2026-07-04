@@ -21,7 +21,7 @@ router.get(
     currentUser,
     async (req: Request & { user?: { id: string } }, res) => {
         const datasetId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-        const dataset = await getDataset(datasetId , req.user!.id);
+        const dataset = await getDataset(datasetId);
 
     if (!dataset) {
     throw new NotFoundError(
