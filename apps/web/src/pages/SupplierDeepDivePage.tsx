@@ -85,20 +85,7 @@ export default function SupplierDeepDivePage() {
                 </div>
             </div>
 
-            {/* Opportunity Banner */}
-            {data.opportunityAssessment && (
-                <div className="mb-8 p-5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl flex items-start gap-3">
-                    <Lightbulb className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5" />
-                    <div>
-                        <h4 className="text-[13px] font-bold text-emerald-900 dark:text-emerald-300 mb-1">
-                            Executive Opportunity Alert: {data.opportunityAssessment.level}
-                        </h4>
-                        <p className="text-sm text-emerald-800 dark:text-emerald-200/80 leading-relaxed">
-                            {data.opportunityAssessment.primaryOpportunity}
-                        </p>
-                    </div>
-                </div>
-            )}
+
 
             {/* Key Metrics */}
             <div className="mb-10">

@@ -85,20 +85,7 @@ export default function HotelDeepDivePage() {
                 </div>
             </div>
 
-            {/* Risk Banner */}
-            {data.riskAssessment && (
-                <div className="mb-8 p-5 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 rounded-xl flex items-start gap-3">
-                    <ShieldAlert className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
-                    <div>
-                        <h4 className="text-[13px] font-bold text-orange-900 dark:text-orange-300 mb-1">
-                            Executive Risk Alert: {data.riskAssessment.level}
-                        </h4>
-                        <p className="text-sm text-orange-800 dark:text-orange-200/80 leading-relaxed">
-                            {data.riskAssessment.primaryRisk}
-                        </p>
-                    </div>
-                </div>
-            )}
+
 
             {/* Key Metrics */}
             <div className="mb-10">
