@@ -1,6 +1,6 @@
 import React from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Info, TrendingUp, AlertCircle, TrendingDown } from "lucide-react";
+import { Info } from "lucide-react";
 import type { DeepDiveData } from "../../api/deepDiveApi";
 
 interface DeepDiveDashboardProps {
