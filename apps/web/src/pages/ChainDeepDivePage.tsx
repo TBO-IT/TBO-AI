@@ -4,7 +4,7 @@ import { ChevronLeft, AlertTriangle, Building, Activity, LineChart, Target, Link
 import PageShell from "../components/layout/PageShell";
 import MetricCard from "../components/shared/MetricCard";
 import DeepDiveDashboard from "../components/shared/DeepDiveDashboard";
-import { getChainDeepDive, type DeepDiveData } from "../api/deepDiveApi";
+import { getChainDeepDive } from "../api/deepDiveApi";
 
 import { ProgressiveLoader } from "../components/shared/ProgressiveLoader";
 
@@ -142,7 +142,7 @@ export default function ChainDeepDivePage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {data.topProperties.map((property, idx) => (
+                                        {data.topProperties.map((property: any, idx: number) => (
                                             <tr key={idx} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
                                                 <td className="py-3 px-2 font-medium text-white flex items-center gap-2">
                                                     <Building className="h-3.5 w-3.5 text-slate-400" />

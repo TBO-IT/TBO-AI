@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import PageShell from "../components/layout/PageShell";
-import { Users, Shield, ShieldAlert, Check, Loader2 } from "lucide-react";
+import { Shield, ShieldAlert, Loader2 } from "lucide-react";
 import { api } from "../api/client";
 
 interface AdminUser {
@@ -37,7 +37,7 @@ export default function AdminDashboardPage() {
     const handleRoleChange = async (userId: string, newRole: string) => {
         setUpdating(userId);
         try {
-            const res = await api.post(`/admin/users/${userId}/role`, { role: newRole });
+            await api.post(`/admin/users/${userId}/role`, { role: newRole });
             setUsers(users.map(u => u.id === userId ? { ...u, role: newRole as any } : u));
         } catch (err: any) {
             alert(err.response?.data?.error || err.message || "Failed to update role");

@@ -4,7 +4,7 @@ import { Building, ChevronLeft, AlertTriangle, Building2, Activity, LineChart, T
 import PageShell from "../components/layout/PageShell";
 import MetricCard from "../components/shared/MetricCard";
 import DeepDiveDashboard from "../components/shared/DeepDiveDashboard";
-import { getSupplierDeepDive, type DeepDiveData } from "../api/deepDiveApi";
+import { getSupplierDeepDive } from "../api/deepDiveApi";
 
 import { ProgressiveLoader } from "../components/shared/ProgressiveLoader";
 
@@ -142,7 +142,7 @@ export default function SupplierDeepDivePage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {data.topHotels.map((hotel, idx) => (
+                                        {data.topHotels.map((hotel: any, idx: number) => (
                                             <tr key={idx} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
                                                 <td className="py-3 px-2 font-medium text-white flex items-center gap-2">
                                                     <Building2 className="h-3.5 w-3.5 text-slate-400" />
