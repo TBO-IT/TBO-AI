@@ -12,6 +12,26 @@ db.all(`SELECT * FROM read_csv_auto('${file}') LIMIT 1`, (err, res) => {
     console.log("Found dateCol:", dateCol);
     
     if (dateCol) {
+        const hasApwNew = schema.includes('apw_bucket_new');
+        
+        const apwSelect = hasApwNew 
+            ? `
+                AVG(CASE WHEN apw_bucket_new = '< 10 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d10,
+                AVG(CASE WHEN apw_bucket_new = '10-15 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d15,
+                AVG(CASE WHEN apw_bucket_new = '15-30 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d30,
+                AVG(CASE WHEN apw_bucket_new = '31-45 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d45,
+                AVG(CASE WHEN apw_bucket_new = '46-60 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d60,
+                AVG(CASE WHEN (apw_bucket_new = '60+ days' OR apw_bucket_new = '> 60 days') AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d90
+            `
+            : `
+                AVG(CASE WHEN CAST(apw AS INTEGER) < 10 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d10,
+                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 10 AND 15 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d15,
+                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 16 AND 30 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d30,
+                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 31 AND 45 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d45,
+                AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 46 AND 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d60,
+                AVG(CASE WHEN CAST(apw AS INTEGER) > 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d90
+            `;
+
         const query = `
             WITH data_table AS (
                 SELECT * FROM read_csv_auto('${file}')
@@ -21,7 +41,7 @@ db.all(`SELECT * FROM read_csv_auto('${file}') LIMIT 1`, (err, res) => {
                     date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE)) as week,
                     AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
                     AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
-                    AVG(CASE WHEN CAST(apw AS INTEGER) < 10 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d10
+                    ${apwSelect}
                 FROM data_table
                 GROUP BY week
                 ORDER BY week ASC

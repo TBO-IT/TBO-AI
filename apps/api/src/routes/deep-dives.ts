@@ -109,6 +109,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
                 const schema = await executeQuery<{ column_name: string }>(`DESCRIBE data_table`, localPath);
                 const dateCol = schema.find(c => ['search_date', 'scraped_date', 'date'].includes(c.column_name.toLowerCase()))?.column_name;
                 const hasApwNew = schema.some(c => c.column_name.toLowerCase() === 'apw_bucket_new');
+                const hasApwRaw = schema.some(c => c.column_name.toLowerCase() === 'apw');
                 
                 if (dateCol) {
                     const apwSelect = hasApwNew 
@@ -120,19 +121,21 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
                             AVG(CASE WHEN apw_bucket_new = '46-60 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d60,
                             AVG(CASE WHEN (apw_bucket_new = '60+ days' OR apw_bucket_new = '> 60 days') AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d90
                         `
-                        : `
+                        : (hasApwRaw ? `
                             AVG(CASE WHEN CAST(apw AS INTEGER) < 10 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d10,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 10 AND 15 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d15,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 16 AND 30 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d30,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 31 AND 45 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d45,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 46 AND 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d60,
                             AVG(CASE WHEN CAST(apw AS INTEGER) > 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d90
-                        `;
+                        ` : `
+                            0 as w_d10, 0 as w_d15, 0 as w_d30, 0 as w_d45, 0 as w_d60, 0 as w_d90
+                        `);
                         
                     const timeSql = `
                         WITH weekly AS (
                             SELECT 
-                                date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE)) as week,
+                                date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE, try_strptime("${dateCol}", '%m-%d-%Y')::DATE, try_strptime("${dateCol}", '%d-%m-%Y')::DATE)) as week,
                                 AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
                                 AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
                                 ${apwSelect}
@@ -331,6 +334,7 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
                 const schema = await executeQuery<{ column_name: string }>(`DESCRIBE data_table`, localPath);
                 const dateCol = schema.find(c => ['search_date', 'scraped_date', 'date'].includes(c.column_name.toLowerCase()))?.column_name;
                 const hasApwNew = schema.some(c => c.column_name.toLowerCase() === 'apw_bucket_new');
+                const hasApwRaw = schema.some(c => c.column_name.toLowerCase() === 'apw');
                 
                 if (dateCol) {
                     const apwSelect = hasApwNew 
@@ -342,19 +346,21 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
                             AVG(CASE WHEN apw_bucket_new = '46-60 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d60,
                             AVG(CASE WHEN (apw_bucket_new = '60+ days' OR apw_bucket_new = '> 60 days') AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d90
                         `
-                        : `
+                        : (hasApwRaw ? `
                             AVG(CASE WHEN CAST(apw AS INTEGER) < 10 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d10,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 10 AND 15 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d15,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 16 AND 30 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d30,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 31 AND 45 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d45,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 46 AND 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d60,
                             AVG(CASE WHEN CAST(apw AS INTEGER) > 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d90
-                        `;
+                        ` : `
+                            0 as w_d10, 0 as w_d15, 0 as w_d30, 0 as w_d45, 0 as w_d60, 0 as w_d90
+                        `);
                         
                     const timeSql = `
                         WITH weekly AS (
                             SELECT 
-                                date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE)) as week,
+                                date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE, try_strptime("${dateCol}", '%m-%d-%Y')::DATE, try_strptime("${dateCol}", '%d-%m-%Y')::DATE)) as week,
                                 AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
                                 AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
                                 ${apwSelect}
@@ -558,6 +564,7 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
                 const schema = await executeQuery<{ column_name: string }>(`DESCRIBE data_table`, localPath);
                 const dateCol = schema.find(c => ['search_date', 'scraped_date', 'date'].includes(c.column_name.toLowerCase()))?.column_name;
                 const hasApwNew = schema.some(c => c.column_name.toLowerCase() === 'apw_bucket_new');
+                const hasApwRaw = schema.some(c => c.column_name.toLowerCase() === 'apw');
                 
                 if (dateCol) {
                     const apwSelect = hasApwNew 
@@ -569,19 +576,21 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
                             AVG(CASE WHEN apw_bucket_new = '46-60 days' AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d60,
                             AVG(CASE WHEN (apw_bucket_new = '60+ days' OR apw_bucket_new = '> 60 days') AND "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as w_d90
                         `
-                        : `
+                        : (hasApwRaw ? `
                             AVG(CASE WHEN CAST(apw AS INTEGER) < 10 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d10,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 10 AND 15 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d15,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 16 AND 30 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d30,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 31 AND 45 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d45,
                             AVG(CASE WHEN CAST(apw AS INTEGER) BETWEEN 46 AND 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d60,
                             AVG(CASE WHEN CAST(apw AS INTEGER) > 60 THEN CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END END) * 100 as w_d90
-                        `;
+                        ` : `
+                            0 as w_d10, 0 as w_d15, 0 as w_d30, 0 as w_d45, 0 as w_d60, 0 as w_d90
+                        `);
                         
                     const timeSql = `
                         WITH weekly AS (
                             SELECT 
-                                date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE)) as week,
+                                date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE, try_strptime("${dateCol}", '%m-%d-%Y')::DATE, try_strptime("${dateCol}", '%d-%m-%Y')::DATE)) as week,
                                 AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
                                 AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
                                 ${apwSelect}
