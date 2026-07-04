@@ -293,7 +293,7 @@ export async function generateRecommendationText(
     prompt: string,
     systemPrompt: string
 ): Promise<GenerateTextResult> {
-    return generateText(prompt, systemPrompt, "SONNET", 1500, 0.2);
+    return generateText(prompt, systemPrompt, "SONNET", 4096, 0.2);
 }
 
 /**
@@ -304,7 +304,7 @@ export async function generateRecommendationTextStream(
     systemPrompt: string,
     onToken: (chunk: string) => void,
     abortSignal?: AbortSignal,
-    maxTokens: number = 1500,
+    maxTokens: number = 4096,
     temperature: number = 0.2
 ): Promise<GenerateTextResult> {
     validatePrompt(prompt);

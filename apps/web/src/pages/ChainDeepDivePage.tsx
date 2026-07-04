@@ -132,7 +132,7 @@ export default function ChainDeepDivePage() {
                             <h3 className="text-[13px] font-semibold tracking-wide uppercase text-slate-400 mb-6 flex items-center gap-2">
                                 <Target className="h-4 w-4" /> Top Properties (Distribution)
                             </h3>
-                            <div className="overflow-hidden">
+                            <div className="overflow-x-auto overflow-y-hidden">
                                 <table className="w-full text-left text-[13px]">
                                     <thead>
                                         <tr className="border-b border-slate-800/80 text-slate-400">
@@ -144,11 +144,13 @@ export default function ChainDeepDivePage() {
                                     <tbody>
                                         {data.topProperties.map((property: any, idx: number) => (
                                             <tr key={idx} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
-                                                <td className="py-3 px-2 font-medium text-white flex items-center gap-2">
-                                                    <Building className="h-3.5 w-3.5 text-slate-400" />
-                                                    {property.name}
+                                                <td className="py-3 px-2 font-medium text-white max-w-[150px]">
+                                                    <div className="flex items-center gap-2 truncate">
+                                                        <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                        <span className="truncate">{property.name}</span>
+                                                    </div>
                                                 </td>
-                                                <td className="py-3 px-2 text-slate-300">
+                                                <td className="py-3 px-2 text-slate-300 whitespace-nowrap">
                                                     <span className="font-medium">{property.winRate}%</span>
                                                 </td>
                                                 <td className="py-3 px-2 text-right">
