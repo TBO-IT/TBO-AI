@@ -18,7 +18,12 @@ export async function runDataAnalystAgent(
     parsedQuestion: QuestionAnalysis,
     semanticLayer: EnrichedSemanticLayer,
     metadata: DatasetMetadata,
-    tempPath: string
+    tempPath: string,
+    opts?: {
+        onToken?: (chunk: string) => void;
+        onStageChange?: (stage: string) => void;
+        abortSignal?: AbortSignal;
+    }
 ): Promise<AgentResult> {
     const schemaDetails = semanticLayer.allColumns.map(c => `  "${c.column_name}" (${c.column_type})`).join("\n");
 
@@ -87,6 +92,8 @@ Structure your final answer as a clear executive report with:
 - Bold headers for each sub-question answered
 - Key numbers highlighted
 - Actionable recommendations at the end
+
+CRITICAL: When you have gathered enough data and are ready to provide the final answer, output the full executive report as regular text and DO NOT call any tools. Only call the execute_sql tool when you need to run a query.
 `;
 
     const tools = [
@@ -100,36 +107,36 @@ Structure your final answer as a clear executive report with:
                 },
                 required: ["query"]
             }
-        },
-        {
-            name: "submit_answer",
-            description: "Submit the final answer after you have gathered enough data or if the question is unanswerable.",
-            input_schema: {
-                type: "object",
-                properties: {
-                    narrative: { type: "string", description: "The detailed, business-focused executive summary based on the data." },
-                    final_sql: { type: "string", description: "The single most important SQL query that backs up your narrative (or the final one you ran). Leave empty if no query was needed." },
-                    explanation: { type: "string", description: "A brief one-sentence explanation of what the final SQL query does." }
-                },
-                required: ["narrative", "final_sql", "explanation"]
-            }
         }
     ];
 
     const messages: any[] = [{ role: "user", content: question }];
     const maxIterations = 8;
 
+    let lastSql = "";
+    let lastExplanation = "Agent executed queries to answer the question.";
+    let finalNarrative = "";
+
     for (let i = 0; i < maxIterations; i++) {
         console.log(`[AGENT] Iteration ${i + 1}/${maxIterations}`);
+        opts?.onStageChange?.(`Agent analyzing data (Step ${i + 1}/${maxIterations})...`);
         
-        const response = await getAnthropicClient().messages.create({
+        const stream = await getAnthropicClient().messages.stream({
             model: MODELS.SONNET || "claude-3-5-sonnet-latest",
             max_tokens: 3000,
             temperature: 0.1,
             system: systemPrompt,
             messages,
             tools: tools as any
-        });
+        }, { signal: opts?.abortSignal });
+
+        for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                opts?.onToken?.(event.delta.text);
+            }
+        }
+
+        const response = await stream.finalMessage();
 
         if (response.usage) {
             await recordUsage(MODELS.SONNET || "claude-3-5-sonnet-latest", "NARRATIVE_GENERATION", response.usage.input_tokens, response.usage.output_tokens);
@@ -141,32 +148,25 @@ Structure your final answer as a clear executive report with:
         if (toolCalls.length === 0) {
             return {
                 narrative: response.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n"),
-                sql: "",
-                explanation: "Agent finished without submitting an explicit answer."
+                sql: lastSql,
+                explanation: lastExplanation
             };
         }
 
-        let submittedResult: AgentResult | null = null;
+        // Add visual separator for intermediate steps in the UI
+        opts?.onToken?.("\n\n---\n\n");
+
         const toolResponses = [];
 
         for (const toolBlock of toolCalls) {
             const toolName = (toolBlock as any).name;
             const input = (toolBlock as any).input;
 
-            if (toolName === "submit_answer") {
-                submittedResult = {
-                    narrative: input.narrative,
-                    sql: input.final_sql,
-                    explanation: input.explanation
-                };
-                toolResponses.push({
-                    type: "tool_result",
-                    tool_use_id: (toolBlock as any).id,
-                    content: "Answer submitted successfully."
-                });
-            } else if (toolName === "execute_sql") {
+            if (toolName === "execute_sql") {
                 try {
                     console.log(`[AGENT] Executing SQL:\n${input.query}`);
+                    lastSql = input.query;
+                    lastExplanation = `Agent executed SQL in iteration ${i + 1}`;
                     const rows = await executeAgentSql(input.query, tempPath);
                     const jsonString = JSON.stringify(rows, null, 2);
                     const truncated = jsonString.length > 8000 ? jsonString.substring(0, 8000) + "\n...[TRUNCATED]" : jsonString;
@@ -189,10 +189,6 @@ Structure your final answer as a clear executive report with:
         }
 
         messages.push({ role: "user", content: toolResponses });
-
-        if (submittedResult) {
-            return submittedResult;
-        }
     }
 
     return {

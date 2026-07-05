@@ -512,7 +512,8 @@ export class ChatOrchestrator {
                             parsedQuestion,
                             semanticLayer,
                             metadata,
-                            tempPath
+                            tempPath,
+                            opts
                         );
                         
                         sql = agentResult.sql;
