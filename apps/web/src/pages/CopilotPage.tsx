@@ -274,6 +274,9 @@ export default function CopilotPage() {
             timestamp: new Date().toISOString(),
         });
 
+        let rawContent = "";
+        let currentSections: Record<string, string> | undefined = undefined;
+
         try {
             const token = await getToken();
             const response = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
@@ -302,7 +305,6 @@ export default function CopilotPage() {
             const decoder = new TextDecoder("utf-8");
             let done = false;
             let buffer = "";
-            let rawContent = "";
 
             while (!done) {
                 const { value, done: readerDone } = await reader.read();
@@ -335,8 +337,8 @@ export default function CopilotPage() {
                             }
                         } else if (eventType === "token") {
                             rawContent += data.text;
-                            const sections = parseExecutiveResponse(rawContent);
-                            updateMessageContent(assistantId, rawContent, sections || undefined, undefined);
+                            currentSections = parseExecutiveResponse(rawContent) || undefined;
+                            updateMessageContent(assistantId, rawContent, currentSections, undefined);
                         } else if (eventType === "complete") {
                             let finalAns = rawContent;
                             if (data.response?.answer) finalAns = data.response.answer;
@@ -347,8 +349,8 @@ export default function CopilotPage() {
                             else finalAns = data.response ? JSON.stringify(data.response) : finalAns;
 
                             rawContent = finalAns;
-                            const sections = parseExecutiveResponse(rawContent);
-                            updateMessageContent(assistantId, rawContent, sections || undefined, undefined);
+                            currentSections = parseExecutiveResponse(rawContent) || undefined;
+                            updateMessageContent(assistantId, rawContent, currentSections, undefined);
                             break;
                         } else if (eventType === "error") {
                             throw new Error(data.message || "Streaming error");
@@ -359,6 +361,7 @@ export default function CopilotPage() {
         } catch (err: any) {
             if (err.name === "AbortError") {
                 console.log("Fetch aborted");
+                updateMessageContent(assistantId, rawContent || "*(Stopped by user)*", currentSections, undefined);
                 return;
             }
             console.error("[PIPELINE_FATAL]", err);
