@@ -11,6 +11,9 @@ const router = Router();
 function sseSend(res: any, event: string, data: any) {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (typeof res.flush === "function") {
+        res.flush();
+    }
 }
 
 router.post(

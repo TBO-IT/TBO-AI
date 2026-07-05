@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Sparkles, Cpu, Loader2, Database, ChevronDown, BookmarkPlus, Copy, Check, Trash2 } from "lucide-react";
+import { Send, Sparkles, Cpu, Loader2, Database, ChevronDown, BookmarkPlus, Copy, Check, Trash2, Square } from "lucide-react";
 import { useChatHistory } from "../context/ChatHistoryContext";
 import type { ChatMessage } from "../context/ChatHistoryContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -387,6 +387,15 @@ export default function CopilotPage() {
         }
     };
 
+    const handleStop = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setIsThinking(false);
+        setLoadingStage("Analyzing your data…");
+    };
+
     const handleCopy = (id: string, text: string) => {
         navigator.clipboard.writeText(text);
         setCopiedId(id);
@@ -603,14 +612,24 @@ export default function CopilotPage() {
 
             {/* Bottom input */}
             <div className="border-t border-slate-200 dark:border-slate-800/60 bg-white/80 dark:bg-[#0c1021]/80 backdrop-blur-md px-5 py-4">
-                <div className="max-w-3xl mx-auto">
-                    <InputBar
-                        value={input}
-                        onChange={setInput}
-                        onSend={handleSend}
-                        disabled={!selectedDataset || isThinking}
-                        placeholder={selectedDataset ? "Follow-up question…" : "Select a dataset…"}
-                    />
+                <div className="max-w-3xl mx-auto flex flex-col items-center">
+                    {isThinking && (
+                        <button
+                            onClick={handleStop}
+                            className="mb-3 flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-medium border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors shadow-sm cursor-pointer"
+                        >
+                            <Square className="h-3 w-3 fill-slate-400 text-slate-400" /> Stop generating
+                        </button>
+                    )}
+                    <div className="w-full">
+                        <InputBar
+                            value={input}
+                            onChange={setInput}
+                            onSend={handleSend}
+                            disabled={!selectedDataset || isThinking}
+                            placeholder={selectedDataset ? "Follow-up question…" : "Select a dataset…"}
+                        />
+                    </div>
                 </div>
             </div>
         </div>

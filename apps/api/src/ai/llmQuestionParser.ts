@@ -101,7 +101,8 @@ RULES:
 5. For multi-part questions ("show me worst hotels AND the APW to focus on AND the worst competitor"), set intent to the primary analytical type (RANKING or LIST) and set requiresNarrative=true. The "dimensions" array should list all dimensions the user wants analyzed: e.g. ["hotel", "apw", "thirdparty"].
 6. "requiresNarrative" = true if the answer needs explanation. "requiresRecommendation" = true if the user asks 'what should I do', 'how to improve', or 'what action to take'.
 7. Be robust against typos. Map "marriot" → Marriott, "dubai" → Dubai, "31 45" → "31-45 days", etc.
-8. Output ONLY valid JSON. No markdown ticks, no preamble.`;
+8. Output ONLY valid JSON. No markdown ticks, no preamble.
+9. If a question asks which entity (e.g. competitor, hotel, destination) is "hurting us the most", "driving the decline", or having the most negative impact, set requiresNarrative=true AND requiresRecommendation=true so that a full analytical report is generated.`;
 
     const userPrompt = `Parse this user question into the JSON schema: "${question}"`;
 

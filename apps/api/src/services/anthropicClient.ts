@@ -241,7 +241,7 @@ export async function generateNarrativeTextStream(
 
     // NOTE: Anthropic SDK streaming yields events; we append delta text
     // and forward chunks to caller.
-    const response = await client.messages.stream(
+    const responseStream = client.messages.stream(
         {
             model,
             max_tokens: maxTokens,
@@ -252,16 +252,14 @@ export async function generateNarrativeTextStream(
         { signal: abortSignal }
     );
 
-    for await (const event of response) {
-        // Expected event shapes include delta with text (SDK version dependent).
-        const anyEvent: any = event;
-
-        const deltaText: unknown = anyEvent?.delta?.text;
-        if (typeof deltaText === "string" && deltaText.length > 0) {
-            accumulated += deltaText;
-            onToken(deltaText);
+    responseStream.on('text', (text) => {
+        if (text) {
+            accumulated += text;
+            onToken(text);
         }
-    }
+    });
+
+    await responseStream.finalMessage();
 
     const latencyMs = Math.round(performance.now() - start);
 
@@ -317,7 +315,7 @@ export async function generateRecommendationTextStream(
     const client = getClient();
     let accumulated = "";
 
-    const response = await client.messages.stream(
+    const responseStream = client.messages.stream(
         {
             model,
             max_tokens: maxTokens,
@@ -328,14 +326,14 @@ export async function generateRecommendationTextStream(
         { signal: abortSignal }
     );
 
-    for await (const event of response) {
-        const anyEvent: any = event;
-        const deltaText: unknown = anyEvent?.delta?.text;
-        if (typeof deltaText === "string" && deltaText.length > 0) {
-            accumulated += deltaText;
-            onToken(deltaText);
+    responseStream.on('text', (text) => {
+        if (text) {
+            accumulated += text;
+            onToken(text);
         }
-    }
+    });
+
+    await responseStream.finalMessage();
 
     const latencyMs = Math.round(performance.now() - start);
 

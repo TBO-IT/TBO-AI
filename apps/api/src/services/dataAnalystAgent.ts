@@ -120,8 +120,7 @@ CRITICAL: When you have gathered enough data and are ready to provide the final 
     for (let i = 0; i < maxIterations; i++) {
         console.log(`[AGENT] Iteration ${i + 1}/${maxIterations}`);
         opts?.onStageChange?.(`Agent analyzing data (Step ${i + 1}/${maxIterations})...`);
-        
-        const stream = await getAnthropicClient().messages.stream({
+        const stream = getAnthropicClient().messages.stream({
             model: MODELS.SONNET || "claude-3-5-sonnet-latest",
             max_tokens: 3000,
             temperature: 0.1,
@@ -130,11 +129,9 @@ CRITICAL: When you have gathered enough data and are ready to provide the final 
             tools: tools as any
         }, { signal: opts?.abortSignal });
 
-        for await (const event of stream) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                opts?.onToken?.(event.delta.text);
-            }
-        }
+        stream.on('text', (text) => {
+            opts?.onToken?.(text);
+        });
 
         const response = await stream.finalMessage();
 
