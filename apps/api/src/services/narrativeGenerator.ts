@@ -111,8 +111,8 @@ export function buildNarrativePrompt(pack: ClaudeInputPack): string {
         .map(a => `  • [${a.priority}] ${a.action}: ${a.rationale}`)
         .join("\n");
 
-    const primaryTargetText = ep.primaryTarget
-        ? `${ep.primaryTarget.name} (${ep.primaryTarget.entityType}): ${ep.primaryTarget.reason}`
+    const primaryTargetText = ep.actionabilityTargets && ep.actionabilityTargets.length > 0
+        ? ep.actionabilityTargets.slice(0, 5).map(t => `${t.name} (${t.entityType}): ${t.reason}`).join("\n  • ")
         : "None identified.";
 
     const supportingTargetsText = ep.drilldowns.slice(0, 3)
@@ -143,7 +143,7 @@ EXECUTIVE SUMMARY (legacy text): ${ep.executiveSummary}
 KEY TAKEAWAY: ${ep.keyTakeaway}
 LEADERSHIP MESSAGE (legacy): ${ep.leadershipMessage}
 
-PRIMARY TARGET:
+TOP ACTIONABLE TARGETS:
   • ${primaryTargetText}
 
 TOP RISKS:
@@ -198,14 +198,11 @@ STRUCTURE (EXACT):
 | Volume | [volume share in percent] |
 | Recommended Action | [short directive] |
 
-## Primary Target
-| Target | Value |
-|---|---|
-| Metric | ${pack.metricName} |
-| Target Name | [primary target name] |
-| Business Impact | [business impact text] |
-| Volume Share | [volume share] |
-| Recommended Direction | [recover / de-risk / protect / scale text] |
+## Top Actionable Targets
+| Target Name | Type | Business Impact | Recommended Direction |
+|---|---|---|---|
+| [target 1] | [type] | [impact] | [direction] |
+| [target 2] | [type] | [impact] | [direction] |
 
 ## Recommended Actions
 | Priority | Action | Why | Expected Outcome |
@@ -355,13 +352,15 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
         ["Recommended Action", recommendedAction]
     ];
 
-    const primaryTargetTable = [
-        ["Metric", pack.metricName],
-        ["Target Name", primary?.name ?? "None identified"],
-        ["Business Impact", primary?.reason ?? ep.keyTakeaway],
-        ["Volume Share", primary?.volumeShare != null ? `${(primary.volumeShare * 100).toFixed(1)}%` : "N/A"],
-        ["Recommended Direction", primary?.polarity === "POSITIVE" ? "recover" : primary?.polarity === "RISK" ? "de-risk" : "scale"]
-    ];
+    const topTargetsRows = (ep.actionabilityTargets ?? []).slice(0, 5);
+    const topTargetsTable = topTargetsRows.length
+        ? topTargetsRows.map((t: any) => [
+            t.name ?? "Unknown",
+            t.entityType ?? "Unknown",
+            t.reason ?? ep.keyTakeaway,
+            t.polarity === "POSITIVE" ? "recover" : t.polarity === "RISK" ? "de-risk" : "scale"
+        ])
+        : [["None identified", "N/A", "N/A", "N/A"]];
 
     const recRows = (ep.topActions ?? []).slice(0, 3);
     const recActionsTable = recRows.length
@@ -398,10 +397,10 @@ export function buildDeterministicNarrative(pack: ClaudeInputPack): NarrativeRes
         "| ------------------ | ------------------------------- |",
         ...decisionTable.map(([k, v]) => `| ${k} | ${v} |`),
         "",
-        "## Primary Target",
-        "| Target | Value |",
-        "|---|---|",
-        ...primaryTargetTable.map(([k, v]) => `| ${k} | ${v} |`),
+        "## Top Actionable Targets",
+        "| Target Name | Type | Business Impact | Recommended Direction |",
+        "|---|---|---|---|",
+        ...topTargetsTable.map(([t, type, i, d]) => `| ${t} | ${type} | ${i} | ${d} |`),
         "",
         "## Recommended Actions",
         "| Priority | Action | Why | Expected Outcome |",

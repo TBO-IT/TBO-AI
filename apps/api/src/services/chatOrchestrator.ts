@@ -728,19 +728,33 @@ export class ChatOrchestrator {
                 const { executeEntityDrilldown } = await import("./insights/entityDrilldownEngine.js");
                 const { generateAttributedRecommendations } = await import("./insights/recommendationAttributionEngine.js");
 
-                const drilldowns = await executeEntityDrilldown(
-                    rootCausePack.primaryTarget,
-                    parsedQuestion,
-                    semanticLayer,
-                    tempPath,
-                    undefined,
-                    competitorContext ?? undefined
-                );
-                rootCausePack.recommendations = generateAttributedRecommendations(
-                    rootCausePack.primaryTarget,
-                    drilldowns,
-                    competitorContext || undefined
-                );
+                const topTargets = (rootCausePack.actionabilityTargets || []).slice(0, 5);
+                const allDrilldowns = [];
+                const allRecs = [];
+
+                if (topTargets.length > 0) {
+                    for (const target of topTargets) {
+                        const drilldowns = await executeEntityDrilldown(
+                            target,
+                            parsedQuestion,
+                            semanticLayer,
+                            tempPath,
+                            undefined,
+                            competitorContext ?? undefined
+                        );
+                        allDrilldowns.push(...drilldowns);
+                        
+                        const recs = generateAttributedRecommendations(
+                            target,
+                            drilldowns,
+                            competitorContext || undefined
+                        );
+                        allRecs.push(...recs);
+                    }
+                }
+
+                rootCausePack.drilldowns = allDrilldowns;
+                rootCausePack.recommendations = allRecs;
 
                 executivePack = buildExecutivePack(rootCausePack, competitorContext || undefined);
                 console.log("[EXECUTIVE_PACK]", JSON.stringify(executivePack, null, 2));

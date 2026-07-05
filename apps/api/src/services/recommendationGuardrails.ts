@@ -1,6 +1,6 @@
 import { ExecutivePack } from "./insights/executivePackBuilder.js";
 
-const MIN_VOLUME_SHARE = 1;
+const MIN_VOLUME_SHARE = 0;
 const MIN_CONFIDENCE_SCORE = 0;
 
 export interface RecommendationGuardrailResult {
