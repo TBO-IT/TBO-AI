@@ -1,3 +1,3 @@
 setup:
-  project: tbo-project
-  config: dev
+  project: tbo-backend
+  config: prd
