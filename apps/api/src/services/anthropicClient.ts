@@ -291,7 +291,7 @@ export async function generateRecommendationText(
     prompt: string,
     systemPrompt: string
 ): Promise<GenerateTextResult> {
-    return generateText(prompt, systemPrompt, "SONNET", 4096, 0.2);
+    return generateText(prompt, systemPrompt, "HAIKU", 4096, 0.2);
 }
 
 /**
@@ -307,10 +307,10 @@ export async function generateRecommendationTextStream(
 ): Promise<GenerateTextResult> {
     validatePrompt(prompt);
 
-    const model = getModel("SONNET");
+    const model = getModel("HAIKU");
     const start = performance.now();
 
-    logger.info({ tier: "SONNET", model, maxTokens, promptChars: prompt.length }, "Claude input (stream)");
+    logger.info({ tier: "HAIKU", model, maxTokens, promptChars: prompt.length }, "Claude input (stream)");
 
     const client = getClient();
     let accumulated = "";

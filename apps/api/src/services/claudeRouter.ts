@@ -44,15 +44,14 @@ const HAIKU_OPS = new Set<ClaudeOperation>([
     "EXECUTIVE_SUMMARY",
     "NARRATIVE_GENERATION",
     "EXPLAIN_RESULTS",
-    "TREND_EXPLANATION"
-]);
-
-const SONNET_OPS = new Set<ClaudeOperation>([
+    "TREND_EXPLANATION",
     "RECOMMENDATIONS",
     "STRATEGIC_ANALYSIS",
     "OPPORTUNITY_DISCOVERY",
     "RISK_ANALYSIS"
 ]);
+
+const SONNET_OPS = new Set<ClaudeOperation>([]);
 
 const TOKEN_BUDGETS: Record<ClaudeOperation, number> = {
     EXECUTIVE_SUMMARY:      800,

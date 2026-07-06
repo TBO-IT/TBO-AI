@@ -106,7 +106,7 @@ RULES:
 
     const userPrompt = `Parse this user question into the JSON schema: "${question}"`;
 
-    const result = await generateText(userPrompt, systemPrompt, "HAIKU", 1500, 0);
+    const result = await generateText(userPrompt, systemPrompt, "HAIKU", 500, 0);
 
     try {
         const jsonStr = extractJsonBlock(result.text);
