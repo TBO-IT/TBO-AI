@@ -118,6 +118,7 @@ router.post(
                     );
 
             if (uploadError) {
+                logger.error({ uploadError }, "Supabase upload failed (Make sure the 'datasets' bucket exists!)");
                 throw uploadError;
             }
 

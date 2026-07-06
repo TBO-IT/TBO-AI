@@ -117,7 +117,8 @@ export class ChatOrchestrator {
 
             setStage("Analyzing query intent (AI)...");
             // ── 2. AI-Native Question Analysis ───────────────────────────────────────────
-            const llmAnalysis = await llmParseQuestion(question, semanticLayer);
+            const { hybridParseQuestion } = await import("../ai/hybridQuestionParser.js");
+            const llmAnalysis = await hybridParseQuestion(question, semanticLayer, metadata);
             
             const isRecommendation = llmAnalysis.requiresRecommendation;
             const isNarrative = llmAnalysis.requiresNarrative;
