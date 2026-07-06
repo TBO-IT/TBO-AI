@@ -60,7 +60,7 @@ async function analyzeCompetitiveness(
         SELECT
             COUNT(*) as rowCount,
             AVG(CASE WHEN "${COMPETITIVENESS_COLUMNS.STATUS}" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
-            MEDIAN(CAST(price_diff_perc AS DOUBLE)) as medianPriceDiff
+            MEDIAN(CAST(price_diff_perc AS DOUBLE)) * -1 as medianPriceDiff
         FROM ${src}
     `;
 

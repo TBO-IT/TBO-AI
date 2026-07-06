@@ -31,7 +31,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
         let winRateVal = 42.5;
         let volumeShareVal = 3.4;
         let totalQueriesVal = 12500;
-        let priceCompVal = -1.2;
+        let priceCompVal = 1.2;
         let topSuppliersData = [
             { name: "Expedia", winRate: 45.2, share: 60 },
             { name: "Booking.com", winRate: 38.1, share: 30 },
@@ -74,7 +74,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
                 SELECT 
                     COUNT(*) as totalQueries,
                     AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
-                    AVG(CAST(price_diff_perc AS DOUBLE)) as priceComp
+                    AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as priceComp
                 FROM data_table
                 WHERE tbo_hotelname ILIKE '%${hotelName.replace(/'/g, "''")}%'
             `;
@@ -141,7 +141,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
                             SELECT 
                                 date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE, try_strptime("${dateCol}", '%m-%d-%Y')::DATE, try_strptime("${dateCol}", '%d-%m-%Y')::DATE)) as week,
                                 AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
-                                AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
+                                AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as avg_gap,
                                 ${apwSelect}
                             FROM data_table
                             WHERE tbo_hotelname ILIKE '%${hotelName.replace(/'/g, "''")}%'
@@ -270,7 +270,7 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
         let winRateVal = 38.2;
         let volumeShareVal = 25.0;
         let totalQueriesVal = 85000;
-        let priceCompVal = -0.8;
+        let priceCompVal = 0.8;
         let topHotelsData = [
             { name: "Hilton London", winRate: 55.2, share: 5 },
             { name: "Marriott Paris", winRate: 48.1, share: 4 },
@@ -301,7 +301,7 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
                 SELECT 
                     COUNT(*) as totalQueries,
                     AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
-                    AVG(CAST(price_diff_perc AS DOUBLE)) as priceComp
+                    AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as priceComp
                 FROM data_table
                 WHERE suppliername ILIKE '%${supplierName.replace(/'/g, "''")}%'
             `;
@@ -369,7 +369,7 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
                             SELECT 
                                 date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE, try_strptime("${dateCol}", '%m-%d-%Y')::DATE, try_strptime("${dateCol}", '%d-%m-%Y')::DATE)) as week,
                                 AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
-                                AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
+                                AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as avg_gap,
                                 ${apwSelect}
                             FROM data_table
                             WHERE suppliername ILIKE '%${supplierName.replace(/'/g, "''")}%'
@@ -494,7 +494,7 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
         let winRateVal = 40.5;
         let volumeShareVal = 15.0;
         let totalQueriesVal = 45000;
-        let priceCompVal = -0.5;
+        let priceCompVal = 0.5;
         let topPropertiesData = [
             { name: "Hilton London", winRate: 50.2, share: 8 },
             { name: "Hilton Paris", winRate: 45.1, share: 6 },
@@ -538,7 +538,7 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
                 SELECT 
                     COUNT(*) as totalQueries,
                     AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
-                    AVG(CAST(price_diff_perc AS DOUBLE)) as priceComp
+                    AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as priceComp
                 FROM data_table
                 WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'
             `;
@@ -605,7 +605,7 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
                             SELECT 
                                 date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE, try_strptime("${dateCol}", '%m-%d-%Y')::DATE, try_strptime("${dateCol}", '%d-%m-%Y')::DATE)) as week,
                                 AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
-                                AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
+                                AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as avg_gap,
                                 ${apwSelect}
                             FROM data_table
                             WHERE tbo_chainname ILIKE '%${chainName.replace(/'/g, "''")}%'
@@ -734,7 +734,7 @@ router.get("/destination/:id", requireAuth(), currentUser, async (req: any, res)
         let winRateVal = 40.5;
         let volumeShareVal = 15.0;
         let totalQueriesVal = 45000;
-        let priceCompVal = -0.5;
+        let priceCompVal = 0.5;
         let topHotelsData: any[] = [];
 
         let trendWinRate: any[] = [];
@@ -785,7 +785,7 @@ router.get("/destination/:id", requireAuth(), currentUser, async (req: any, res)
                 SELECT 
                     COUNT(*) as totalQueries,
                     AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as winRate,
-                    AVG(CAST(price_diff_perc AS DOUBLE)) as priceComp
+                    AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as priceComp
                 FROM data_table
                 WHERE "${destCol}" ILIKE '%${destinationName.replace(/'/g, "''")}%'
             `;
@@ -851,7 +851,7 @@ router.get("/destination/:id", requireAuth(), currentUser, async (req: any, res)
                             SELECT 
                                 date_trunc('week', COALESCE(TRY_CAST("${dateCol}" AS DATE), try_strptime("${dateCol}", '%m/%d/%Y')::DATE, try_strptime("${dateCol}", '%d/%m/%Y')::DATE, try_strptime("${dateCol}", '%m-%d-%Y')::DATE, try_strptime("${dateCol}", '%d-%m-%Y')::DATE)) as week,
                                 AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1 ELSE 0 END) * 100 as win_rate,
-                                AVG(CAST(price_diff_perc AS DOUBLE)) as avg_gap,
+                                AVG(CAST(price_diff_perc AS DOUBLE)) * -1 as avg_gap,
                                 ${apwSelect}
                             FROM data_table
                             WHERE "${destCol}" ILIKE '%${destinationName.replace(/'/g, "''")}%'
