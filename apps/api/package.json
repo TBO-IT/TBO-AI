@@ -18,7 +18,8 @@
     "test:context": "tsx src/tests/contextSmokeTest.ts",
     "test:pipeline": "tsx src/tests/analysisPipelineTest.ts",
     "test:objectives": "tsx src/tests/objectiveRegistryTest.ts",
-    "test:planner": "tsx src/tests/analysisPlannerSmokeTest.ts"
+    "test:planner": "tsx src/tests/analysisPlannerSmokeTest.ts",
+    "migrate": "prisma migrate deploy"
   },
   "keywords": [],
   "author": "",
