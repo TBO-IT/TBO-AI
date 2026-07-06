@@ -1,7 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/clerk-react";
-import { MessageSquare, Upload, Database, User, LogOut, Sparkles, Sun, Moon } from "lucide-react";
-import { useTheme } from "../context/ThemeContext";
+import { MessageSquare, Upload, Database, User, LogOut, Sparkles } from "lucide-react";
 
 export default function Sidebar() {
     const { signOut } = useAuth();

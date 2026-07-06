@@ -83,7 +83,7 @@ function parseExecutiveResponse(raw: string): Record<string, string> | null {
         sections[currentSection] = buffer.join("\n").trim();
     }
 
-    return Object.keys(sections).length >= 3 ? sections : null;
+    return Object.keys(sections).length >= 1 ? sections : null;
 }
 
 function parseKPITable(text: string) {
@@ -603,8 +603,8 @@ export default function CopilotPage() {
                                     </div>
                                 ) : (
                                     /* Plain text fallback */
-                                    <div className="rounded-2xl rounded-tl-md px-4 py-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 text-[13px] text-slate-700 dark:text-slate-300">
-                                        <MarkdownRenderer text={msg.content} />
+                                    <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
+                                        <MarkdownRenderer text={msg.content + (isThinking && msg.id === messages[messages.length - 1].id ? " ▍" : "")} />
                                     </div>
                                 )}
                             </div>

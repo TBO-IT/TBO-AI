@@ -7,14 +7,11 @@ import {
     Settings,
     Shield,
     LogOut,
-    Sun,
-    Moon,
     Sparkles,
     ChevronLeft,
     ChevronRight,
     Activity,
 } from "lucide-react";
-import { useTheme } from "../../context/ThemeContext";
 import { cn } from "../../lib/utils";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,7 +27,6 @@ const BASE_NAV_ITEMS = [
 export default function Sidebar() {
     const { signOut } = useAuth();
     const { user } = useUser();
-    const { theme, toggleTheme } = useTheme();
     const location = useLocation();
     const [collapsed, setCollapsed] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
