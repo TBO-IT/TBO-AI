@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router-dom";
-import { Database, FileText, Search, Settings, Sun, Moon, Sparkles, Building, Building2 } from "lucide-react";
-import { useTheme } from "../../context/ThemeContext";
+import { Database, FileText, Search, Settings, Sparkles, Building, Building2 } from "lucide-react";
 import { getDatasets } from "../../api/datasetApi";
 import type { Dataset } from "../../types/dataset";
 import { cn } from "../../lib/utils";
@@ -16,7 +15,6 @@ export default function CommandPalette({
     setOpen: (open: boolean) => void;
 }) {
     const navigate = useNavigate();
-    const { theme, toggleTheme } = useTheme();
     const [datasets, setDatasets] = useState<Dataset[]>([]);
 
     useEffect(() => {
@@ -122,19 +120,7 @@ export default function CommandPalette({
                         </Command.Group>
                     )}
 
-                    <Command.Group heading="System" className="text-xs font-medium text-slate-500 dark:text-slate-400 px-2 py-1.5">
-                        <Command.Item
-                            onSelect={() => runCommand(() => toggleTheme())}
-                            className="flex items-center gap-2 px-3 py-2.5 text-sm rounded-lg cursor-pointer aria-selected:bg-slate-100 dark:aria-selected:bg-slate-800/60 aria-selected:text-slate-900 dark:aria-selected:text-white"
-                        >
-                            {theme === "dark" ? (
-                                <Sun className="h-4 w-4 text-brand-orange" />
-                            ) : (
-                                <Moon className="h-4 w-4 text-brand-blue" />
-                            )}
-                            <span>Toggle Theme</span>
-                        </Command.Item>
-                    </Command.Group>
+
                 </Command.List>
             </Command>
         </div>

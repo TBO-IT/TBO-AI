@@ -6,7 +6,6 @@ import { useTheme } from "../context/ThemeContext";
 export default function Sidebar() {
     const { signOut } = useAuth();
     const { user } = useUser();
-    const { theme, toggleTheme } = useTheme();
 
     const navItems = [
         { to: "/chat", label: "Ask AI", icon: MessageSquare },
@@ -60,21 +59,6 @@ export default function Sidebar() {
                 })}
             </nav>
 
-            {/* Theme Toggle Button */}
-            <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-400">Theme</span>
-                <button
-                    onClick={toggleTheme}
-                    className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors flex items-center justify-center cursor-pointer"
-                    title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                >
-                    {theme === "dark" ? (
-                        <Sun className="h-4 w-4 text-brand-orange" />
-                    ) : (
-                        <Moon className="h-4 w-4 text-brand-blue-light" />
-                    )}
-                </button>
-            </div>
 
             {/* User Session Info & Action */}
             {user && (

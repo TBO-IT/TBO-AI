@@ -165,23 +165,6 @@ export default function Sidebar() {
                     {!collapsed && <span className="truncate">Settings</span>}
                 </NavLink>
 
-                {/* Theme Toggle */}
-                <button
-                    onClick={toggleTheme}
-                    className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium w-full",
-                        "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/[0.04] transition-all duration-150 cursor-pointer",
-                        collapsed && "justify-center px-0"
-                    )}
-                    title={collapsed ? (theme === "dark" ? "Light Mode" : "Dark Mode") : undefined}
-                >
-                    {theme === "dark" ? (
-                        <Sun className="h-[18px] w-[18px] flex-shrink-0 text-brand-orange" />
-                    ) : (
-                        <Moon className="h-[18px] w-[18px] flex-shrink-0 text-brand-blue-light" />
-                    )}
-                    {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
-                </button>
 
                 {/* Collapse Toggle */}
                 <button
