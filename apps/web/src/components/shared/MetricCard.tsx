@@ -4,8 +4,8 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 interface MetricCardProps {
     title: string;
     value: string | number;
-    delta: number;
-    trend: "up" | "down" | "flat";
+    delta?: number;
+    trend?: "up" | "down" | "flat";
     format?: "percentage" | "number" | "currency";
 }
 
@@ -25,17 +25,19 @@ export default function MetricCard({ title, value, delta, trend, format = "numbe
                     {format === "percentage" ? `${value}%` : value}
                 </span>
                 
-                <div className={cn(
-                    "flex items-center gap-1 text-[12px] font-medium px-2 py-0.5 rounded-md",
-                    isPositive && "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
-                    isNegative && "text-red-600 bg-red-50 dark:bg-red-500/10 dark:text-red-400",
-                    trend === "flat" && "text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400"
-                )}>
-                    {trend === "up" && <TrendingUp className="h-3.5 w-3.5" />}
-                    {trend === "down" && <TrendingDown className="h-3.5 w-3.5" />}
-                    {trend === "flat" && <Minus className="h-3.5 w-3.5" />}
-                    <span>{formatDelta(delta)}{format === "percentage" ? "pp" : "%"}</span>
-                </div>
+                {delta !== undefined && trend !== undefined && (
+                    <div className={cn(
+                        "flex items-center gap-1 text-[12px] font-medium px-2 py-0.5 rounded-md",
+                        isPositive && "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
+                        isNegative && "text-red-600 bg-red-50 dark:bg-red-500/10 dark:text-red-400",
+                        trend === "flat" && "text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400"
+                    )}>
+                        {trend === "up" && <TrendingUp className="h-3.5 w-3.5" />}
+                        {trend === "down" && <TrendingDown className="h-3.5 w-3.5" />}
+                        {trend === "flat" && <Minus className="h-3.5 w-3.5" />}
+                        <span>{formatDelta(delta)}{format === "percentage" ? "pp" : "%"}</span>
+                    </div>
+                )}
             </div>
         </div>
     );

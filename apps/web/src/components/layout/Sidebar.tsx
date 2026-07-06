@@ -43,7 +43,7 @@ export default function Sidebar() {
         }
     }, [user]);
 
-    const NAV_ITEMS = isAdmin 
+    const NAV_ITEMS = isAdmin
         ? [...BASE_NAV_ITEMS, { to: "/admin", label: "Admin", icon: Shield, description: "Manage users" }]
         : BASE_NAV_ITEMS;
 
@@ -70,7 +70,7 @@ export default function Sidebar() {
                             className="ml-3 overflow-hidden whitespace-nowrap"
                         >
                             <h1 className="text-[15px] font-bold tracking-tight text-white">
-                                TBO Intelligence
+                                TBO AI
                             </h1>
                             <p className="text-[10px] text-slate-500 font-medium -mt-0.5">
                                 Executive Analytics

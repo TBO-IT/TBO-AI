@@ -223,10 +223,10 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
                 name: hotelName,
                 type: "HOTEL",
                 metrics: {
-                    winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
-                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
-                    volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
-                    totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
+                    winRate: { value: Number(winRateVal.toFixed(1)) },
+                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)) },
+                    volumeShare: { value: Number(volumeShareVal.toFixed(1)) },
+                    totalQueries: { value: totalQueriesVal },
                 },
                 topSuppliers: topSuppliersData,
                 riskAssessment: {
@@ -447,10 +447,10 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
                 name: supplierName,
                 type: "SUPPLIER",
                 metrics: {
-                    winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
-                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
-                    volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
-                    totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
+                    winRate: { value: Number(winRateVal.toFixed(1)) },
+                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)) },
+                    volumeShare: { value: Number(volumeShareVal.toFixed(1)) },
+                    totalQueries: { value: totalQueriesVal },
                 },
                 topHotels: topHotelsData,
                 opportunityAssessment: {
@@ -687,10 +687,10 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
                 name: chainName,
                 type: "CHAIN",
                 metrics: {
-                    winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
-                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
-                    volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
-                    totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
+                    winRate: { value: Number(winRateVal.toFixed(1)) },
+                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)) },
+                    volumeShare: { value: Number(volumeShareVal.toFixed(1)) },
+                    totalQueries: { value: totalQueriesVal },
                 },
                 topProperties: topPropertiesData,
                 opportunityAssessment: {
@@ -929,10 +929,10 @@ router.get("/destination/:id", requireAuth(), currentUser, async (req: any, res)
                 name: destinationName,
                 type: "DESTINATION",
                 metrics: {
-                    winRate: { value: Number(winRateVal.toFixed(1)), delta: 0, trend: "flat" },
-                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)), delta: 0, trend: "flat" },
-                    volumeShare: { value: Number(volumeShareVal.toFixed(1)), delta: 0, trend: "flat" },
-                    totalQueries: { value: totalQueriesVal, delta: 0, trend: "flat" },
+                    winRate: { value: Number(winRateVal.toFixed(1)) },
+                    priceCompetitiveness: { value: Number(priceCompVal.toFixed(1)) },
+                    volumeShare: { value: Number(volumeShareVal.toFixed(1)) },
+                    totalQueries: { value: totalQueriesVal },
                 },
                 topProperties: topHotelsData,
                 opportunityAssessment: {

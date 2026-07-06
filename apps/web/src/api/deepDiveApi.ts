@@ -2,8 +2,8 @@ import { api } from "./client";
 
 export interface MetricData {
     value: number;
-    delta: number;
-    trend: "up" | "down" | "flat";
+    delta?: number;
+    trend?: "up" | "down" | "flat";
 }
 
 export interface DeepDiveData {
