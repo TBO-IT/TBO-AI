@@ -27,6 +27,7 @@ import DestinationDeepDivePage from "./pages/DestinationDeepDivePage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import UsageDashboard from "./pages/UsageDashboard";
 import AdminRoute from "./components/auth/AdminRoute";
+import DomainGuard from "./components/auth/DomainGuard";
 
 // ── Query Client ──
 const queryClient = new QueryClient({
@@ -55,31 +56,33 @@ function AppContent() {
             </SignedOut>
 
             <SignedIn>
-                <Routes>
-                    <Route element={<AppLayout />}>
-                        <Route path="/copilot" element={<CopilotPage />} />
-                        <Route path="/datasets" element={<DatasetsPage />} />
-                        <Route path="/datasets/upload" element={<UploadPage />} />
-                        <Route path="/deep-dives" element={<DeepDivesIndexPage />} />
-                        <Route path="/deep-dives/hotel/:id" element={<HotelDeepDivePage />} />
-                        <Route path="/deep-dives/supplier/:id" element={<SupplierDeepDivePage />} />
-                        <Route path="/deep-dives/chain/:id" element={<ChainDeepDivePage />} />
-                        <Route path="/deep-dives/destination/:id" element={<DestinationDeepDivePage />} />
-                        <Route path="/settings" element={<SettingsPage />} />
-                        <Route path="/usage" element={<UsageDashboard />} />
-                        <Route path="/profile" element={<ProfilePage />} />
+                <DomainGuard>
+                    <Routes>
+                        <Route element={<AppLayout />}>
+                            <Route path="/copilot" element={<CopilotPage />} />
+                            <Route path="/datasets" element={<DatasetsPage />} />
+                            <Route path="/datasets/upload" element={<UploadPage />} />
+                            <Route path="/deep-dives" element={<DeepDivesIndexPage />} />
+                            <Route path="/deep-dives/hotel/:id" element={<HotelDeepDivePage />} />
+                            <Route path="/deep-dives/supplier/:id" element={<SupplierDeepDivePage />} />
+                            <Route path="/deep-dives/chain/:id" element={<ChainDeepDivePage />} />
+                            <Route path="/deep-dives/destination/:id" element={<DestinationDeepDivePage />} />
+                            <Route path="/settings" element={<SettingsPage />} />
+                            <Route path="/usage" element={<UsageDashboard />} />
+                            <Route path="/profile" element={<ProfilePage />} />
 
-                        <Route element={<AdminRoute />}>
-                            <Route path="/admin" element={<AdminDashboardPage />} />
+                            <Route element={<AdminRoute />}>
+                                <Route path="/admin" element={<AdminDashboardPage />} />
+                            </Route>
+
+                            {/* Redirects */}
+                            <Route path="/" element={<Navigate to="/copilot" replace />} />
+                            <Route path="/chat" element={<Navigate to="/copilot" replace />} />
+                            <Route path="/upload" element={<Navigate to="/datasets/upload" replace />} />
+                            <Route path="*" element={<Navigate to="/copilot" replace />} />
                         </Route>
-
-                        {/* Redirects */}
-                        <Route path="/" element={<Navigate to="/copilot" replace />} />
-                        <Route path="/chat" element={<Navigate to="/copilot" replace />} />
-                        <Route path="/upload" element={<Navigate to="/datasets/upload" replace />} />
-                        <Route path="*" element={<Navigate to="/copilot" replace />} />
-                    </Route>
-                </Routes>
+                    </Routes>
+                </DomainGuard>
             </SignedIn>
         </BrowserRouter>
     );

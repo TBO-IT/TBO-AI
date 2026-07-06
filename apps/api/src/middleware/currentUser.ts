@@ -36,9 +36,9 @@ export async function currentUser(req: any, res: any, next: any) {
                  return res.status(500).json({ error: "Unable to complete authentication." });
             }
 
-            // Domain validation
+            // Strict Domain Validation for TBO.com
             const domain = email.split("@")[1]?.toLowerCase() || "";
-            const allowedDomainsEnv = process.env.ALLOWED_EMAIL_DOMAINS || "";
+            const allowedDomainsEnv = process.env.ALLOWED_EMAIL_DOMAINS || "tbo.com";
             const allowedDomains = allowedDomainsEnv.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
 
             if (allowedDomains.length > 0 && !allowedDomains.includes(domain)) {
@@ -47,7 +47,7 @@ export async function currentUser(req: any, res: any, next: any) {
                     reason: "INVALID_DOMAIN"
                 }, "[AUTH]");
                 return res.status(403).json({
-                    error: "Access is restricted to authorized company employees.",
+                    error: "Access is restricted to authorized @tbo.com employees.",
                 });
             }
 
@@ -94,6 +94,20 @@ export async function currentUser(req: any, res: any, next: any) {
              return res.status(403).json({
                  error: "Your account has been disabled. Please contact your administrator.",
              });
+        }
+        // Strict Domain Validation for existing users (in case they were provisioned earlier)
+        const domain = user.email.split("@")[1]?.toLowerCase() || "";
+        const allowedDomainsEnv = process.env.ALLOWED_EMAIL_DOMAINS || "tbo.com";
+        const allowedDomains = allowedDomainsEnv.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
+
+        if (allowedDomains.length > 0 && !allowedDomains.includes(domain)) {
+            logger.info({
+                email: user.email,
+                reason: "INVALID_DOMAIN_RETROACTIVE"
+            }, "[AUTH]");
+            return res.status(403).json({
+                error: "Access is restricted to authorized @tbo.com employees.",
+            });
         }
         
         logger.info({
