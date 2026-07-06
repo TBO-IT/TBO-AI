@@ -937,7 +937,7 @@ router.get("/destination/:id", requireAuth(), currentUser, async (req: any, res)
                 topProperties: topHotelsData,
                 opportunityAssessment: {
                     level: "MEDIUM",
-                    primaryOpportunity: \`Opportunities found for \${destinationName} based on historical pricing trends.\`,
+                    primaryOpportunity: `Opportunities found for ${destinationName} based on historical pricing trends.`,
                 },
                 trendData: {
                     winRate: trendWinRate,
