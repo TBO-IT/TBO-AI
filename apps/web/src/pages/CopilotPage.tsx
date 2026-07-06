@@ -10,6 +10,7 @@ import { cn } from "../lib/utils";
 import { useAuth } from "@clerk/clerk-react";
 import { MarkdownRenderer } from "../components/shared/MarkdownRenderer";
 import { ExecutiveKPICard, RecommendationCard } from "../components/ExecutiveCards";
+import { DataVisualizer } from "../components/shared/DataVisualizer";
 
 // ── Types ──
 
@@ -335,6 +336,8 @@ export default function CopilotPage() {
                                 setLoadingStage(data.stage);
                                 updateMessageContent(assistantId, rawContent, undefined, data.stage);
                             }
+                        } else if (eventType === "data") {
+                            updateMessageContent(assistantId, rawContent, currentSections, undefined, data);
                         } else if (eventType === "token") {
                             rawContent += data.text;
                             currentSections = parseExecutiveResponse(rawContent) || undefined;
@@ -565,6 +568,7 @@ export default function CopilotPage() {
                                 ) : msg.sections ? (
                                     /* Structured executive response */
                                     <div className="space-y-2">
+                                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
                                         {SECTION_ORDER.map(section => {
                                             const content = msg.sections![section];
                                             if (!content) return null;

@@ -103,7 +103,10 @@ router.post(
                     onStageChange: (stage: string) => {
                         sseSend(res, "status", { stage });
                     },
-                    abortSignal: abortController.signal
+                    abortSignal: abortController.signal,
+                    onDataPayload: (payload: any) => {
+                        sseSend(res, "data", payload);
+                    }
                 }
             );
 

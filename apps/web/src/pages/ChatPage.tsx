@@ -10,9 +10,11 @@ interface Message {
   content: string;
   timestamp: Date;
   stage?: string;
+  dataPayload?: any;
 }
 
 import { MarkdownRenderer } from "../components/shared/MarkdownRenderer";
+import { DataVisualizer } from "../components/shared/DataVisualizer";
 
 export default function ChatPage() {
   const { getToken } = useAuth();
@@ -134,6 +136,10 @@ export default function ChatPage() {
                   msg.id === assistantId ? { ...msg, stage: data.stage } : msg
                 ));
               }
+            } else if (eventType === "data") {
+              setMessages(prev => prev.map(msg =>
+                msg.id === assistantId ? { ...msg, dataPayload: data } : msg
+              ));
             } else if (eventType === "token") {
               rawContent += data.text;
               setMessages(prev => prev.map(msg =>
@@ -302,7 +308,10 @@ export default function ChatPage() {
                         <span className="text-slate-500">{msg.stage}</span>
                       </div>
                     ) : (
-                      <MarkdownRenderer text={msg.content} />
+                      <>
+                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
+                        <MarkdownRenderer text={msg.content} />
+                      </>
                     )}
                     <span className="text-[10px] block mt-1.5 text-right text-slate-400 dark:text-slate-500">
                       {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

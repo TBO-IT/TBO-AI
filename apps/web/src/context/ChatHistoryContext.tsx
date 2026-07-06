@@ -20,6 +20,7 @@ export interface ChatMessage {
     timestamp: string; // ISO string for easy JSON serialization
     sections?: Record<string, string>;
     stage?: string;
+    dataPayload?: any;
 }
 
 interface ChatHistoryContextValue {
@@ -27,7 +28,7 @@ interface ChatHistoryContextValue {
     /** Add a new message or replace an existing one by id */
     upsertMessage: (msg: ChatMessage) => void;
     /** Append text to an existing assistant message during streaming */
-    updateMessageContent: (id: string, content: string, sections?: Record<string, string>, stage?: string) => void;
+    updateMessageContent: (id: string, content: string, sections?: Record<string, string>, stage?: string, dataPayload?: any) => void;
     clearHistory: () => void;
 }
 
@@ -83,11 +84,12 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
         id: string,
         content: string,
         sections?: Record<string, string>,
-        stage?: string
+        stage?: string,
+        dataPayload?: any
     ) => {
         setMessages(prev => prev.map(m =>
             m.id === id
-                ? { ...m, content, sections, stage }
+                ? { ...m, content, sections, stage, ...(dataPayload !== undefined && { dataPayload }) }
                 : m
         ));
     }, []);

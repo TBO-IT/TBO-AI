@@ -8,6 +8,7 @@ import { validateQuestion } from "../ai/questionValidator.js";
 import { routeQuery, planExecution } from "../ai/queryRouter.js";
 import { getCachedSql, setCachedSql } from "./queryCacheService.js";
 import { getCachedNarrative, setCachedNarrative, invalidateNarrativeCache } from "./narrativeCacheService.js";
+import { getSemanticCachedNarrative, setSemanticCachedNarrative } from "./semanticCacheService.js";
 import { ClaudeOutputSchemas, GeneratedQueryResponse } from "../ai/outputSchemas.js";
 import { validateSqlSyntax } from "../ai/sqlValidator.js";
 import { executeQuery } from "./queryExecutionService.js";
@@ -61,6 +62,7 @@ export class ChatOrchestrator {
             onClaudeToken?: (chunk: string) => void;
             onStageChange?: (stage: string) => void;
             abortSignal?: AbortSignal;
+            onDataPayload?: (payload: any) => void;
         }
     ): Promise<any> {
         const timer = new PerformanceTimer("Chat Query");
@@ -79,6 +81,35 @@ export class ChatOrchestrator {
         console.log(`\n[QUESTION] "${question}"`);
 
         try {
+            setStage("Checking semantic cache...");
+            const semanticCacheResult = await getSemanticCachedNarrative(datasetId, question);
+            if (semanticCacheResult) {
+                if (opts?.onDataPayload && (semanticCacheResult.queryResults || semanticCacheResult.executivePack || semanticCacheResult.rootCausePack)) {
+                    opts.onDataPayload({
+                        queryResults: semanticCacheResult.queryResults,
+                        executivePack: semanticCacheResult.executivePack,
+                        rootCausePack: semanticCacheResult.rootCausePack
+                    });
+                }
+                pipelineTimer.stop();
+                
+                // Emulate token stream so the UI behaves identically
+                if (opts?.onClaudeToken) {
+                    opts.onClaudeToken(semanticCacheResult.narrative);
+                }
+                
+                return {
+                    answer: semanticCacheResult.narrative,
+                    sql: semanticCacheResult.sql,
+                    results: semanticCacheResult.queryResults,
+                    rootCausePack: semanticCacheResult.rootCausePack,
+                    recommendations: semanticCacheResult.executivePack?.recommendations,
+                    responseSource: semanticCacheResult.responseSource,
+                    routeType: "CACHE_HIT",
+                    latencyMs: 0,
+                };
+            }
+
             setStage("Loading dataset...");
             // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
             const dataset = await getDataset(datasetId);
@@ -910,6 +941,13 @@ export class ChatOrchestrator {
             if (rootCausePack?.contradictionDetected) {
                 recordContradiction();
             }
+            if (opts?.onDataPayload) {
+                opts.onDataPayload({
+                    queryResults,
+                    executivePack,
+                    rootCausePack
+                });
+            }
 
             setStage("Generating narrative...");
             // ── 7. Narrative / Recommendation Generation ──────────────────────
@@ -1091,6 +1129,14 @@ export class ChatOrchestrator {
                 }
                 timer.checkpoint("Narrative Generation");
                 await setCachedNarrative(datasetId, question.toLowerCase().trim(), sql, narrative, responseSource);
+                await setSemanticCachedNarrative(datasetId, question.toLowerCase().trim(), {
+                    narrative,
+                    responseSource,
+                    sql,
+                    executivePack,
+                    rootCausePack,
+                    queryResults
+                });
             }
 
             // ── 8. Record metrics ─────────────────────────────────────────────
