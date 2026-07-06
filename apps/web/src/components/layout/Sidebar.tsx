@@ -93,7 +93,7 @@ export default function Sidebar() {
                                 "relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150",
                                 isActive
                                     ? "bg-slate-900/5 dark:bg-white/10 text-brand-blue-dark dark:text-white"
-                                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5",
+                                    : "text-slate-700 dark:text-slate-400 hover:text-slate-950 dark:hover:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/5",
                                 collapsed && "justify-center px-0"
                             )}
                             title={collapsed ? item.label : undefined}
@@ -170,7 +170,7 @@ export default function Sidebar() {
                     onClick={toggleTheme}
                     className={cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium w-full",
-                        "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-all duration-150 cursor-pointer",
+                        "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/[0.04] transition-all duration-150 cursor-pointer",
                         collapsed && "justify-center px-0"
                     )}
                     title={collapsed ? (theme === "dark" ? "Light Mode" : "Dark Mode") : undefined}
@@ -188,7 +188,7 @@ export default function Sidebar() {
                     onClick={() => setCollapsed(!collapsed)}
                     className={cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium w-full",
-                        "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] transition-all duration-150 cursor-pointer",
+                        "text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/[0.04] transition-all duration-150 cursor-pointer",
                         collapsed && "justify-center px-0"
                     )}
                 >
@@ -221,7 +221,7 @@ export default function Sidebar() {
                         )}
                         {!collapsed && (
                             <div className="flex-1 min-w-0">
-                                <p className="text-[12px] font-semibold text-slate-200 truncate">
+                                <p className="text-[12px] font-semibold text-slate-900 dark:text-slate-200 truncate">
                                     {user.fullName || "User"}
                                 </p>
                                 <p className="text-[10px] text-slate-500 truncate">
@@ -232,7 +232,7 @@ export default function Sidebar() {
                         {!collapsed && (
                             <button
                                 onClick={() => signOut()}
-                                className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors cursor-pointer"
+                                className="p-1.5 rounded-md text-slate-500 hover:text-slate-900 dark:hover:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
                                 title="Sign Out"
                             >
                                 <LogOut className="h-3.5 w-3.5" />

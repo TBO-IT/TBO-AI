@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Building2, Building, Database, Link as LinkIcon } from "lucide-react";
+import { Search, Building2, Building, Database, Link as LinkIcon, MapPin } from "lucide-react";
 import PageShell from "../components/layout/PageShell";
 import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
@@ -14,6 +14,7 @@ export default function DeepDivesIndexPage() {
     const [hotelQuery, setHotelQuery] = useState("");
     const [supplierQuery, setSupplierQuery] = useState("");
     const [chainQuery, setChainQuery] = useState("");
+    const [destinationQuery, setDestinationQuery] = useState("");
 
     useEffect(() => {
         getDatasets().then(data => {
@@ -23,6 +24,13 @@ export default function DeepDivesIndexPage() {
             }
         }).catch(console.error);
     }, []);
+
+    const handleDestinationSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (destinationQuery.trim() && selectedDataset) {
+            navigate(`/deep-dives/destination/${encodeURIComponent(destinationQuery.trim())}?datasetId=${selectedDataset}`);
+        }
+    };
 
     const handleHotelSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -73,7 +81,39 @@ export default function DeepDivesIndexPage() {
                     </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+                    {/* Destination Search */}
+                    <form onSubmit={handleDestinationSubmit} className="bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800/80 p-6 flex flex-col">
+                        <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center mb-4">
+                            <MapPin className="h-6 w-6 text-blue-500" />
+                        </div>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Destination Analysis</h2>
+                        <p className="text-sm text-slate-500 mb-6">Enter a destination name to view its win rate, pricing trends, and top properties.</p>
+                        
+                        <div className="mt-auto relative">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="e.g. Dubai..."
+                                value={destinationQuery}
+                                onChange={(e) => setDestinationQuery(e.target.value)}
+                                className="w-full h-11 pl-10 pr-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-accent outline-none"
+                            />
+                        </div>
+                        <button 
+                            type="submit"
+                            disabled={!destinationQuery.trim() || !selectedDataset}
+                            className={cn(
+                                "mt-4 w-full h-10 rounded-lg font-medium text-sm transition-colors",
+                                destinationQuery.trim() && selectedDataset
+                                    ? "bg-blue-500 hover:bg-blue-600 text-white"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                            )}
+                        >
+                            Analyze Destination
+                        </button>
+                    </form>
+
                     {/* Hotel Search */}
                     <form onSubmit={handleHotelSubmit} className="bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800/80 p-6 flex flex-col">
                         <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 flex items-center justify-center mb-4">

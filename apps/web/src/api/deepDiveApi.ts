@@ -61,3 +61,8 @@ export async function getChainDeepDive(id: string, datasetId: string): Promise<D
     const response = await api.get(`/deep-dives/chain/${encodeURIComponent(id)}?datasetId=${datasetId}`);
     return response.data;
 }
+
+export async function getDestinationDeepDive(id: string, datasetId: string): Promise<DeepDiveResponse> {
+    const response = await api.get(`/deep-dives/destination/${encodeURIComponent(id)}?datasetId=${datasetId}`);
+    return response.data;
+}

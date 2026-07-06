@@ -23,6 +23,7 @@ import HotelDeepDivePage from "./pages/HotelDeepDivePage";
 import SupplierDeepDivePage from "./pages/SupplierDeepDivePage";
 import ChainDeepDivePage from "./pages/ChainDeepDivePage";
 import DeepDivesIndexPage from "./pages/DeepDivesIndexPage";
+import DestinationDeepDivePage from "./pages/DestinationDeepDivePage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import UsageDashboard from "./pages/UsageDashboard";
 import AdminRoute from "./components/auth/AdminRoute";
@@ -63,6 +64,7 @@ function AppContent() {
                         <Route path="/deep-dives/hotel/:id" element={<HotelDeepDivePage />} />
                         <Route path="/deep-dives/supplier/:id" element={<SupplierDeepDivePage />} />
                         <Route path="/deep-dives/chain/:id" element={<ChainDeepDivePage />} />
+                        <Route path="/deep-dives/destination/:id" element={<DestinationDeepDivePage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/usage" element={<UsageDashboard />} />
                         <Route path="/profile" element={<ProfilePage />} />
