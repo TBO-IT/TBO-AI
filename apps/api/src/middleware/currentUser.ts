@@ -6,6 +6,11 @@ export async function currentUser(req: any, res: any, next: any) {
     const auth = getAuth(req);
 
     if (!auth.userId) {
+        console.error("Auth failed:", {
+            authObject: auth,
+            authHeader: req.headers.authorization ? "Present" : "Missing",
+            clerkSecretExists: !!process.env.CLERK_SECRET_KEY
+        });
         return res.status(401).json({
             error: "Unauthorized",
         });
