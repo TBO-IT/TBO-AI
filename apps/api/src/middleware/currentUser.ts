@@ -76,6 +76,7 @@ export async function currentUser(req: any, res: any, next: any) {
             }, "[AUTH]");
 
         } catch (error) {
+            console.error("Auto-provisioning error:", error);
             return res.status(500).json({ error: "Unable to complete authentication." });
         }
     } else {
