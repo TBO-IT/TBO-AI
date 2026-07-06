@@ -12,6 +12,7 @@ import datasetRoutes from "./routes/dataset.js";
 import chatRoutes from "./routes/chat.js";
 import metricsRoutes from "./routes/metrics.js";
 import deepDiveRoutes from "./routes/deep-dives.js";
+import usageRoutes from "./routes/usage.js";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -90,6 +91,7 @@ app.use("/admin", adminRoutes);
 app.use("/test", testRouter);
 app.use("/api", meRoutes);
 app.use("/api/metrics", metricsRoutes);
+app.use("/api/usage", usageRoutes);
 app.use("/auth", authLimiter, authRoutes);
 app.use("/deep-dives", deepDiveRoutes);
 

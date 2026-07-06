@@ -12,6 +12,7 @@ import {
     Sparkles,
     ChevronLeft,
     ChevronRight,
+    Activity,
 } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { cn } from "../../lib/utils";
@@ -23,6 +24,7 @@ const BASE_NAV_ITEMS = [
     { to: "/copilot", label: "Copilot", icon: MessageSquare, description: "Ask questions" },
     { to: "/datasets", label: "Datasets", icon: Database, description: "Manage data" },
     { to: "/deep-dives", label: "Deep Dives", icon: SearchIcon, description: "Entity analysis" },
+    { to: "/usage", label: "API Usage", icon: Activity, description: "Track LLM cost" },
 ];
 
 export default function Sidebar() {

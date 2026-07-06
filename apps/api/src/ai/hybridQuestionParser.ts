@@ -1,6 +1,7 @@
 import { LlmAnalysisResult, llmParseQuestion } from "./llmQuestionParser.js";
 import { EnrichedSemanticLayer } from "./semanticLayer.js";
 import { DatasetMetadata } from "../services/metadataService.js";
+import { QuestionIntent } from "./questionTypes.js";
 
 /**
  * Escapes special regex characters in a string
@@ -31,7 +32,7 @@ export async function hybridParseQuestion(
     const filters: { dimension: string; operator: "ILIKE" | "="; value: string | number }[] = [];
     const metrics: string[] = [];
     const dimensions: string[] = [];
-    let intent = "SUMMARY"; // default
+    let intent: QuestionIntent = "SUMMARY"; // default
 
     // 2. Extract Entities from Metadata
     const entityMaps = [
@@ -106,7 +107,7 @@ export async function hybridParseQuestion(
     // 6. Confidence Check
     // If we extracted at least one entity and one metric, and there are no unknown parts, we can return.
     // For simple queries like "win rate in dubai", foundEntityCount = 1, metrics.length >= 1.
-    if (metrics.length > 0 && foundEntityCount <= 2 && intent !== "UNKNOWN") {
+    if (metrics.length > 0 && foundEntityCount <= 2) {
         console.log(`[HYBRID_PARSER] Confidently parsed simple query: intent=${intent} | metric=${metrics[0]} | filters=${filters.length}`);
         return {
             intent,
