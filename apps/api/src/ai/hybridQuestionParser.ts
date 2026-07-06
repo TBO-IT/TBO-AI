@@ -23,9 +23,11 @@ export async function hybridParseQuestion(
     const qLower = question.toLowerCase();
 
     // 1. Check for complex intents that require LLM
-    const complexKeywords = ["why", "cause", "reason", "should", "recommend", "improve", "fix", "action", "strategy", "compare", "vs"];
-    if (complexKeywords.some(kw => qLower.includes(kw))) {
-        console.log("[HYBRID_PARSER] Complex intent detected, falling back to LLM.");
+    const complexKeywords = ["why", "cause", "reason", "should", "recommend", "improve", "fix", "action", "strategy", "compare", "vs", "which", "what", "how", "who", "where", "hurting", "performance", "most", "least", "worst", "best", "driving", "dropping", "increasing"];
+    const wordCount = question.split(/\s+/).length;
+    
+    if (complexKeywords.some(kw => qLower.includes(kw)) || wordCount > 6) {
+        console.log("[HYBRID_PARSER] Complex intent or long query detected, falling back to LLM.");
         return await llmParseQuestion(question, semanticLayer);
     }
 
