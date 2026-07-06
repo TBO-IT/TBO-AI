@@ -21,7 +21,7 @@ import {
 } from "../services/datasetService.js";
 
 import {
-    downloadDataset
+    getDatasetUrl
 } from "../services/storageService.js";
 
 import { llmParseQuestion } from "../ai/llmQuestionParser.js";
@@ -84,7 +84,7 @@ router.post(
             }
 
             const localCsvPath =
-                await downloadDataset(
+                await getDatasetUrl(
                     dataset.storagePath
                 );
 

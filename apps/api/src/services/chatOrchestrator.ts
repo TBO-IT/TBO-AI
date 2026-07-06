@@ -1,5 +1,5 @@
 import { getDataset } from "./datasetService.js";
-import { downloadDataset } from "./storageService.js";
+import { getDatasetUrl } from "./storageService.js";
 import { getDatasetSchema } from "./schemaService.js";
 import { getCachedDatasetPath, getCachedSchema, getCachedMetadata } from "./datasetCacheService.js";
 import { buildSemanticLayer } from "../ai/semanticLayer.js";

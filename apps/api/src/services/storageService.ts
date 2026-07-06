@@ -5,6 +5,21 @@ import crypto from "crypto";
 import { supabase }
     from "../lib/supabase.js";
 
+export async function getDatasetUrl(
+    storagePath: string
+) {
+    const { data, error } =
+        await supabase.storage
+            .from("datasets")
+            .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+    if (error) {
+        throw error;
+    }
+
+    return data.signedUrl;
+}
+
 export async function downloadDataset(
     storagePath: string
 ) {

@@ -3,7 +3,7 @@ import { requireAuth } from "@clerk/express";
 import { currentUser } from "../middleware/currentUser.js";
 import { getDataset } from "../services/datasetService.js";
 import { executeQuery } from "../services/queryExecutionService.js";
-import { downloadDataset } from "../services/storageService.js";
+import { getDatasetUrl } from "../services/storageService.js";
 import { getDatasetContext } from "../services/metadataService.js";
 import { logger } from "../lib/logger.js";
 
@@ -50,7 +50,7 @@ router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
         let metaContext: any = null;
 
         if (datasetId !== "demo" && dataset?.storagePath) {
-            const localPath = await downloadDataset(dataset.storagePath);
+            const localPath = await getDatasetUrl(dataset.storagePath);
             metaContext = await getDatasetContext(localPath);
             
             // Validate existence
@@ -287,7 +287,7 @@ router.get("/supplier/:id", requireAuth(), currentUser, async (req: any, res) =>
         };
 
         if (datasetId !== "demo" && dataset?.storagePath) {
-            const localPath = await downloadDataset(dataset.storagePath);
+            const localPath = await getDatasetUrl(dataset.storagePath);
             
             // Get total dataset row count for volume share
             const totalRes = await executeQuery<{ total: number }>(
@@ -513,7 +513,7 @@ router.get("/chain/:id", requireAuth(), currentUser, async (req: any, res) => {
         let metaContext: any = null;
 
         if (datasetId !== "demo" && dataset?.storagePath) {
-            const localPath = await downloadDataset(dataset.storagePath);
+            const localPath = await getDatasetUrl(dataset.storagePath);
             metaContext = await getDatasetContext(localPath);
             
             // Validate existence
@@ -749,7 +749,7 @@ router.get("/destination/:id", requireAuth(), currentUser, async (req: any, res)
         let metaContext: any = null;
 
         if (datasetId !== "demo" && dataset?.storagePath) {
-            const localPath = await downloadDataset(dataset.storagePath);
+            const localPath = await getDatasetUrl(dataset.storagePath);
             metaContext = await getDatasetContext(localPath);
             
             // Validate existence
@@ -969,7 +969,7 @@ router.get("/cross-tab", requireAuth(), currentUser, async (req: any, res) => {
             }
         }
 
-        const localPath = datasetId === "demo" ? "uploads/demo.csv" : await downloadDataset(dataset.storagePath);
+        const localPath = datasetId === "demo" ? "uploads/demo.csv" : await getDatasetUrl(dataset.storagePath);
         
         // Use the crossTabEngine
         const { generateCrossTabSql } = await import("../services/analytics/crossTabEngine.js");

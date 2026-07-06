@@ -1,18 +1,23 @@
 import duckdb from "duckdb";
 
-// Use a singleton DuckDB instance for the entire application to prevent OOM
-// Creating a new Database(":memory:") for every query creates isolated buffer pools
-// that each try to grab 80% of system RAM.
-export const db = new duckdb.Database(":memory:");
+// Initialize database connection
+const connectionString = process.env.MOTHERDUCK_TOKEN 
+    ? `md:?motherduck_token=${process.env.MOTHERDUCK_TOKEN}`
+    : ":memory:";
 
-// Initialize database with safe memory and thread limits for constrained environments like Render
-db.exec("PRAGMA memory_limit='512MB'; PRAGMA threads=4;", (err) => {
-    if (err) {
-        console.error("[DUCKDB_INIT] Failed to set pragmas:", err);
-    } else {
-        console.log("[DUCKDB_INIT] Initialized singleton instance with 512MB memory limit.");
-    }
-});
+export const db = new duckdb.Database(connectionString);
+
+if (!process.env.MOTHERDUCK_TOKEN) {
+    db.exec("PRAGMA memory_limit='512MB'; PRAGMA threads=4;", (err) => {
+        if (err) {
+            console.error("[DUCKDB_INIT] Failed to set pragmas:", err);
+        } else {
+            console.log("[DUCKDB_INIT] Initialized local instance with 512MB memory limit.");
+        }
+    });
+} else {
+    console.log("[DUCKDB_INIT] Connected to MotherDuck.");
+}
 
 /**
  * Converts any BigInt values in a row to Number so that JSON.stringify works.
@@ -67,7 +72,8 @@ async function ensureMaterialized(csvPath: string): Promise<string> {
         console.warn(`[DUCKDB_CACHE] Could not stat ${normalizedPath}, falling back to path-only hash`);
     }
     
-    const hash = crypto.createHash("md5").update(`${normalizedPath}_${mtime}`).digest("hex");
+    const cleanPath = normalizedPath.split('?')[0];
+    const hash = crypto.createHash("md5").update(`${cleanPath}_${mtime}`).digest("hex");
     const tableName = `ds_${hash}`;
 
     if (materializedTables.has(tableName)) {
