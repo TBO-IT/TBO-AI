@@ -110,7 +110,7 @@ export class ChatOrchestrator {
 
             setStage("Checking Tier 0 SQL Templates...");
             const { routeTier0Query } = await import("../sql-templates/router.js");
-            const tier0Result = await routeTier0Query(question, datasetId, metadata, safeTempPath, userId);
+            const tier0Result = await routeTier0Query(question, datasetId, metadata, safeTempPath);
             if (tier0Result.handled) {
                 pipelineTimer.stop();
                 if (opts?.onClaudeToken) {

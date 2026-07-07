@@ -155,49 +155,6 @@ export class SlotResolver {
 
         return { resolvedSlots, lowestConfidence };
     }
-    extractFiltersFromRaw(rawText: string): { filters: { dimension: string, value: string, operator: string }[], confidence: number } {
-        if (!this.metadata) return { filters: [], confidence: 1.0 };
-        
-        const filters: { dimension: string, value: string, operator: string }[] = [];
-        let lowestConfidence = 1.0;
-        
-        const rawLower = rawText.toLowerCase();
-        
-        // Helper to find matches in a list
-        const findMatches = (list: string[], dim: string) => {
-            if (!list) return;
-            for (const entity of list) {
-                if (!entity) continue;
-                // Avoid matching very short strings accidentally
-                if (entity.length < 3) continue;
-                
-                if (rawLower.includes(entity.toLowerCase())) {
-                    // Check if it's negated
-                    const isNegated = rawLower.includes(`excluding ${entity.toLowerCase()}`) || 
-                                      rawLower.includes(`except ${entity.toLowerCase()}`) ||
-                                      rawLower.includes(`not ${entity.toLowerCase()}`);
-                    
-                    filters.push({ dimension: dim, value: entity, operator: isNegated ? "<>" : "=" });
-                }
-            }
-        };
-
-        findMatches(this.metadata.destinations || [], "destination");
-        findMatches(this.metadata.chains || [], "chain");
-        findMatches(this.metadata.thirdParties || [], "thirdparty");
-        
-        // Also look for status
-        if (rawLower.includes("winning")) filters.push({ dimension: "status", value: "Winning", operator: "=" });
-        else if (rawLower.includes("losing")) filters.push({ dimension: "status", value: "Losing", operator: "=" });
-
-        // Also look for APW buckets
-        if (rawLower.includes("< 10") || rawLower.includes("under 10")) filters.push({ dimension: "apw_bucket", value: "< 10 days", operator: "=" });
-        if (rawLower.includes("15-30")) filters.push({ dimension: "apw_bucket", value: "15-30 days", operator: "=" });
-        if (rawLower.includes("31-45")) filters.push({ dimension: "apw_bucket", value: "31-45 days", operator: "=" });
-        if (rawLower.includes("46-60") || rawLower.includes("advance")) filters.push({ dimension: "apw_bucket", value: "46-60 days", operator: "=" });
-
-        return { filters, confidence: lowestConfidence };
-    }
 }
 
 export const globalSlotResolver = new SlotResolver();
