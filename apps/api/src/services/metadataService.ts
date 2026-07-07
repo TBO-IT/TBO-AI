@@ -9,6 +9,8 @@ export interface DatasetMetadata {
     hotels: string[];
     countries: string[];
     apwBuckets: string[];
+    /** Distinct contracting manager names from the contracting_manager column */
+    contractingManagers: string[];
 }
 
 async function getDistinctValues(
@@ -68,7 +70,8 @@ export async function buildDatasetMetadata(
         chains,
         hotels,
         countries,
-        apwBuckets
+        apwBuckets,
+        contractingManagers
     ] = await Promise.all([
         getDistinctValuesWithFallback(tempPath, ["destination", "Destination"]),
         getDistinctValuesWithFallback(tempPath, ["suppliername", "supplier", "SupplierName", "Supplier"]),
@@ -76,7 +79,8 @@ export async function buildDatasetMetadata(
         getDistinctValuesWithFallback(tempPath, ["tbo_chainname", "chain", "chainname", "Chain"]),
         getDistinctValuesWithFallback(tempPath, ["tbo_hotelname", "hotel name", "hotel_name", "hotel", "Hotel"]),
         getDistinctValuesWithFallback(tempPath, ["country", "Country"]),
-        getDistinctValuesWithFallback(tempPath, ["apw_bucket_new", "apw_bucket", "apw", "lead time bucket", "APW"])
+        getDistinctValuesWithFallback(tempPath, ["apw_bucket_new", "apw_bucket", "apw", "lead time bucket", "APW"]),
+        getDistinctValuesWithFallback(tempPath, ["contracting_manager"])
     ]);
 
     return {
@@ -86,7 +90,8 @@ export async function buildDatasetMetadata(
         chains,
         hotels,
         countries,
-        apwBuckets
+        apwBuckets,
+        contractingManagers
     };
 
 }

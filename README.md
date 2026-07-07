@@ -69,6 +69,27 @@ The platform follows a modern decoupled architecture:
 
 ### Handling Schema Changes
 - The AI is highly dependent on `datasetSchema.ts` and `schemaClassifier.ts`. If the underlying data engineering team changes the column names in the CSV reports, you **must** update the aliases in these configuration files so Claude knows how to query them correctly.
+- **`contracting_manager` (STRING)** is a registered dimension as of 2026-07. It represents the name of the person responsible for managing the contracting relationship for each hotel. It is available for SELECT, WHERE, GROUP BY, and ORDER BY in all generated SQL.
+
+#### Adding a New Dimension — Checklist
+
+When a new CSV column needs to be treated as a first-class grouping/filtering dimension, update these files **in order**:
+
+| # | File | What to add |
+|---|---|---|
+| 1 | `config/datasetSchema.ts` | Add to `OPTIONAL_COLUMNS` (or `REQUIRED_COLUMNS` if mandatory) |
+| 2 | `ai/execution/ExecutionRegistry.ts` | Add entry to `DIMENSION_PHYSICAL_MAPPINGS` |
+| 3 | `ai/dimensionRegistry.ts` | Add label to `DIMENSION_BUSINESS_PROPS` |
+| 4 | `ai/semanticLayer.ts` | Add entry to `DIMENSION_MATCHERS` |
+| 5 | `ai/questionKnowledge.ts` | Add synonyms to `DIMENSION_SYNONYMS` |
+| 6 | `ai/businessKnowledge.ts` | Add description to `BUSINESS_KNOWLEDGE.concepts` |
+| 7 | `services/metadataService.ts` | Add field to `DatasetMetadata` interface + fetch in `buildDatasetMetadata` |
+| 8 | `ai/hybridQuestionParser.ts` | Add entry to `entityMaps` array |
+| 9 | `sql-templates/slot-resolver.ts` | Add slot-key → metadata list mapping |
+| 10 | `services/RootCausePackBuilder.ts` | Add to `DIM_COLUMN_MAP`, widen return type, add `affected*` array |
+| 11 | `services/naturalResponseGenerator.ts` | Add to `labelField` search list |
+| 12 | `services/insights/entityDrilldownEngine.ts` | Add to `DIM_MAP` and `drilldownDims` |
+| 13 | Test files | Update mock metadata shape; add smoke-test assertions |
 
 ### Dependency Management
 - The project uses `pnpm` workspaces. Ensure you run `pnpm install` from the root directory.

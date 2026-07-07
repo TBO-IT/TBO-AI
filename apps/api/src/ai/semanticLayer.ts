@@ -93,7 +93,8 @@ const DIMENSION_MATCHERS: DimensionMatcher[] = [
     },
     { canonicalKey: "thirdparty", matches: ["thirdparty", "third_party", "competitor"] },
     { canonicalKey: "competitive_status", matches: ["competitive status", "competitive_status"] },
-    { canonicalKey: "fuzzy_score", matches: ["fuzzy score", "fuzzy_score"] }
+    { canonicalKey: "fuzzy_score", matches: ["fuzzy score", "fuzzy_score"] },
+    { canonicalKey: "contracting_manager", matches: ["contracting_manager"] }
 ];
 
 function mapDimensions(schema: DatasetColumn[]): {

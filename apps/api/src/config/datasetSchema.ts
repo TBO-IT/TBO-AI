@@ -38,7 +38,7 @@ export const DATASET_SCHEMAS: Record<DatasetType.COMPETITIVENESS | DatasetType.C
         ENUM_COLUMNS: {
             "Competitive Status": ["Winning", "Losing"],
         },
-        OPTIONAL_COLUMNS: ["destination", "tbo_hotelname", "thirdparty_hotelname", "apw"],
+        OPTIONAL_COLUMNS: ["destination", "tbo_hotelname", "thirdparty_hotelname", "apw", "contracting_manager"],
         HEADER_NORMALIZATION: DEFAULT_HEADER_NORMALIZATION,
         CLASSIFICATION_KEYWORDS: [
             "competitive status",

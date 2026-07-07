@@ -13,7 +13,8 @@ const mockMetadata: DatasetMetadata = {
     hotels: [],
     suppliers: [],
     countries: [],
-    apwBuckets: []
+    apwBuckets: [],
+    contractingManagers: []
 };
 
 globalSlotResolver.updateMetadata(mockMetadata);

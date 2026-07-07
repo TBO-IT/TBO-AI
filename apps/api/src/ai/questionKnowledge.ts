@@ -178,6 +178,18 @@ export const DIMENSION_SYNONYMS: SynonymEntry[] = [
         synonyms: ["apw", "advanced purchase window",
             "purchase window", "lead time"
         ]
+    },
+    {
+        canonicalKey: "contracting_manager",
+        type: "dimension",
+        synonyms: [
+            "contracting manager", "contracting managers",
+            "contract manager", "contract managers",
+            "hotel manager", "hotel managers",
+            "account manager", "account managers",
+            "contracting lead", "contracting leads",
+            "manager"
+        ]
     }
 ];
 

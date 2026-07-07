@@ -29,7 +29,8 @@ const MOCK_SCHEMA = [
     { column_name: "destination", column_type: "VARCHAR" },
     { column_name: "l2b", column_type: "DOUBLE" },
     { column_name: "apw", column_type: "DOUBLE" },
-    { column_name: "apw_bucket", column_type: "VARCHAR" }
+    { column_name: "apw_bucket", column_type: "VARCHAR" },
+    { column_name: "contracting_manager", column_type: "VARCHAR" }
 ];
 
 function buildTestPack(): ClaudeInputPack {

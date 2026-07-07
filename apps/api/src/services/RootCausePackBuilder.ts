@@ -58,6 +58,7 @@ export interface RootCausePack {
     affectedChains: ContributorEntry[];
     affectedSuppliers: ContributorEntry[];
     affectedAPWBuckets: ContributorEntry[];
+    affectedContractingManagers: ContributorEntry[];
 
     trendSummary: TrendPoint[];
     totalRows: number;
@@ -238,7 +239,7 @@ function detectContradiction(question: string, direction: "increase" | "decline"
 
 // ─── Dimension classification ─────────────────────────────────────────────────
 
-const DIM_COLUMN_MAP: Record<string, "hotel" | "chain" | "supplier" | "destination" | "apw"> = {
+const DIM_COLUMN_MAP: Record<string, "hotel" | "chain" | "supplier" | "destination" | "apw" | "contracting_manager"> = {
     "Hotel": "hotel",
     "hotel": "hotel",
     "Chain": "chain",
@@ -248,13 +249,15 @@ const DIM_COLUMN_MAP: Record<string, "hotel" | "chain" | "supplier" | "destinati
     "Destination": "destination",
     "destination": "destination",
     "APW Bucket": "apw",
-    "apw": "apw"
+    "apw": "apw",
+    "Contracting Manager": "contracting_manager",
+    "contracting_manager": "contracting_manager"
 };
 
 function detectDimensionCategory(
     rows: Record<string, unknown>[],
     semanticLayer: EnrichedSemanticLayer
-): "hotel" | "chain" | "supplier" | "destination" | "apw" | "unknown" {
+): "hotel" | "chain" | "supplier" | "destination" | "apw" | "contracting_manager" | "unknown" {
     if (rows.length === 0) return "unknown";
     const keys = Object.keys(rows[0]);
 
@@ -274,6 +277,7 @@ function detectDimensionCategory(
             if (dim === "supplier") return "supplier";
             if (dim === "destination") return "destination";
             if (dim === "apw") return "apw";
+            if (dim === "contracting_manager") return "contracting_manager";
         }
     }
 
@@ -301,6 +305,7 @@ export function buildRootCausePack(
     const affectedChains: ContributorEntry[] = [];
     const affectedSuppliers: ContributorEntry[] = [];
     const affectedAPWBuckets: ContributorEntry[] = [];
+    const affectedContractingManagers: ContributorEntry[] = [];
 
     let metricChange: MetricChange | null = null;
     let totalRows = 0;
@@ -325,6 +330,7 @@ export function buildRootCausePack(
         else if (dimCategory === "chain") affectedChains.push(...entries);
         else if (dimCategory === "supplier") affectedSuppliers.push(...entries);
         else if (dimCategory === "apw") affectedAPWBuckets.push(...entries);
+        else if (dimCategory === "contracting_manager") affectedContractingManagers.push(...entries);
 
         // Extract metric change from the first set that has it
         if (!metricChange) {
@@ -377,6 +383,7 @@ export function buildRootCausePack(
         affectedChains,
         affectedSuppliers,
         affectedAPWBuckets,
+        affectedContractingManagers,
         trendSummary: [], // Trend usually disabled during multi-dimension RCA to save time
         totalRows,
         builtAt: new Date().toISOString(),

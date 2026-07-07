@@ -128,6 +128,7 @@ export class SlotResolver {
         else if (slotKey === "chain") listToSearch = this.metadata.chains || [];
         else if (slotKey === "thirdparty") listToSearch = this.metadata.thirdParties || [];
         else if (slotKey === "hotel") listToSearch = this.metadata.hotels || [];
+        else if (slotKey === "contracting_manager") listToSearch = this.metadata.contractingManagers || [];
 
         if (listToSearch.length === 0) {
             return { resolved: rawValue, confidence: 1.0 };

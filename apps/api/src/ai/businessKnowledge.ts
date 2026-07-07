@@ -12,6 +12,9 @@ export const BUSINESS_KNOWLEDGE = {
         },
         chain: {
             description: "Hotel chain."
+        },
+        contracting_manager: {
+            description: "The name of the person responsible for managing the contracting relationship for each hotel. Use as a grouping or filtering dimension only — never aggregate it as a metric."
         }
     },
     timeIntelligence: {

@@ -45,7 +45,8 @@ export async function hybridParseQuestion(
         { dim: "chain", values: metadata.chains },
         { dim: "hotel", values: metadata.hotels },
         { dim: "country", values: metadata.countries },
-        { dim: "apw", values: metadata.apwBuckets }
+        { dim: "apw", values: metadata.apwBuckets },
+        { dim: "contracting_manager", values: metadata.contractingManagers }
     ];
 
     let foundEntityCount = 0;

@@ -49,7 +49,8 @@ const DIMENSION_BUSINESS_PROPS: Record<string, { label: string, validValues?: st
         validValues: ["Winning", "Losing", "Equal"]
     },
     thirdparty: { label: "Competitor" },
-    fuzzy_score: { label: "Fuzzy Score" }
+    fuzzy_score: { label: "Fuzzy Score" },
+    contracting_manager: { label: "Contracting Manager" }
 };
 
 /**

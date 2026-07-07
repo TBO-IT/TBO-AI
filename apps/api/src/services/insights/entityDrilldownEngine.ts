@@ -19,7 +19,8 @@ const DIM_MAP: Record<string, string> = {
     "HOTEL": "hotel",
     "DESTINATION": "destination",
     "SUPPLIER": "supplier",
-    "APW": "apw"
+    "APW": "apw",
+    "CONTRACTING_MANAGER": "contracting_manager"
 };
 
 export async function executeEntityDrilldown(
@@ -49,7 +50,7 @@ export async function executeEntityDrilldown(
     };
 
     // We want to drill down into the other dimensions
-    const drilldownDims = ["hotel", "chain", "supplier", "destination"]
+    const drilldownDims = ["hotel", "chain", "supplier", "destination", "contracting_manager"]
         .filter(dim => dim !== targetDimension && semanticLayer?.dimensions?.some((d: string) => d.toLowerCase() === dim.toLowerCase()));
 
     const drilldownResults = await Promise.all(drilldownDims.map(async (dim) => {

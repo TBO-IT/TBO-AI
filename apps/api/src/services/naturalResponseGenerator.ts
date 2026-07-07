@@ -143,7 +143,7 @@ function generateRankingResponse(
     analysis: QuestionAnalysis
 ): string {
     const valueField = findField(results, ["count", "win_rate", "wins", "losing", "price_diff_perc", "avg_price_diff", "total"]);
-    const labelField = findField(results, ["destination", "hotel", "supplier", "chain", "apw", "city"]);
+    const labelField = findField(results, ["destination", "hotel", "supplier", "chain", "apw", "city", "contracting_manager", "contracting manager"]);
 
     if (!valueField || !labelField) {
         return summarizeResults(results);

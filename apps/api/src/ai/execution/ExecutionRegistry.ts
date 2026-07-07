@@ -105,6 +105,11 @@ export const DIMENSION_PHYSICAL_MAPPINGS: Record<string, PhysicalDimensionMappin
         canonicalKey: "fuzzy_score",
         physicalColumns: ["fuzzy_score", "Fuzzy Score", "fuzzy score"],
         filterType: "exact"
+    },
+    contracting_manager: {
+        canonicalKey: "contracting_manager",
+        physicalColumns: ["contracting_manager"],
+        filterType: "ilike"
     }
 };
 
