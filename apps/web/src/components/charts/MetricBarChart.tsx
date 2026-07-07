@@ -1,6 +1,6 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { CHART_COLORS, COMMON_AXIS_CONFIG, COMMON_TOOLTIP_STYLE } from './theme';
+import { CHART_COLORS, COMMON_AXIS_CONFIG } from './theme';
 
 interface MetricBarChartProps {
   data: any[];
@@ -66,7 +66,7 @@ export const MetricBarChart: React.FC<MetricBarChartProps> = ({ data, config }) 
             cursor={{ fill: '#374151', opacity: 0.4 }}
           />
           <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-            {data.map((entry, index) => (
+            {data.map((_, index) => (
               <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
             ))}
           </Bar>
