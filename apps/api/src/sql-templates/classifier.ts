@@ -61,6 +61,60 @@ export class Classifier {
         return REJECTION_KEYWORDS.some(kw => words.includes(kw));
     }
 
+    private extractUniversalComponents(text: string): ClassifierResult | null {
+        // Try to extract metric
+        let metric = ""; 
+        if (text.includes("price") && (text.includes("diff") || text.includes("gap") || text.includes("compare"))) {
+            metric = "avg_price_diff";
+        } else if (text.includes("volume") || text.includes("count") || text.includes("how many")) {
+            metric = "volume";
+        } else if (text.includes("win rate") || text.includes("winning") || text.includes("success") || text.includes("performance")) {
+            metric = "win_rate";
+        }
+
+        // Try to extract groupBy
+        let groupBy: string[] = [];
+        const byMatch = text.match(/by\s+([a-z0-9\s,]+)(?:$|\s(?:for|in|where|excluding|except))/i);
+        if (byMatch) {
+            const groupStr = byMatch[1];
+            const possibleDims = ["destination", "chain", "supplier", "thirdparty", "hotel", "status", "apw", "booking window"];
+            for (const dim of possibleDims) {
+                if (groupStr.includes(dim)) {
+                    groupBy.push(dim === "booking window" ? "apw_bucket" : dim === "supplier" ? "thirdparty" : dim);
+                }
+            }
+        }
+
+        // Try to extract threshold
+        let threshold = "";
+        const threshMatch = text.match(/(?:over|above|below|under|>|<)\s*(\d+)%?/i);
+        if (threshMatch) {
+            threshold = threshMatch[0];
+        }
+
+        // The rest of the text might contain filters
+        const leftover = text.replace(/by\s+[a-z0-9\s,]+/i, "").trim();
+
+        // Check for drill-down phrasing
+        const isDrillDown = /^(?:what about|how about|and for|what if)/i.test(text);
+
+        if (groupBy.length > 0 || threshold || text.includes("win rate") || text.includes("price") || text.includes("volume") || isDrillDown) {
+            return {
+                matched: true,
+                template_id: "T00_UNIVERSAL",
+                slots: {
+                    u_metric: isDrillDown && !metric ? "" : metric, // Pass empty if we just guessed win_rate
+                    u_groupBy: groupBy.join(","),
+                    u_threshold: threshold,
+                    u_raw: text // pass full text so slot-resolver can find the new filter
+                },
+                confidence: 0.9
+            };
+        }
+
+        return null;
+    }
+
     classify(rawQuestion: string): ClassifierResult {
         const normalized = this.normalize(rawQuestion);
 
@@ -84,17 +138,15 @@ export class Classifier {
                     const leftover = normalized.replace(matchedString, "").trim();
                     
                     let cleanedLeftover = leftover;
-                    // Sort fillers by length descending so multi-word fillers match first
                     const sortedFillers = [...FILLER_WORDS_FOR_LEFTOVERS].sort((a, b) => b.length - a.length);
                     for (const filler of sortedFillers) {
                         cleanedLeftover = cleanedLeftover.replace(new RegExp(`\\b${filler}\\b`, 'gi'), "").trim();
                     }
                     cleanedLeftover = cleanedLeftover.replace(/\s+/g, ' ').trim();
 
-                    // Relaxed the leftover word threshold from 2 to 4 to tolerate more conversational phrasing
                     if (cleanedLeftover.length > 0 && cleanedLeftover.split(/\s+/).length > 4) {
                         lastReason = `Leftover words detected: "${leftover}" (cleaned: "${cleanedLeftover}")`;
-                        continue; // try other patterns
+                        continue;
                     }
 
                     return {
@@ -105,6 +157,12 @@ export class Classifier {
                     };
                 }
             }
+        }
+
+        // Secondary Match Layer: Universal Extractor
+        const universalMatch = this.extractUniversalComponents(normalized);
+        if (universalMatch) {
+            return universalMatch;
         }
 
         return { matched: false, reason: lastReason };

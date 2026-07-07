@@ -4,8 +4,8 @@ import { templates } from "./templates.js";
 import { Tier0Result } from "./types.js";
 import { executeQuery } from "../services/queryExecutionService.js";
 import { logger } from "../lib/logger.js";
-
 import { DatasetMetadata } from "../services/metadataService.js";
+import { sessionManager } from "./session.js";
 
 // Register all templates on startup
 templates.forEach(t => globalClassifier.register(t));
@@ -14,7 +14,8 @@ export async function routeTier0Query(
     rawQuestion: string, 
     datasetId: string,
     metadata: DatasetMetadata,
-    tempPath: string
+    tempPath: string,
+    userId: string
 ): Promise<Tier0Result> {
     const startTime = performance.now();
     
@@ -32,23 +33,71 @@ export async function routeTier0Query(
             return { handled: false, reason: "Template definition missing." };
         }
 
-        const { resolvedSlots, lowestConfidence, failedSlot } = globalSlotResolver.resolveAll(classification.slots || {});
+        let resolvedSlots: any = {};
+        let lowestConfidence = 1.0;
+        let failedSlot: string | undefined;
+
+        if (classification.template_id === "T00_UNIVERSAL") {
+            const rawFiltersText = classification.slots?.u_raw || "";
+            const { filters, confidence: fConf } = globalSlotResolver.extractFiltersFromRaw(rawFiltersText);
+            
+            // Get session context
+            const sessionContext = sessionManager.getContext(userId, datasetId);
+            
+            let metric = classification.slots?.u_metric;
+            let groupBy = classification.slots?.u_groupBy ? classification.slots.u_groupBy.split(",").filter(Boolean) : [];
+            let threshold = classification.slots?.u_threshold;
+            
+            // Context merging
+            if (!metric) {
+                metric = sessionContext?.metric || "win_rate";
+            }
+            
+            if (groupBy.length === 0 && sessionContext?.groupBy && sessionContext.groupBy.length > 0 && filters.length > 0) {
+                // E.g., "what about Phuket?" (where Phuket is a filter, keep the old groupBy)
+                groupBy = sessionContext.groupBy;
+            }
+
+            // Merge session filters if a new filter doesn't override it
+            const finalFilters = [...filters];
+            if (sessionContext?.filters) {
+                for (const oldF of sessionContext.filters) {
+                    if (!finalFilters.some(nf => nf.dimension === oldF.dimension)) {
+                        finalFilters.push(oldF);
+                    }
+                }
+            }
+
+            resolvedSlots = {
+                metric,
+                filters: finalFilters,
+                groupBy,
+                threshold
+            };
+            lowestConfidence = fConf;
+            
+            // Update session
+            sessionManager.setContext(userId, datasetId, {
+                metric,
+                filters: finalFilters,
+                groupBy,
+                lastQueryType: "T00_UNIVERSAL"
+            });
+            
+        } else {
+            const resolution = globalSlotResolver.resolveAll(classification.slots || {});
+            resolvedSlots = resolution.resolvedSlots;
+            lowestConfidence = resolution.lowestConfidence;
+            failedSlot = resolution.failedSlot;
+        }
 
         if (!resolvedSlots || lowestConfidence < 0.85) {
             logger.info({ rawQuestion, failedSlot, lowestConfidence }, "Tier 0 Slot resolution failed. Falling back to LLM.");
             return { handled: false, reason: `Slot resolution failed for ${failedSlot} (confidence: ${lowestConfidence})` };
         }
 
-        // We have a strict match and all slots resolved perfectly
         const sqlParams = template.generateSql(resolvedSlots);
         
-        // Execute against DuckDB
-        // executeQuery takes (datasetId, query, params)
-        // Wait, executeQuery is typically `await executeQuery(datasetId, sql)`
-        // Does our duckdbService support parameterized queries? Let's assume yes, or we can inline them safely since we validated the slots heavily.
-        // For the sake of safety, let's assume `executeQuery` takes parameters, or we use a helper.
-        // Actually, TBO-AI's duckdbService executeQuery(sql) might not take params.
-        // Let's manually inject the params safely since we know they are resolved and safe.
         let finalSql = sqlParams.query;
         sqlParams.params.forEach(param => {
             const safeParam = typeof param === "string" ? `'${param.replace(/'/g, "''")}'` : param;
@@ -57,6 +106,15 @@ export async function routeTier0Query(
 
         const rows = await executeQuery(finalSql, tempPath);
         
+        if (classification.template_id !== "T00_UNIVERSAL") {
+            // Only update session for specific drill-down capable templates if needed
+            // For now, let's store the resolved slots
+            sessionManager.setContext(userId, datasetId, {
+                lastQueryType: classification.template_id,
+                lastResolvedSlots: resolvedSlots
+            });
+        }
+
         const formatResult = template.formatAnswer(rows as any[], resolvedSlots);
         
         let answer = "";
