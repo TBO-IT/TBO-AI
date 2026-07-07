@@ -2,7 +2,7 @@ import { globalClassifier } from "./classifier.js";
 import { globalSlotResolver } from "./slot-resolver.js";
 import { templates } from "./templates.js";
 import { Tier0Result } from "./types.js";
-import { executeQuery } from "../services/duckdbService.js";
+import { executeQuery } from "../services/queryExecutionService.js";
 import { logger } from "../lib/logger.js";
 
 import { DatasetMetadata } from "../services/metadataService.js";
@@ -13,7 +13,8 @@ templates.forEach(t => globalClassifier.register(t));
 export async function routeTier0Query(
     rawQuestion: string, 
     datasetId: string,
-    metadata: DatasetMetadata
+    metadata: DatasetMetadata,
+    tempPath: string
 ): Promise<Tier0Result> {
     const startTime = performance.now();
     
@@ -54,7 +55,7 @@ export async function routeTier0Query(
             finalSql = finalSql.replace("?", String(safeParam));
         });
 
-        const rows = await executeQuery(datasetId, finalSql);
+        const rows = await executeQuery(finalSql, tempPath);
         
         const answer = template.formatAnswer(rows as any[], resolvedSlots);
 

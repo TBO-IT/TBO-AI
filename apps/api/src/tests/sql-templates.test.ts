@@ -11,14 +11,9 @@ const mockMetadata: DatasetMetadata = {
     chains: ["Marriott", "IHG", "Accor"],
     thirdParties: ["Otilla", "Tripjack"],
     hotels: [],
-    apwBuckets: [],
+    suppliers: [],
     countries: [],
-    datasetId: "test_dataset_id",
-    metrics: [],
-    totalRows: 0,
-    fileSizeMb: 0,
-    lastScraped: "",
-    updatedAt: new Date().toISOString()
+    apwBuckets: []
 };
 
 globalSlotResolver.updateMetadata(mockMetadata);
