@@ -68,9 +68,44 @@ export class SlotResolver {
         return { resolved: null, confidence: highestScore };
     }
 
-    resolveSlot(slotKey: string, rawValue: string): { resolved: string | null, confidence: number } {
-        // Simple passthrough for exact categorical slots or dates
-        if (slotKey === "apw_bucket_new" || slotKey === "competitive_status" || slotKey.includes("date") || slotKey === "metric" || slotKey === "limit") {
+    resolveSlot(slotKey: string, rawValue: string): { resolved: string | number | null, confidence: number } {
+        const rawLower = rawValue.toLowerCase().trim();
+
+        // N value parsing (top N)
+        if (slotKey === "n") {
+            const parsed = parseInt(rawLower, 10);
+            if (!isNaN(parsed) && parsed > 0) return { resolved: parsed, confidence: 1.0 };
+            return { resolved: 10, confidence: 0.9 }; // default to 10 if we couldn't parse
+        }
+
+        // Enums mapping
+        if (slotKey === "status") {
+            if (rawLower.includes("win")) return { resolved: "Winning", confidence: 1.0 };
+            if (rawLower.includes("los")) return { resolved: "Losing", confidence: 1.0 };
+            if (rawLower.includes("both") || rawLower.includes("all")) return { resolved: "Both", confidence: 1.0 };
+            return { resolved: null, confidence: 0 };
+        }
+
+        if (slotKey === "metric") {
+            if (rawLower.includes("win rate") || rawLower.includes("winning")) return { resolved: "win_rate", confidence: 1.0 };
+            if (rawLower.includes("price") || rawLower.includes("gap")) return { resolved: "price_diff_perc", confidence: 1.0 };
+            if (rawLower.includes("volume") || rawLower.includes("count") || rawLower.includes("how many")) return { resolved: "volume", confidence: 1.0 };
+            return { resolved: null, confidence: 0 };
+        }
+
+        if (slotKey === "apw_bucket" || slotKey === "apw_bucket_new") {
+            if (rawLower.includes("< 10") || rawLower.includes("last minute") || rawLower.includes("under 10")) return { resolved: "< 10 days", confidence: 1.0 };
+            if (rawLower.includes("15-30") || rawLower.includes("15 to 30")) return { resolved: "15-30 days", confidence: 1.0 };
+            if (rawLower.includes("31-45") || rawLower.includes("31 to 45")) return { resolved: "31-45 days", confidence: 1.0 };
+            if (rawLower.includes("46-60") || rawLower.includes("46 to 60") || rawLower.includes("far out") || rawLower.includes("advance")) return { resolved: "46-60 days", confidence: 1.0 };
+            
+            // If they provided a raw value that matches exactly one of the known buckets
+            const knownBuckets = ["< 10 days", "15-30 days", "31-45 days", "46-60 days"];
+            return this.resolveEntity(rawValue, knownBuckets);
+        }
+
+        // Dates
+        if (slotKey.includes("date")) {
             return { resolved: rawValue, confidence: 1.0 };
         }
 

@@ -27,6 +27,7 @@ export interface Tier0Result {
     handled: boolean;
     response?: string;
     template_id?: string;
+    results?: any[];
     confidence?: number;
     latency_ms?: number;
     reason?: string;

@@ -71,6 +71,7 @@ export async function routeTier0Query(
         return {
             handled: true,
             response: answer,
+            results: rows,
             template_id: template.id,
             confidence: lowestConfidence,
             latency_ms: latency

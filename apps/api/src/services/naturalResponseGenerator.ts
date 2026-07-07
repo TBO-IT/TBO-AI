@@ -94,12 +94,10 @@ function generateCountResponse(
     const value = firstRow ? Object.values(firstRow)[0] : 0;
 
     if (typeof value === "number") {
-        const filters = describeFilters(analysis.filters);
-        const condition = filters !== "records" ? ` matching your criteria (${filters})` : "";
-        return `We currently have **${value.toLocaleString()}** records${condition} in the dataset.`;
+        return `We currently have **${value.toLocaleString('en-US')}** records matching your criteria.`;
     }
 
-    return `Based on your query, we found **${results.length.toLocaleString()}** matching records.`;
+    return `Based on your query, we found **${results.length.toLocaleString('en-US')}** matching records.`;
 }
 
 /**

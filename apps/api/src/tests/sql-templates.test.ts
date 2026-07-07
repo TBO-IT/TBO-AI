@@ -20,11 +20,11 @@ globalSlotResolver.updateMetadata(mockMetadata);
 
 // Test Positive Matches
 const positiveTests = [
-    { query: "what's our win rate in bali", expected: "win_rate_destination" },
-    { query: "please show me the average price difference in dubai", expected: "avg_price_diff_destination" },
-    { query: "how many hotels were scraped in london", expected: "hotel_count_destination" },
-    { query: "break down performance by apw in bangkok", expected: "breakdown_apw_destination" },
-    { query: "top 10 hotels where we are losing in pattaya", expected: "top_losing_hotels_destination" }
+    { query: "what's our win rate in bali", expected: "t02_win_rate_destination" },
+    { query: "please show me the average price difference in dubai", expected: "t09_avg_price_diff" },
+    { query: "how many hotels were scraped in london", expected: "t16_total_hotels_scraped" },
+    { query: "break down performance by apw in bangkok", expected: "t21_performance_apw" },
+    { query: "top 10 hotels where we are losing in pattaya", expected: "t11_top_hotels_price_gap" }
 ];
 
 // Test Negative / Adversarial Matches (Should Reject)

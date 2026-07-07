@@ -119,7 +119,7 @@ export class ChatOrchestrator {
                 return {
                     answer: tier0Result.response,
                     sql: null, 
-                    results: [], 
+                    results: tier0Result.results || [], 
                     responseSource: "ANALYTICS",
                     routeType: "TIER_0",
                     latencyMs: tier0Result.latency_ms || 0
