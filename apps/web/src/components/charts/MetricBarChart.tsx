@@ -67,7 +67,7 @@ export const MetricBarChart: React.FC<MetricBarChartProps> = ({ data, config }) 
           />
           <Bar dataKey="value" radius={[4, 4, 0, 0]}>
             {data.map((entry, index) => (
-              <Cell key={\`cell-\${index}\`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
             ))}
           </Bar>
         </BarChart>

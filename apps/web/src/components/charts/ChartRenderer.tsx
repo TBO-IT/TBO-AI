@@ -23,7 +23,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({ chart }) => {
   }
 
   // Add aria labels to charts
-  const ariaLabel = \`\${chart.type} chart showing \${chart.config.valueLabel}\`;
+  const ariaLabel = `${chart.type} chart showing ${chart.config.valueLabel}`;
 
   return (
     <div className="mb-6 w-full rounded-xl border border-gray-800 bg-gray-900/40 p-4" role="region" aria-label={ariaLabel}>

@@ -91,7 +91,7 @@ export function DataVisualizer({ payload }: { payload: any }) {
                             />
                             <Bar dataKey={yKey} radius={[4, 4, 0, 0]}>
                                 {chartData.map((_: any, index: number) => (
-                                    <Cell key={\`cell-\${index}\`} fill={index === 0 ? "#FF5A1F" : "#1e293b"} />
+                                    <Cell key={`cell-${index}`} fill={index === 0 ? "#FF5A1F" : "#1e293b"} />
                                 ))}
                             </Bar>
                         </BarChart>

@@ -48,7 +48,7 @@ export const MetricPieChart: React.FC<MetricPieChartProps> = ({ data, config }) 
             stroke="none"
           >
             {data.map((entry, index) => (
-              <Cell key={\`cell-\${index}\`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
             ))}
           </Pie>
           <Tooltip content={<CustomTooltip />} />
