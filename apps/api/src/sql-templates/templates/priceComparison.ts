@@ -94,7 +94,7 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
         }),
         formatAnswer: (rows): Tier0StructuredResponse => {
             if (rows.length === 0) return { answer: `No statistically significant price gap data found.` };
-            
+
             const chartData = rows.slice(0, 10).map((r: any) => ({
                 name: r.destination,
                 value: Number(r.avg_diff.toFixed(2))
@@ -202,7 +202,7 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
         }),
         formatAnswer: (rows, slots): Tier0StructuredResponse => {
             if (rows.length === 0) return { answer: `No APW price data found for ${slots.destination}.` };
-            
+
             // Optionally, we could map APW buckets to sort them naturally here, but using the DB sort is fine.
             const chartData = rows.map((r: any) => ({
                 name: r.apw_bucket_new || 'Unknown',
@@ -210,7 +210,7 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             }));
 
             const chart: ChartDefinition = {
-                type: "bar",
+                type: "line",
                 data: chartData,
                 config: { valueLabel: "Avg Price Diff", valueFormat: "percent" }
             };
@@ -251,10 +251,10 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             if (!r || r.volume === 0) return { answer: `No pricing data found for hotel: ${slots.hotel}.` };
             return {
                 answer: `Pricing for **${r.tbo_hotelname}**:\n` +
-                       `- **Avg TBO Price**: $${r.avg_tbo_price.toFixed(2)}\n` +
-                       `- **Avg Competitor Price**: $${r.avg_tp_price.toFixed(2)}\n` +
-                       `- **Avg Price Difference**: ${r.avg_diff.toFixed(2)}%\n` +
-                       `- **Offers Compared**: ${r.volume.toLocaleString('en-US')}`,
+                    `- **Avg TBO Price**: $${r.avg_tbo_price.toFixed(2)}\n` +
+                    `- **Avg Competitor Price**: $${r.avg_tp_price.toFixed(2)}\n` +
+                    `- **Avg Price Difference**: ${r.avg_diff.toFixed(2)}%\n` +
+                    `- **Offers Compared**: ${r.volume.toLocaleString('en-US')}`,
                 table: buildTable(rows)
             };
         }
