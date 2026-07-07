@@ -608,6 +608,7 @@ export default function CopilotPage() {
                                 ) : (
                                     /* Plain text fallback */
                                     <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
+                                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
                                         <MarkdownRenderer text={msg.content + (isThinking && msg.id === messages[messages.length - 1].id ? " ▍" : "")} />
                                     </div>
                                 )}
