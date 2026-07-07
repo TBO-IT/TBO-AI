@@ -15,10 +15,11 @@ export const winLossTemplates: TemplateDefinition[] = [
     {
         id: "t01_overall_win_rate",
         patterns: [
-            /what.*s our win rate/,
-            /how are we doing overall/,
-            /are we winning more than losing/,
-            /overall win rate/
+            /what.*s our win rate$/,
+            /how are we doing overall$/,
+            /are we winning more than losing$/,
+            /overall win rate$/,
+            /^(?:show me )?(?:the )?win rate$/
         ],
         slots: [],
         generateSql: () => ({
@@ -204,7 +205,11 @@ export const winLossTemplates: TemplateDefinition[] = [
         patterns: [
             /is our win rate improving/,
             /win rate trend/,
-            /are we winning more than last month/
+            /are we winning more than last month/,
+            /trend.*win rate/,
+            /win rate.*trend/,
+            /performing.*trend/,
+            /performance.*trend/
         ],
         slots: [],
         generateSql: () => ({

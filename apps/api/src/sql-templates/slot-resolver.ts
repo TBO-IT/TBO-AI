@@ -1,4 +1,5 @@
 import { DatasetMetadata } from "../services/metadataService.js";
+import * as chrono from 'chrono-node';
 
 // Basic Levenshtein distance for fuzzy matching
 function levenshtein(a: string, b: string): number {
@@ -106,7 +107,14 @@ export class SlotResolver {
 
         // Dates
         if (slotKey.includes("date")) {
-            return { resolved: rawValue, confidence: 1.0 };
+            const parsed = chrono.parseDate(rawValue);
+            if (parsed) {
+                // Return in YYYY-MM-DD format for duckdb
+                // Use local timezone formatting to prevent offset shifting
+                const iso = parsed.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD
+                return { resolved: iso, confidence: 1.0 };
+            }
+            return { resolved: rawValue, confidence: 0.8 };
         }
 
         if (!this.metadata) {
