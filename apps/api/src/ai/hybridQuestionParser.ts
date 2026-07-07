@@ -38,6 +38,7 @@ export async function hybridParseQuestion(
 
     // 2. Extract Entities from Metadata
     const entityMaps = [
+        { dim: "competitive_status", values: ["Winning", "Losing", "Equal"] },
         { dim: "destination", values: metadata.destinations },
         { dim: "supplier", values: metadata.suppliers },
         { dim: "thirdparty", values: metadata.thirdParties },
@@ -90,9 +91,18 @@ export async function hybridParseQuestion(
     // 4. Extract Explicit Dimensions (e.g. "by hotel", "by supplier")
     const dimKeywords = ["by", "per", "across", "top", "bottom"];
     for (const dim of semanticLayer.dimensions) {
+        // Explicit prefix match
         for (const kw of dimKeywords) {
             if (qLower.includes(`${kw} ${dim.toLowerCase()}`)) {
-                dimensions.push(dim);
+                if (!dimensions.includes(dim)) dimensions.push(dim);
+            }
+        }
+        
+        // Direct noun match for lists (e.g. "list hotels", "show destinations")
+        if (qLower.includes("list ") || qLower.includes("show ")) {
+            // Check for plural or singular form
+            if (qLower.includes(` ${dim.toLowerCase()}s`) || qLower.includes(` ${dim.toLowerCase()} `)) {
+                if (!dimensions.includes(dim)) dimensions.push(dim);
             }
         }
     }
@@ -102,7 +112,7 @@ export async function hybridParseQuestion(
         intent = "TREND";
     } else if (qLower.includes("top") || qLower.includes("bottom") || qLower.includes("worst") || qLower.includes("best")) {
         intent = "RANKING";
-    } else if (dimensions.length > 0) {
+    } else if (dimensions.length > 0 || qLower.includes("list ") || qLower.includes("show me ")) {
         intent = "LIST";
     }
 
@@ -110,14 +120,15 @@ export async function hybridParseQuestion(
     // If we extracted at least one entity and one metric, and there are no unknown parts, we can return.
     // For simple queries like "win rate in dubai", foundEntityCount = 1, metrics.length >= 1.
     if (metrics.length > 0 && foundEntityCount <= 2) {
-        console.log(`[HYBRID_PARSER] Confidently parsed simple query: intent=${intent} | metric=${metrics[0]} | filters=${filters.length}`);
+        const focus = dimensions[0] || (intent === "LIST" && qLower.includes("hotel") ? "hotel" : null) || filters[0]?.dimension || "overall";
+        console.log(`[HYBRID_PARSER] Confidently parsed simple query: intent=${intent} | metric=${metrics[0]} | filters=${filters.length} | focus=${focus}`);
         return {
             intent,
             metrics,
             dimensions,
             filters,
             timeReferences: [],
-            focus: dimensions[0] || filters[0]?.dimension || "overall",
+            focus,
             requiresNarrative: false,
             requiresRecommendation: false,
             originalQuestion: question

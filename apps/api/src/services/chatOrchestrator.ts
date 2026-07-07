@@ -81,6 +81,51 @@ export class ChatOrchestrator {
         console.log(`\n[QUESTION] "${question}"`);
 
         try {
+            setStage("Loading dataset...");
+            // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
+            const dataset = await getDataset(datasetId);
+            if (!dataset || !dataset.storagePath) {
+                throw new Error("Dataset not found or does not have a storage path.");
+            }
+
+            // Use cached dataset path to avoid redundant downloads
+            tempPath = await getCachedDatasetPath(datasetId, dataset.storagePath);
+
+            setStage("Analyzing dataset schema and metadata...");
+            
+            // Use cached metadata and schema in parallel
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            const safeTempPath = tempPath!;
+            const [metadata, schema] = await Promise.all([
+                getCachedMetadata(
+                    datasetId,
+                    safeTempPath,
+                    () => buildDatasetMetadata(safeTempPath)
+                ),
+                getCachedSchema(
+                    safeTempPath,
+                    () => getDatasetSchema(safeTempPath)
+                )
+            ]);
+
+            setStage("Checking Tier 0 SQL Templates...");
+            const { routeTier0Query } = await import("../sql-templates/router.js");
+            const tier0Result = await routeTier0Query(question, datasetId, metadata);
+            if (tier0Result.handled) {
+                pipelineTimer.stop();
+                if (opts?.onClaudeToken) {
+                    opts.onClaudeToken(tier0Result.response || "");
+                }
+                return {
+                    answer: tier0Result.response,
+                    sql: null, 
+                    results: [], 
+                    responseSource: "ANALYTICS",
+                    routeType: "TIER_0",
+                    latencyMs: tier0Result.latency_ms || 0
+                };
+            }
+
             setStage("Checking semantic cache...");
             const semanticCacheResult = await getSemanticCachedNarrative(datasetId, question);
             if (semanticCacheResult) {
@@ -109,33 +154,6 @@ export class ChatOrchestrator {
                     latencyMs: 0,
                 };
             }
-
-            setStage("Loading dataset...");
-            // ── 1. Fetch Dataset & Schema ──────────────────────────────────────────
-            const dataset = await getDataset(datasetId);
-            if (!dataset || !dataset.storagePath) {
-                throw new Error("Dataset not found or does not have a storage path.");
-            }
-
-            // Use cached dataset path to avoid redundant downloads
-            tempPath = await getCachedDatasetPath(datasetId, dataset.storagePath);
-
-            setStage("Analyzing dataset schema and metadata...");
-            
-            // Use cached metadata and schema in parallel
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const safeTempPath = tempPath!;
-            const [metadata, schema] = await Promise.all([
-                getCachedMetadata(
-                    datasetId,
-                    safeTempPath,
-                    () => buildDatasetMetadata(safeTempPath)
-                ),
-                getCachedSchema(
-                    safeTempPath,
-                    () => getDatasetSchema(safeTempPath)
-                )
-            ]);
 
             console.log("DATASET METADATA:", JSON.stringify(metadata, null, 2));
             console.log(

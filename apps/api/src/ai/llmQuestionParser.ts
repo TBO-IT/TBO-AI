@@ -83,7 +83,7 @@ JSON SCHEMA TO RETURN:
   "filters": [
     {
       "dimension": "string (canonical dimension key)",
-      "operator": "ILIKE" | "=", 
+      "operator": "ILIKE" | "=" | "<" | ">" | "<=" | ">=" | "!=", 
       "value": "string or number (the filter value)"
     }
   ],
@@ -102,7 +102,8 @@ RULES:
 6. "requiresNarrative" = true if the answer needs explanation. "requiresRecommendation" = true if the user asks 'what should I do', 'how to improve', or 'what action to take'.
 7. Be robust against typos. Map "marriot" → Marriott, "dubai" → Dubai, "31 45" → "31-45 days", etc.
 8. Output ONLY valid JSON. No markdown ticks, no preamble.
-9. If a question asks which entity (e.g. competitor, hotel, destination) is "hurting us the most", "driving the decline", or having the most negative impact, set requiresNarrative=true AND requiresRecommendation=true so that a full analytical report is generated.`;
+9. If a question asks which entity (e.g. competitor, hotel, destination) is "hurting us the most", "driving the decline", or having the most negative impact, set requiresNarrative=true AND requiresRecommendation=true so that a full analytical report is generated.
+10. If the user filters on a metric (e.g. "price gap > 5", "win rate below 50%"), add it to the filters array. Use the canonical metric key as the dimension, and the appropriate mathematical operator (<, >, <=, >=). Ensure the value is a number.`;
 
     const userPrompt = `Parse this user question into the JSON schema: "${question}"`;
 

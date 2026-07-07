@@ -58,13 +58,21 @@ export function buildFilterCondition(
     const isAbs = filter.dimension.startsWith("abs_");
     const cleanDimension = isAbs ? filter.dimension.slice(4) : filter.dimension;
 
-    const physicalCol = resolvePhysicalColumn(cleanDimension, schemaColumns);
+    let physicalCol = resolvePhysicalColumn(cleanDimension, schemaColumns);
 
     if (!physicalCol) {
-        console.warn(
-            `[FilterBuilder] Cannot resolve physical column for dimension '${filter.dimension}'. Skipping filter.`
-        );
-        return null;
+        // Fallback: If not in dimension registry, check if it's a direct column match.
+        // This seamlessly unlocks filtering on metric columns (e.g. price_diff_perc).
+        const directMatch = schemaColumns.find(c => c.toLowerCase() === cleanDimension.toLowerCase());
+        if (directMatch) {
+            physicalCol = directMatch;
+            console.log(`[FilterBuilder] Resolved '${filter.dimension}' to metric/direct column '${physicalCol}'`);
+        } else {
+            console.warn(
+                `[FilterBuilder] Cannot resolve physical column for dimension/metric '${filter.dimension}'. Skipping filter.`
+            );
+            return null;
+        }
     }
 
     const dim = getDimension(cleanDimension);
@@ -144,7 +152,12 @@ export function buildWhereClause(
             if (condition) conditions.push(condition);
         } else {
             // Multiple entity values for the same dimension — combine into a single IN clause!
-            const physicalCol = resolvePhysicalColumn(dim, schemaColumns);
+            let physicalCol = resolvePhysicalColumn(dim, schemaColumns);
+            if (!physicalCol) {
+                const directMatch = schemaColumns.find(c => c.toLowerCase() === dim.toLowerCase());
+                if (directMatch) physicalCol = directMatch;
+            }
+            
             if (physicalCol) {
                 const col = `"${physicalCol}"`;
                 const values = list
