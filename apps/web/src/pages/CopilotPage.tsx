@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Send, Sparkles, Cpu, Loader2, Database, ChevronDown, BookmarkPlus, Copy, Check, Trash2, Square } from "lucide-react";
 import { useChatHistory } from "../context/ChatHistoryContext";
 import type { ChatMessage } from "../context/ChatHistoryContext";
@@ -11,11 +11,14 @@ import { useAuth } from "@clerk/clerk-react";
 import { MarkdownRenderer } from "../components/shared/MarkdownRenderer";
 import { ExecutiveKPICard, RecommendationCard } from "../components/ExecutiveCards";
 import { DataVisualizer } from "../components/shared/DataVisualizer";
+import { Virtuoso } from "react-virtuoso";
 
 // ── Types ──
 
 // Re-export ChatMessage as Message alias for backwards compat within this file
 type Message = ChatMessage;
+
+
 
 // ── Formatted Text Renderer ──
 // Imported from ChatPage
@@ -209,6 +212,103 @@ function SectionCard({ title, content, defaultOpen = false }: { title: string; c
 }
 
 // ── Main Page ──
+
+const MessageItem = React.memo(({ 
+    msg, 
+    isThinking, 
+    isLastMessage,
+    isCopied,
+    isSaving,
+    onCopy,
+    onSaveReport
+}: { 
+    msg: Message;
+    isThinking: boolean;
+    isLastMessage: boolean;
+    isCopied: boolean;
+    isSaving: boolean;
+    onCopy: (id: string, text: string) => void;
+    onSaveReport: (msg: Message) => void;
+}) => {
+    return (
+        <div className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}>
+            {msg.role === "assistant" && (
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-brand-blue flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Cpu className="h-3.5 w-3.5 text-white" />
+                </div>
+            )}
+
+            <div className={cn(
+                "max-w-[85%]",
+                msg.role === "user"
+                    ? "rounded-2xl rounded-tr-md px-4 py-3 bg-slate-900 dark:bg-slate-800 text-white text-[13px]"
+                    : "flex-1 max-w-2xl"
+            )}>
+                {msg.role === "user" ? (
+                    <p>{msg.content}</p>
+                ) : msg.stage ? (
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
+                        <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />
+                        <span className="text-[12px] text-slate-400">{msg.stage}</span>
+                    </div>
+                ) : msg.sections ? (
+                    <div className="space-y-2">
+                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
+                        {SECTION_ORDER.map(section => {
+                            const content = msg.sections![section];
+                            if (!content) return null;
+                            const alwaysOpen = section === "PRIMARY TARGET" || section === "EXECUTIVE SUMMARY" || section === "KEY TAKEAWAY" || section === "LEADERSHIP MESSAGE";
+                            return (
+                                <SectionCard
+                                    key={section}
+                                    title={section}
+                                    content={content}
+                                    defaultOpen={alwaysOpen}
+                                />
+                            );
+                        })}
+                        <div className="flex items-center gap-2 pt-2">
+                            <button
+                                onClick={() => onCopy(msg.id, msg.content)}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                            >
+                                {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                                {isCopied ? "Copied" : "Copy"}
+                            </button>
+                            <button
+                                onClick={() => onSaveReport(msg)}
+                                disabled={isSaving}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                                {isSaving ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                    <BookmarkPlus className="h-3 w-3" />
+                                )}
+                                {isSaving ? "Saving..." : "Save Report"}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
+                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
+                        <MarkdownRenderer text={msg.content + (isThinking && isLastMessage ? " ▍" : "")} />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}, (prev, next) => {
+    return (
+        prev.msg.content === next.msg.content &&
+        prev.msg.stage === next.msg.stage &&
+        prev.isThinking === next.isThinking &&
+        prev.isLastMessage === next.isLastMessage &&
+        prev.isCopied === next.isCopied &&
+        prev.isSaving === next.isSaving
+    );
+});
+
 
 export default function CopilotPage() {
     const { getToken } = useAuth();
@@ -536,86 +636,27 @@ export default function CopilotPage() {
             </header>
 
             {/* Messages */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-6">
-                <div className="max-w-3xl mx-auto space-y-5">
-                    {messages.map((msg) => (
-                        <motion.div
-                            key={msg.id}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.25 }}
-                            className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
-                        >
-                            {msg.role === "assistant" && (
-                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-brand-blue flex items-center justify-center flex-shrink-0 mt-0.5">
-                                    <Cpu className="h-3.5 w-3.5 text-white" />
-                                </div>
-                            )}
-
-                            <div className={cn(
-                                "max-w-[85%]",
-                                msg.role === "user"
-                                    ? "rounded-2xl rounded-tr-md px-4 py-3 bg-slate-900 dark:bg-slate-800 text-white text-[13px]"
-                                    : "flex-1 max-w-2xl"
-                            )}>
-                                {msg.role === "user" ? (
-                                    <p>{msg.content}</p>
-                                ) : msg.stage ? (
-                                    <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
-                                        <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />
-                                        <span className="text-[12px] text-slate-400">{msg.stage}</span>
-                                    </div>
-                                ) : msg.sections ? (
-                                    /* Structured executive response */
-                                    <div className="space-y-2">
-                                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
-                                        {SECTION_ORDER.map(section => {
-                                            const content = msg.sections![section];
-                                            if (!content) return null;
-                                            const alwaysOpen = section === "PRIMARY TARGET" || section === "EXECUTIVE SUMMARY" || section === "KEY TAKEAWAY" || section === "LEADERSHIP MESSAGE";
-                                            return (
-                                                <SectionCard
-                                                    key={section}
-                                                    title={section}
-                                                    content={content}
-                                                    defaultOpen={alwaysOpen}
-                                                />
-                                            );
-                                        })}
-                                        {/* Actions */}
-                                        <div className="flex items-center gap-2 pt-2">
-                                            <button
-                                                onClick={() => handleCopy(msg.id, msg.content)}
-                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                                            >
-                                                {copiedId === msg.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                                                {copiedId === msg.id ? "Copied" : "Copy"}
-                                            </button>
-                                            <button
-                                                onClick={() => handleSaveReport(msg)}
-                                                disabled={savingReportId === msg.id}
-                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer disabled:opacity-50"
-                                            >
-                                                {savingReportId === msg.id ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                ) : (
-                                                    <BookmarkPlus className="h-3 w-3" />
-                                                )}
-                                                {savingReportId === msg.id ? "Saving..." : "Save Report"}
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    /* Plain text fallback */
-                                    <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80">
-                                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
-                                        <MarkdownRenderer text={msg.content + (isThinking && msg.id === messages[messages.length - 1].id ? " ▍" : "")} />
-                                    </div>
-                                )}
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
+            <div className="flex-1 overflow-y-auto px-5 py-6">
+               <div className="flex-1 w-full max-w-4xl mx-auto h-full px-2">
+                <Virtuoso
+                    data={messages}
+                    initialTopMostItemIndex={messages.length > 0 ? messages.length - 1 : 0}
+                    followOutput="smooth"
+                    itemContent={(index, msg) => (
+                        <div className="py-2.5">
+                            <MessageItem 
+                                msg={msg}
+                                isThinking={isThinking}
+                                isLastMessage={index === messages.length - 1}
+                                isCopied={copiedId === msg.id}
+                                isSaving={savingReportId === msg.id}
+                                onCopy={handleCopy}
+                                onSaveReport={handleSaveReport}
+                            />
+                        </div>
+                    )}
+                />
+               </div>
             </div>
 
             {/* Bottom input */}

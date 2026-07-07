@@ -15,6 +15,51 @@ interface Message {
 
 import { MarkdownRenderer } from "../components/shared/MarkdownRenderer";
 import { DataVisualizer } from "../components/shared/DataVisualizer";
+import React from "react";
+import { Virtuoso } from "react-virtuoso";
+
+const MessageItem = React.memo(({ msg }: { msg: Message }) => {
+  return (
+    <div
+      className={`flex space-x-4 ${msg.role === "user" ? "justify-end" : "justify-start"} py-3`}
+    >
+      {msg.role === "assistant" && (
+        <div className="h-8 w-8 rounded-lg bg-brand-blue text-white flex items-center justify-center shadow-sm flex-shrink-0 mt-0.5">
+          <Cpu className="h-4 w-4" />
+        </div>
+      )}
+      <div
+        className={`rounded-2xl px-5 py-3.5 text-sm shadow-sm max-w-[85%] leading-relaxed ${
+          msg.role === "user"
+            ? "bg-slate-900 dark:bg-slate-800 text-white rounded-tr-none"
+            : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none"
+        }`}
+      >
+        {msg.stage ? (
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-4 w-4 text-brand-blue animate-spin" />
+            <span className="text-slate-500">{msg.stage}</span>
+          </div>
+        ) : (
+          <>
+            {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
+            <MarkdownRenderer text={msg.content} />
+          </>
+        )}
+        <span className="text-[10px] block mt-1.5 text-right text-slate-400 dark:text-slate-500">
+          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      </div>
+      {msg.role === "user" && (
+        <div className="h-8 w-8 rounded-lg bg-slate-800 dark:bg-slate-750 text-slate-200 dark:text-slate-300 flex items-center justify-center shadow-sm flex-shrink-0 mt-0.5 font-semibold text-xs">
+          ME
+        </div>
+      )}
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  return prevProps.msg.content === nextProps.msg.content && prevProps.msg.stage === nextProps.msg.stage;
+});
 
 export default function ChatPage() {
   const { getToken } = useAuth();
@@ -285,45 +330,13 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto space-y-6">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex space-x-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  {msg.role === "assistant" && (
-                    <div className="h-8 w-8 rounded-lg bg-brand-blue text-white flex items-center justify-center shadow-sm flex-shrink-0 mt-0.5">
-                      <Cpu className="h-4 w-4" />
-                    </div>
-                  )}
-                  <div
-                    className={`rounded-2xl px-5 py-3.5 text-sm shadow-sm max-w-[85%] leading-relaxed ${msg.role === "user"
-                      ? "bg-slate-900 dark:bg-slate-800 text-white rounded-tr-none"
-                      : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none"
-                      }`}
-                  >
-                    {msg.stage ? (
-                      <div className="flex items-center space-x-2">
-                        <Loader2 className="h-4 w-4 text-brand-blue animate-spin" />
-                        <span className="text-slate-500">{msg.stage}</span>
-                      </div>
-                    ) : (
-                      <>
-                        {msg.dataPayload && <DataVisualizer payload={msg.dataPayload} />}
-                        <MarkdownRenderer text={msg.content} />
-                      </>
-                    )}
-                    <span className="text-[10px] block mt-1.5 text-right text-slate-400 dark:text-slate-500">
-                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  {msg.role === "user" && (
-                    <div className="h-8 w-8 rounded-lg bg-slate-800 dark:bg-slate-750 text-slate-200 dark:text-slate-300 flex items-center justify-center shadow-sm flex-shrink-0 mt-0.5 font-semibold text-xs">
-                      ME
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="flex-1 w-full max-w-4xl mx-auto h-full px-2">
+              <Virtuoso
+                data={messages}
+                initialTopMostItemIndex={messages.length > 0 ? messages.length - 1 : 0}
+                followOutput="smooth"
+                itemContent={(_, msg) => <MessageItem msg={msg} />}
+              />
             </div>
           )}
         </div>
