@@ -156,7 +156,7 @@ export default function ChatPage() {
 
               rawContent = finalAns;
               setMessages(prev => prev.map(msg =>
-                msg.id === assistantId ? { ...msg, content: rawContent, stage: undefined } : msg
+                msg.id === assistantId ? { ...msg, content: rawContent, stage: undefined, dataPayload: data.response || data } : msg
               ));
               break;
             } else if (eventType === "error") {

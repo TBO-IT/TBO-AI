@@ -353,7 +353,7 @@ export default function CopilotPage() {
 
                             rawContent = finalAns;
                             currentSections = parseExecutiveResponse(rawContent) || undefined;
-                            updateMessageContent(assistantId, rawContent, currentSections, undefined);
+                            updateMessageContent(assistantId, rawContent, currentSections, undefined, data.response || data);
                             break;
                         } else if (eventType === "error") {
                             throw new Error(data.message || "Streaming error");
