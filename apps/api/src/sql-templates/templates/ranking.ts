@@ -1,4 +1,4 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse, ChartDefinition } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
 
@@ -8,6 +8,14 @@ function getMetricSql(metric: string): string {
     // default to win_rate
     return "(COUNT(CASE WHEN \"Competitive Status\" = 'Winning' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0))";
 }
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const rankingTemplates: TemplateDefinition[] = [
     // T26. Top-N destinations by any metric
@@ -33,12 +41,25 @@ export const rankingTemplates: TemplateDefinition[] = [
             `,
             params: [slots.n]
         }),
-        formatAnswer: (rows, slots) => {
-            if (rows.length === 0) return `No ranking data found for destinations by ${slots.metric}.`;
-            return `Top ${slots.n} destinations by ${slots.metric}:\n\n` +
-                   `| Destination | ${slots.metric} | Volume |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.destination}** | ${typeof r.metric_val === 'number' ? r.metric_val.toFixed(2) : r.metric_val} | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No ranking data found for destinations by ${slots.metric}.` };
+            
+            const chartData = rows.map((r: any) => ({
+                name: r.destination,
+                value: Number(typeof r.metric_val === 'number' ? r.metric_val.toFixed(2) : r.metric_val)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: slots.metric, valueFormat: "number" }
+            };
+
+            return {
+                answer: `Top ${slots.n} destinations by ${slots.metric}:`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -69,14 +90,15 @@ export const rankingTemplates: TemplateDefinition[] = [
                 params: [slots.n || 10]
             };
         },
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const m = slots.metric || 'win_rate';
             const n = slots.n || 10;
-            if (rows.length === 0) return `No ranking data found for hotels by ${m}.`;
-            return `Top ${n} hotels by ${m}:\n\n` +
-                   `| Hotel | ${m} | Volume |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.tbo_hotelname}** | ${typeof r.metric_val === 'number' ? r.metric_val.toFixed(2) : r.metric_val} | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+            if (rows.length === 0) return { answer: `No ranking data found for hotels by ${m}.` };
+            
+            return {
+                answer: `Top ${n} hotels by ${m}:`,
+                table: buildTable(rows) // No chart for hotels usually
+            };
         }
     },
 
@@ -108,14 +130,27 @@ export const rankingTemplates: TemplateDefinition[] = [
                 params: [slots.n || 10]
             };
         },
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const m = slots.metric || 'win_rate';
             const n = slots.n || 10;
-            if (rows.length === 0) return `No bottom ranking data found.`;
-            return `Bottom ${n} hotels by ${m}:\n\n` +
-                   `| Hotel | ${m} | Volume |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.tbo_hotelname}** | ${typeof r.metric_val === 'number' ? r.metric_val.toFixed(2) : r.metric_val} | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+            if (rows.length === 0) return { answer: `No bottom ranking data found.` };
+            
+            const chartData = rows.map((r: any) => ({
+                name: r.tbo_hotelname,
+                value: Number(typeof r.metric_val === 'number' ? r.metric_val.toFixed(2) : r.metric_val)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: m, valueFormat: "number" }
+            };
+
+            return {
+                answer: `Bottom ${n} performers by ${m}:`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     }
 ];

@@ -96,10 +96,10 @@ export async function getCachedSchema(
     const cacheKey = buildSchemaCacheKey(csvPath);
 
     try {
-        const cached = await redis.get<string>(cacheKey);
+        const cached = await redis.get<any>(cacheKey);
         if (cached) {
             console.log(`[SCHEMA_CACHE] HIT | path=${csvPath.slice(-30)}`);
-            return JSON.parse(cached);
+            return cached;
         }
     } catch (error) {
         console.warn(`[SCHEMA_CACHE] Redis error: ${error}`);
@@ -108,7 +108,7 @@ export async function getCachedSchema(
     const schema = await fetchSchema();
 
     try {
-        await redis.setex(cacheKey, SCHEMA_CACHE_TTL, JSON.stringify(schema));
+        await redis.setex(cacheKey, SCHEMA_CACHE_TTL, schema);
     } catch (error) {
         console.warn(`[SCHEMA_CACHE] Failed to cache: ${error}`);
     }
@@ -128,10 +128,10 @@ export async function getCachedMetadata(
     const cacheKey = buildMetadataCacheKey(datasetId);
 
     try {
-        const cached = await redis.get<string>(cacheKey);
+        const cached = await redis.get<any>(cacheKey);
         if (cached) {
             console.log(`[METADATA_CACHE] HIT | datasetId=${datasetId}`);
-            return JSON.parse(cached);
+            return cached;
         }
     } catch (error) {
         console.warn(`[METADATA_CACHE] Redis error: ${error}`);
@@ -140,7 +140,7 @@ export async function getCachedMetadata(
     const metadata = await fetchMetadata();
 
     try {
-        await redis.setex(cacheKey, DATASET_CACHE_TTL, JSON.stringify(metadata));
+        await redis.setex(cacheKey, DATASET_CACHE_TTL, metadata);
     } catch (error) {
         console.warn(`[METADATA_CACHE] Failed to cache: ${error}`);
     }

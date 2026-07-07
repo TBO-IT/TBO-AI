@@ -1,6 +1,14 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const dataMetaTemplates: TemplateDefinition[] = [
     // T34. Data freshness
@@ -20,10 +28,13 @@ export const dataMetaTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
+        formatAnswer: (rows): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || !r.last_scraped) return `I couldn't determine the most recent scrape date.`;
-            return `The most recent scrape date in this dataset is **${r.last_scraped}**.`;
+            if (!r || !r.last_scraped) return { answer: `I couldn't determine the most recent scrape date.` };
+            return {
+                answer: `The most recent scrape date in this dataset is **${r.last_scraped}**.`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -47,10 +58,13 @@ export const dataMetaTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No destinations found in the dataset.`;
-            return `We currently track ${rows.length} top destinations. Here are some of the most tracked:\n\n` +
-                   rows.slice(0, 15).map((r: any) => `- **${r.destination}** (${r.volume.toLocaleString('en-US')} offers)`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No destinations found in the dataset.` };
+            return {
+                answer: `We currently track ${rows.length} top destinations. Here are some of the most tracked:\n\n` +
+                       rows.slice(0, 15).map((r: any) => `- **${r.destination}** (${r.volume.toLocaleString('en-US')} offers)`).join("\n"),
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -74,12 +88,15 @@ export const dataMetaTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
+        formatAnswer: (rows): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r) return `I couldn't determine the date ranges.`;
-            return `**Dataset Date Ranges**:\n` +
-                   `- **Check-in dates**: From ${r.first_checkin || 'Unknown'} to ${r.last_checkin || 'Unknown'}\n` +
-                   `- **Scraped dates**: From ${r.first_scraped || 'Unknown'} to ${r.last_scraped || 'Unknown'}`;
+            if (!r) return { answer: `I couldn't determine the date ranges.` };
+            return {
+                answer: `**Dataset Date Ranges**:\n` +
+                       `- **Check-in dates**: From ${r.first_checkin || 'Unknown'} to ${r.last_checkin || 'Unknown'}\n` +
+                       `- **Scraped dates**: From ${r.first_scraped || 'Unknown'} to ${r.last_scraped || 'Unknown'}`,
+                table: buildTable(rows)
+            };
         }
     }
 ];

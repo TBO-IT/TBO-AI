@@ -57,7 +57,19 @@ export async function routeTier0Query(
 
         const rows = await executeQuery(finalSql, tempPath);
         
-        const answer = template.formatAnswer(rows as any[], resolvedSlots);
+        const formatResult = template.formatAnswer(rows as any[], resolvedSlots);
+        
+        let answer = "";
+        let chart = undefined;
+        let table = undefined;
+
+        if (typeof formatResult === "string") {
+            answer = formatResult;
+        } else {
+            answer = formatResult.answer;
+            chart = formatResult.chart;
+            table = formatResult.table;
+        }
 
         const latency = performance.now() - startTime;
         
@@ -71,6 +83,8 @@ export async function routeTier0Query(
         return {
             handled: true,
             response: answer,
+            chart: chart,
+            table: table,
             results: rows,
             template_id: template.id,
             confidence: lowestConfidence,

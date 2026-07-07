@@ -1,6 +1,14 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse, ChartDefinition } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const comparativeTemplates: TemplateDefinition[] = [
     // T29. Destination vs destination
@@ -11,8 +19,6 @@ export const comparativeTemplates: TemplateDefinition[] = [
             /compare (?<destination_a>[a-z\s]+) and (?<destination_b>[a-z\s]+)/
         ],
         slots: ["destination_a", "destination_b"], // Requires new slot logic or just let destination matching happen (might need 2 slots)
-        // Wait, SlotResolver might not easily support destination_a and destination_b unless defined. 
-        // We will just do a simple IN query.
         generateSql: (slots) => ({
             query: `
                 SELECT 
@@ -26,12 +32,25 @@ export const comparativeTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination_a, slots.destination_b]
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No comparison data found.`;
-            return `Here is the comparison:\n\n` +
-                   `| Destination | Win Rate | Avg Price Diff | Volume |\n` +
-                   `|---|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.destination}** | ${r.win_rate !== null ? r.win_rate.toFixed(1) : 0}% | ${r.avg_diff !== null ? r.avg_diff.toFixed(2) : 0}% | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No comparison data found.` };
+            
+            const chartData = rows.map((r: any) => ({
+                name: r.destination,
+                value: Number(r.win_rate !== null ? r.win_rate.toFixed(1) : 0)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Here is the comparison:`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -55,12 +74,25 @@ export const comparativeTemplates: TemplateDefinition[] = [
             `,
             params: [slots.chain_a, slots.chain_b]
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No comparison data found for these chains.`;
-            return `Here is the comparison:\n\n` +
-                   `| Chain | Win Rate | Avg Price Diff | Volume |\n` +
-                   `|---|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.tbo_chainname}** | ${r.win_rate !== null ? r.win_rate.toFixed(1) : 0}% | ${r.avg_diff !== null ? r.avg_diff.toFixed(2) : 0}% | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No comparison data found for these chains.` };
+            
+            const chartData = rows.map((r: any) => ({
+                name: r.tbo_chainname,
+                value: Number(r.win_rate !== null ? r.win_rate.toFixed(1) : 0)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Here is the comparison:`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -85,12 +117,25 @@ export const comparativeTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No competitor comparison data found.`;
-            return `Competitor Comparison:\n\n` +
-                   `| Competitor | Win Rate | Avg Price Diff | Volume |\n` +
-                   `|---|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.thirdparty}** | ${r.win_rate !== null ? r.win_rate.toFixed(1) : 0}% | ${r.avg_diff !== null ? r.avg_diff.toFixed(2) : 0}% | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No competitor comparison data found.` };
+            
+            const chartData = rows.map((r: any) => ({
+                name: r.thirdparty,
+                value: Number(r.win_rate !== null ? r.win_rate.toFixed(1) : 0)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Competitor Comparison:`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     }
 ];

@@ -118,6 +118,8 @@ export class ChatOrchestrator {
                 }
                 return {
                     answer: tier0Result.response,
+                    chart: tier0Result.chart,
+                    table: tier0Result.table,
                     sql: null, 
                     results: tier0Result.results || [], 
                     responseSource: "ANALYTICS",

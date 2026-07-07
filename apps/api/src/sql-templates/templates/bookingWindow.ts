@@ -1,6 +1,14 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse, ChartDefinition } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const bookingWindowTemplates: TemplateDefinition[] = [
     // T21. Performance by booking window
@@ -27,12 +35,25 @@ export const bookingWindowTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No APW performance data found.`;
-            return `Performance breakdown by booking window (APW):\n\n` +
-                   `| APW Bucket | Win Rate | Total Offers |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.apw_bucket_new}** | ${r.win_rate !== null ? r.win_rate.toFixed(1) : 0}% | ${r.total_offers.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No APW performance data found.` };
+            
+            const chartData = rows.map((r: any) => ({
+                name: r.apw_bucket_new || "Unknown",
+                value: Number(r.win_rate !== null ? r.win_rate.toFixed(1) : 0)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Performance breakdown by booking window (APW):`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -58,12 +79,27 @@ export const bookingWindowTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No statistically significant APW performance data found.`;
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No statistically significant APW performance data found.` };
             const best = rows[0];
             const worst = rows[rows.length - 1];
-            return `We perform **best** in the **${best.apw_bucket_new}** booking window with a win rate of ${best.win_rate.toFixed(1)}%.\n` +
-                   `We perform **worst** in the **${worst.apw_bucket_new}** booking window with a win rate of ${worst.win_rate.toFixed(1)}%.`;
+
+            const chartData = rows.map((r: any) => ({
+                name: r.apw_bucket_new || "Unknown",
+                value: Number(r.win_rate !== null ? r.win_rate.toFixed(1) : 0)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `We perform **best** in the **${best.apw_bucket_new}** booking window with a win rate of ${best.win_rate.toFixed(1)}%.\nWe perform **worst** in the **${worst.apw_bucket_new}** booking window with a win rate of ${worst.win_rate.toFixed(1)}%.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     }
 ];

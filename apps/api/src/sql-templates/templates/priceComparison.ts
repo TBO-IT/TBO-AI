@@ -1,8 +1,44 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse, ChartDefinition } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
 
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
+
 export const priceComparisonTemplates: TemplateDefinition[] = [
+    // T13. Median / distribution of price difference
+    {
+        id: "t13_median_price_diff",
+        patterns: [
+            /what.*s the typical price gap in (?<destination>[a-z\s]+)/,
+            /median price difference in (?<destination>[a-z\s]+)/
+        ],
+        slots: ["destination"],
+        generateSql: (slots) => ({
+            query: `
+                SELECT 
+                    median(TRY_CAST(price_diff_perc AS DOUBLE)) as median_diff, 
+                    COUNT(*) as volume
+                FROM data_table
+                WHERE ${BASE_WHERE} AND UPPER(destination) = UPPER(?) AND price_diff_perc IS NOT NULL
+            `,
+            params: [slots.destination]
+        }),
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            const r = rows[0];
+            if (!r || r.volume === 0 || r.median_diff === null) return { answer: `No median price gap data found for ${slots.destination}.` };
+            return {
+                answer: `The median price difference in ${slots.destination} is ${r.median_diff.toFixed(2)}% (based on ${r.volume.toLocaleString('en-US')} offers).`,
+                table: buildTable(rows)
+            };
+        }
+    },
+
     // T09. Average price difference
     {
         id: "t09_avg_price_diff",
@@ -21,10 +57,13 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.volume === 0 || r.avg_diff === null) return `No price gap data found for ${slots.destination}.`;
-            return `The average price difference in ${slots.destination} is ${r.avg_diff.toFixed(2)}% (based on ${r.volume.toLocaleString('en-US')} offers).`;
+            if (!r || r.volume === 0 || r.avg_diff === null) return { answer: `No price gap data found for ${slots.destination}.` };
+            return {
+                answer: `The average price difference in ${slots.destination} is ${r.avg_diff.toFixed(2)}% (based on ${r.volume.toLocaleString('en-US')} offers).`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -53,12 +92,25 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No statistically significant price gap data found.`;
-            return `Here is the average price gap across our top destinations:\n\n` +
-                   `| Destination | Avg Price Diff (%) | Volume |\n` +
-                   `|---|---|---|\n` +
-                   rows.slice(0, 10).map((r: any) => `| **${r.destination}** | ${r.avg_diff.toFixed(2)}% | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No statistically significant price gap data found.` };
+            
+            const chartData = rows.slice(0, 10).map((r: any) => ({
+                name: r.destination,
+                value: Number(r.avg_diff.toFixed(2))
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Avg Price Diff", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Here is the average price gap across our top destinations.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -90,10 +142,13 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination, slots.n]
         }),
-        formatAnswer: (rows, slots) => {
-            if (rows.length === 0) return `No hotels with significant data found in ${slots.destination}.`;
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No hotels with significant data found in ${slots.destination}.` };
             const list = rows.map((r: any, i: number) => `| ${i + 1}. **${r.tbo_hotelname}** | ${r.avg_diff.toFixed(2)}% | ${r.volume} |`).join("\n");
-            return `Top hotels in ${slots.destination} by average price difference:\n\n| Hotel | Avg Price Diff (%) | Volume |\n|---|---|---|\n${list}`;
+            return {
+                answer: `Top hotels in ${slots.destination} by average price difference:\n\n| Hotel | Avg Price Diff (%) | Volume |\n|---|---|---|\n${list}`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -113,35 +168,13 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             `,
             params: [slots.thirdparty, slots.destination]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.volume === 0 || r.avg_diff === null) return `No price gap data found against ${slots.thirdparty} in ${slots.destination}.`;
-            return `Against ${slots.thirdparty} in ${slots.destination}, our average price difference is ${r.avg_diff.toFixed(2)}% (based on ${r.volume.toLocaleString('en-US')} offers).`;
-        }
-    },
-
-    // T13. Median / distribution of price difference
-    {
-        id: "t13_median_price_diff",
-        patterns: [
-            /what.*s the typical price gap in (?<destination>[a-z\s]+)/,
-            /median price difference in (?<destination>[a-z\s]+)/
-        ],
-        slots: ["destination"],
-        generateSql: (slots) => ({
-            query: `
-                SELECT 
-                    median(TRY_CAST(price_diff_perc AS DOUBLE)) as median_diff, 
-                    COUNT(*) as volume
-                FROM data_table
-                WHERE ${BASE_WHERE} AND UPPER(destination) = UPPER(?) AND price_diff_perc IS NOT NULL
-            `,
-            params: [slots.destination]
-        }),
-        formatAnswer: (rows, slots) => {
-            const r = rows[0];
-            if (!r || r.volume === 0 || r.median_diff === null) return `No median price gap data found for ${slots.destination}.`;
-            return `The median price difference in ${slots.destination} is ${r.median_diff.toFixed(2)}% (based on ${r.volume.toLocaleString('en-US')} offers).`;
+            if (!r || r.volume === 0 || r.avg_diff === null) return { answer: `No price gap data found against ${slots.thirdparty} in ${slots.destination}.` };
+            return {
+                answer: `Against ${slots.thirdparty} in ${slots.destination}, our average price difference is ${r.avg_diff.toFixed(2)}% (based on ${r.volume.toLocaleString('en-US')} offers).`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -167,12 +200,26 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination]
         }),
-        formatAnswer: (rows, slots) => {
-            if (rows.length === 0) return `No APW price data found for ${slots.destination}.`;
-            return `Price difference by booking window (APW) in ${slots.destination}:\n\n` +
-                   `| APW Bucket | Avg Price Diff (%) | Volume |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.apw_bucket_new || 'Unknown'}** | ${r.avg_diff !== null ? r.avg_diff.toFixed(2) : 'N/A'}% | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No APW price data found for ${slots.destination}.` };
+            
+            // Optionally, we could map APW buckets to sort them naturally here, but using the DB sort is fine.
+            const chartData = rows.map((r: any) => ({
+                name: r.apw_bucket_new || 'Unknown',
+                value: Number(r.avg_diff.toFixed(2))
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Avg Price Diff", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Price difference by booking window (APW) in ${slots.destination}.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -199,14 +246,17 @@ export const priceComparisonTemplates: TemplateDefinition[] = [
             `,
             params: [slots.hotel]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.volume === 0) return `No pricing data found for hotel: ${slots.hotel}.`;
-            return `Pricing for **${r.tbo_hotelname}**:\n` +
-                   `- **Avg TBO Price**: $${r.avg_tbo_price.toFixed(2)}\n` +
-                   `- **Avg Competitor Price**: $${r.avg_tp_price.toFixed(2)}\n` +
-                   `- **Avg Price Difference**: ${r.avg_diff.toFixed(2)}%\n` +
-                   `- **Offers Compared**: ${r.volume.toLocaleString('en-US')}`;
+            if (!r || r.volume === 0) return { answer: `No pricing data found for hotel: ${slots.hotel}.` };
+            return {
+                answer: `Pricing for **${r.tbo_hotelname}**:\n` +
+                       `- **Avg TBO Price**: $${r.avg_tbo_price.toFixed(2)}\n` +
+                       `- **Avg Competitor Price**: $${r.avg_tp_price.toFixed(2)}\n` +
+                       `- **Avg Price Difference**: ${r.avg_diff.toFixed(2)}%\n` +
+                       `- **Offers Compared**: ${r.volume.toLocaleString('en-US')}`,
+                table: buildTable(rows)
+            };
         }
     }
 ];

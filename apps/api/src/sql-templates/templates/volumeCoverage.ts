@@ -1,6 +1,14 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse, ChartDefinition } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const volumeCoverageTemplates: TemplateDefinition[] = [
     // T16. Total hotels/offers scraped
@@ -22,10 +30,13 @@ export const volumeCoverageTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.hotel_count === 0) return `No data found for ${slots.destination}.`;
-            return `We have scraped ${r.hotel_count.toLocaleString('en-US')} unique hotels across ${r.offer_count.toLocaleString('en-US')} offers in ${slots.destination}.`;
+            if (!r || r.hotel_count === 0) return { answer: `No data found for ${slots.destination}.` };
+            return {
+                answer: `We have scraped ${r.hotel_count.toLocaleString('en-US')} unique hotels across ${r.offer_count.toLocaleString('en-US')} offers in ${slots.destination}.`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -49,12 +60,25 @@ export const volumeCoverageTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No coverage data found.`;
-            return `Here is our data coverage across top destinations:\n\n` +
-                   `| Destination | Unique Hotels | Total Offers |\n` +
-                   `|---|---|---|\n` +
-                   rows.slice(0, 10).map((r: any) => `| **${r.destination}** | ${r.hotel_count.toLocaleString('en-US')} | ${r.offer_count.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No coverage data found.` };
+            
+            const chartData = rows.slice(0, 10).map((r: any) => ({
+                name: r.destination,
+                value: Number(r.offer_count)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Total Offers", valueFormat: "number" }
+            };
+
+            return {
+                answer: `Here is our data coverage across top destinations.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -76,12 +100,15 @@ export const volumeCoverageTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No competitor coverage data found.`;
-            return `Coverage breakdown by competitor:\n\n` +
-                   `| Competitor | Unique Hotels | Total Offers |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.thirdparty}** | ${r.hotel_count.toLocaleString('en-US')} | ${r.offer_count.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No competitor coverage data found.` };
+            return {
+                answer: `Coverage breakdown by competitor:\n\n` +
+                       `| Competitor | Unique Hotels | Total Offers |\n` +
+                       `|---|---|---|\n` +
+                       rows.map((r: any) => `| **${r.thirdparty}** | ${r.hotel_count.toLocaleString('en-US')} | ${r.offer_count.toLocaleString('en-US')} |`).join("\n"),
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -107,12 +134,33 @@ export const volumeCoverageTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No chain coverage data found.`;
-            return `Chain coverage breakdown:\n\n` +
-                   `| Chain / Type | Unique Hotels | Total Offers |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => `| **${r.chain_type}** | ${r.hotel_count.toLocaleString('en-US')} | ${r.offer_count.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No chain coverage data found.` };
+            
+            // Pie chart logic: > 6 slices gets collapsed into "Other"
+            let chartData: any[] = [];
+            if (rows.length <= 6) {
+                chartData = rows.map((r: any) => ({ name: r.chain_type, value: Number(r.offer_count) }));
+            } else {
+                chartData = rows.slice(0, 5).map((r: any) => ({ name: r.chain_type, value: Number(r.offer_count) }));
+                const otherValue = rows.slice(5).reduce((sum: number, r: any) => sum + Number(r.offer_count), 0);
+                chartData.push({ name: "Other", value: otherValue });
+            }
+
+            const chart: ChartDefinition = {
+                type: "pie",
+                data: chartData,
+                config: { valueLabel: "Total Offers", valueFormat: "number" }
+            };
+
+            return {
+                answer: `Chain coverage breakdown:\n\n` +
+                       `| Chain / Type | Unique Hotels | Total Offers |\n` +
+                       `|---|---|---|\n` +
+                       rows.map((r: any) => `| **${r.chain_type}** | ${r.hotel_count.toLocaleString('en-US')} | ${r.offer_count.toLocaleString('en-US')} |`).join("\n"),
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -143,12 +191,25 @@ export const volumeCoverageTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No fuzzy matching score data found.`;
-            return `Fuzzy match quality distribution:\n\n` +
-                   `| Quality Bucket | Volume |\n` +
-                   `|---|---|\n` +
-                   rows.map((r: any) => `| **${r.match_quality}** | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No fuzzy matching score data found.` };
+            
+            const chartData = rows.map((r: any) => ({
+                name: r.match_quality,
+                value: Number(r.volume)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Volume", valueFormat: "number" }
+            };
+
+            return {
+                answer: `Fuzzy match quality distribution.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     }
 ];

@@ -1,6 +1,14 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse, ChartDefinition } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const timeTrendTemplates: TemplateDefinition[] = [
     // T24. Trend over date range
@@ -24,15 +32,26 @@ export const timeTrendTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination]
         }),
-        formatAnswer: (rows, slots) => {
-            if (rows.length === 0) return `No trend data found for ${slots.destination}.`;
-            return `Here is the daily win rate trend for ${slots.destination}:\n\n` +
-                   `| Date | Win Rate | Volume |\n` +
-                   `|---|---|---|\n` +
-                   rows.map((r: any) => {
-                       const d = r.day_date ? new Date(r.day_date).toISOString().substring(0,10) : 'Unknown';
-                       return `| ${d} | ${r.win_rate !== null ? r.win_rate.toFixed(1) : 0}% | ${r.total_offers.toLocaleString('en-US')} |`;
-                   }).join("\n");
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            const validRows = rows.filter(r => r.day_date);
+            if (validRows.length === 0) return { answer: `No trend data found for ${slots.destination}.` };
+            
+            const chartData = validRows.map((r: any) => ({
+                name: new Date(r.day_date).toISOString().substring(0,10),
+                value: Number(r.win_rate !== null ? r.win_rate.toFixed(1) : 0)
+            }));
+
+            const chart: ChartDefinition = {
+                type: "line",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Here is the daily win rate trend for ${slots.destination}:`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -54,10 +73,13 @@ export const timeTrendTemplates: TemplateDefinition[] = [
             `,
             params: [`%${slots.date}%`]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.total_offers === 0) return `No data found for the date ${slots.date}.`;
-            return `As of ${slots.date}, our overall win rate was ${r.win_rate.toFixed(1)}% (based on ${r.total_offers.toLocaleString('en-US')} offers).`;
+            if (!r || r.total_offers === 0) return { answer: `No data found for the date ${slots.date}.` };
+            return {
+                answer: `As of ${slots.date}, our overall win rate was ${r.win_rate.toFixed(1)}% (based on ${r.total_offers.toLocaleString('en-US')} offers).`,
+                table: buildTable(rows)
+            };
         }
     }
 ];

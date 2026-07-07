@@ -1,13 +1,28 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { TrendingUp, Activity, AlertTriangle } from "lucide-react";
+import { ChartRenderer } from "../charts/ChartRenderer";
+import { TableRenderer } from "../charts/TableRenderer";
 
 export function DataVisualizer({ payload }: { payload: any }) {
-    if (!payload || !payload.queryResults || payload.queryResults.length === 0) {
+    if (!payload) return null;
+
+    const { queryResults, executivePack, chart, table } = payload;
+    
+    // Tier-0 Structured Response Handling
+    if (chart || table) {
+        return (
+            <div className="my-4 space-y-4">
+                {chart && <ChartRenderer chart={chart} />}
+                {table && <TableRenderer table={table} />}
+            </div>
+        );
+    }
+
+    // Legacy Fallback for LLM Responses
+    if (!queryResults || queryResults.length === 0) {
         return null;
     }
 
-    const { queryResults, executivePack } = payload;
-    
     // Find numeric columns and categorical columns
     const keys = Object.keys(queryResults[0] || {});
     const numericKeys = keys.filter(k => typeof queryResults[0][k] === 'number');
@@ -76,7 +91,7 @@ export function DataVisualizer({ payload }: { payload: any }) {
                             />
                             <Bar dataKey={yKey} radius={[4, 4, 0, 0]}>
                                 {chartData.map((_: any, index: number) => (
-                                    <Cell key={`cell-${index}`} fill={index === 0 ? "#FF5A1F" : "#1e293b"} />
+                                    <Cell key={\`cell-\${index}\`} fill={index === 0 ? "#FF5A1F" : "#1e293b"} />
                                 ))}
                             </Bar>
                         </BarChart>

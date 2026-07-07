@@ -1,6 +1,14 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const entityLookupTemplates: TemplateDefinition[] = [
     // T32. Single hotel full profile
@@ -26,15 +34,18 @@ export const entityLookupTemplates: TemplateDefinition[] = [
             `,
             params: [slots.hotel]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.volume === 0) return `No profile data found for hotel: ${slots.hotel}.`;
-            return `**Profile for ${r.tbo_hotelname}**:\n` +
-                   `- **Chain**: ${r.chain || 'Independent'}\n` +
-                   `- **Win Rate**: ${r.win_rate !== null ? r.win_rate.toFixed(1) : 0}%\n` +
-                   `- **Avg Price Diff**: ${r.avg_diff !== null ? r.avg_diff.toFixed(2) : 0}%\n` +
-                   `- **Total Comparisons**: ${r.volume.toLocaleString('en-US')}\n` +
-                   `- **Last Scraped**: ${r.last_scraped || 'Unknown'}`;
+            if (!r || r.volume === 0) return { answer: `No profile data found for hotel: ${slots.hotel}.` };
+            return {
+                answer: `**Profile for ${r.tbo_hotelname}**:\n` +
+                       `- **Chain**: ${r.chain || 'Independent'}\n` +
+                       `- **Win Rate**: ${r.win_rate !== null ? r.win_rate.toFixed(1) : 0}%\n` +
+                       `- **Avg Price Diff**: ${r.avg_diff !== null ? r.avg_diff.toFixed(2) : 0}%\n` +
+                       `- **Total Comparisons**: ${r.volume.toLocaleString('en-US')}\n` +
+                       `- **Last Scraped**: ${r.last_scraped || 'Unknown'}`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -68,12 +79,15 @@ export const entityLookupTemplates: TemplateDefinition[] = [
                 params: [slots.destination, slots.chain]
             };
         },
-        formatAnswer: (rows, slots) => {
-            if (rows.length === 0) return `No ${slots.status || 'matching'} ${slots.chain} hotels found in ${slots.destination}.`;
-            return `Matching hotels:\n\n` +
-                   `| Hotel | Volume |\n` +
-                   `|---|---|\n` +
-                   rows.map((r: any) => `| **${r.tbo_hotelname}** | ${r.volume.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No ${slots.status || 'matching'} ${slots.chain} hotels found in ${slots.destination}.` };
+            return {
+                answer: `Matching hotels:\n\n` +
+                       `| Hotel | Volume |\n` +
+                       `|---|---|\n` +
+                       rows.map((r: any) => `| **${r.tbo_hotelname}** | ${r.volume.toLocaleString('en-US')} |`).join("\n"),
+                table: buildTable(rows)
+            };
         }
     }
 ];

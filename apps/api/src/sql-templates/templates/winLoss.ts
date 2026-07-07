@@ -1,6 +1,14 @@
-import { TemplateDefinition } from "../types.js";
+import { TemplateDefinition, Tier0StructuredResponse, ChartDefinition } from "../types.js";
 
 const BASE_WHERE = `fuzzy_score >= 90 AND tbo_hotelcode != 0`;
+
+const buildTable = (rows: any[]) => {
+    if (!rows || rows.length === 0) return undefined;
+    return {
+        columns: Object.keys(rows[0]),
+        rows: rows
+    };
+};
 
 export const winLossTemplates: TemplateDefinition[] = [
     // T01. Overall win rate
@@ -24,9 +32,12 @@ export const winLossTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
+        formatAnswer: (rows): Tier0StructuredResponse => {
             const r = rows[0];
-            return `Overall, we are winning ${r.win_rate.toFixed(1)}% of comparisons (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} total offers).`;
+            return {
+                answer: `Overall, we are winning ${r.win_rate.toFixed(1)}% of comparisons (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} total offers).`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -52,10 +63,13 @@ export const winLossTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.total_offers === 0) return `No matching data found for ${slots.destination}.`;
-            return `${slots.destination} is currently winning ${r.win_rate.toFixed(1)}% of comparisons (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} matched offers).`;
+            if (!r || r.total_offers === 0) return { answer: `No matching data found for ${slots.destination}.` };
+            return {
+                answer: `${slots.destination} is currently winning ${r.win_rate.toFixed(1)}% of comparisons (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} matched offers).`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -83,12 +97,25 @@ export const winLossTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No data found.`;
-            return `Here is the win rate breakdown across our top destinations:\n\n` +
-                   `| Destination | Win Rate | Total Offers |\n` +
-                   `|---|---|---|\n` +
-                   rows.slice(0, 10).map((r: any) => `| **${r.destination}** | ${r.win_rate.toFixed(1)}% | ${r.total_offers.toLocaleString('en-US')} |`).join("\n");
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No data found.` };
+            
+            const chartData = rows.slice(0, 10).map((r: any) => ({
+                name: r.destination,
+                value: Number(r.win_rate.toFixed(1))
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Here is the win rate breakdown across our top destinations.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -117,12 +144,27 @@ export const winLossTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No statistically significant data found.`;
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No statistically significant data found.` };
             const best = rows[0];
             const worst = rows[rows.length - 1];
-            return `Our **best performing** market is **${best.destination}** with a win rate of ${best.win_rate.toFixed(1)}%.\n` +
-                   `Our **worst performing** market is **${worst.destination}** with a win rate of ${worst.win_rate.toFixed(1)}%.`;
+            
+            const chartData = rows.slice(0, 5).concat(rows.slice(-5)).map((r: any) => ({
+                name: r.destination,
+                value: Number(r.win_rate.toFixed(1))
+            }));
+
+            const chart: ChartDefinition = {
+                type: "bar",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Our **best performing** market is **${best.destination}** with a win rate of ${best.win_rate.toFixed(1)}%.\nOur **worst performing** market is **${worst.destination}** with a win rate of ${worst.win_rate.toFixed(1)}%.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -146,10 +188,13 @@ export const winLossTemplates: TemplateDefinition[] = [
             `,
             params: [slots.thirdparty]
         }),
-        formatAnswer: (rows, slots) => {
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
             const r = rows[0];
-            if (!r || r.total_offers === 0) return `No matching data found against ${slots.thirdparty}.`;
-            return `Against ${slots.thirdparty}, we are winning ${r.win_rate.toFixed(1)}% of the time (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} comparisons).`;
+            if (!r || r.total_offers === 0) return { answer: `No matching data found against ${slots.thirdparty}.` };
+            return {
+                answer: `Against ${slots.thirdparty}, we are winning ${r.win_rate.toFixed(1)}% of the time (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} comparisons).`,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -175,17 +220,26 @@ export const winLossTemplates: TemplateDefinition[] = [
             `,
             params: []
         }),
-        formatAnswer: (rows) => {
-            if (rows.length === 0) return `No trend data found based on scraped dates.`;
-            let answer = `Here is the win rate trend over time:\n\n`;
-            answer += `| Month | Win Rate | Volume |\n`;
-            answer += `|---|---|---|\n`;
-            rows.forEach((r: any) => {
-                if(!r.month_date) return;
-                const dateStr = new Date(r.month_date).toISOString().substring(0,7);
-                answer += `| ${dateStr} | ${r.win_rate.toFixed(1)}% | ${r.total_offers.toLocaleString('en-US')} |\n`;
-            });
-            return answer;
+        formatAnswer: (rows): Tier0StructuredResponse => {
+            const validRows = rows.filter(r => r.month_date);
+            if (validRows.length === 0) return { answer: `No trend data found based on scraped dates.` };
+            
+            const chartData = validRows.map((r: any) => ({
+                name: new Date(r.month_date).toISOString().substring(0,7),
+                value: Number(r.win_rate.toFixed(1))
+            }));
+
+            const chart: ChartDefinition = {
+                type: "line",
+                data: chartData,
+                config: { valueLabel: "Win Rate", valueFormat: "percent" }
+            };
+
+            return {
+                answer: `Here is the win rate trend over time.`,
+                chart,
+                table: buildTable(rows)
+            };
         }
     },
 
@@ -198,21 +252,55 @@ export const winLossTemplates: TemplateDefinition[] = [
             /win rate by chain/
         ],
         slots: ["chain"],
-        generateSql: (slots) => ({
-            query: `
-                SELECT 
-                    COUNT(*) as total_offers,
-                    COUNT(CASE WHEN "Competitive Status" = 'Winning' THEN 1 END) as winning_offers,
-                    (COUNT(CASE WHEN "Competitive Status" = 'Winning' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) as win_rate
-                FROM data_table
-                WHERE ${BASE_WHERE} AND UPPER(tbo_chainname) = UPPER(?)
-            `,
-            params: [slots.chain]
-        }),
-        formatAnswer: (rows, slots) => {
-            const r = rows[0];
-            if (!r || r.total_offers === 0) return `No matching data found for the chain ${slots.chain}.`;
-            return `For ${slots.chain}, we are winning ${r.win_rate.toFixed(1)}% of comparisons (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} matched offers).`;
+        generateSql: (slots) => {
+            if (slots.chain) {
+                return {
+                    query: `
+                        SELECT 
+                            COUNT(*) as total_offers,
+                            COUNT(CASE WHEN "Competitive Status" = 'Winning' THEN 1 END) as winning_offers,
+                            (COUNT(CASE WHEN "Competitive Status" = 'Winning' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) as win_rate
+                        FROM data_table
+                        WHERE ${BASE_WHERE} AND UPPER(tbo_chainname) = UPPER(?)
+                    `,
+                    params: [slots.chain]
+                };
+            }
+            return {
+                query: `
+                    SELECT 
+                        tbo_chainname as chain,
+                        COUNT(*) as total_offers,
+                        (COUNT(CASE WHEN "Competitive Status" = 'Winning' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) as win_rate
+                    FROM data_table
+                    WHERE ${BASE_WHERE} AND tbo_chainname IS NOT NULL AND TRIM(tbo_chainname) <> ''
+                    GROUP BY tbo_chainname
+                    ORDER BY total_offers DESC
+                    LIMIT 20
+                `,
+                params: []
+            };
+        },
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            if (slots.chain) {
+                const r = rows[0];
+                if (!r || r.total_offers === 0) return { answer: `No matching data found for the chain ${slots.chain}.` };
+                return {
+                    answer: `For ${slots.chain}, we are winning ${r.win_rate.toFixed(1)}% of comparisons (${r.winning_offers.toLocaleString('en-US')} wins out of ${r.total_offers.toLocaleString('en-US')} matched offers).`,
+                    table: buildTable(rows)
+                };
+            } else {
+                if (rows.length === 0) return { answer: `No chain data found.` };
+                const chartData = rows.slice(0, 10).map((r: any) => ({
+                    name: r.chain,
+                    value: Number(r.win_rate.toFixed(1))
+                }));
+                return {
+                    answer: `Here is the win rate breakdown across our top chains.`,
+                    chart: { type: "bar", data: chartData, config: { valueLabel: "Win Rate", valueFormat: "percent" } },
+                    table: buildTable(rows)
+                };
+            }
         }
     },
 
@@ -235,9 +323,12 @@ export const winLossTemplates: TemplateDefinition[] = [
             `,
             params: [slots.destination]
         }),
-        formatAnswer: (rows, slots) => {
-            if (rows.length === 0) return `No matching data found in ${slots.destination}.`;
-            return `In ${slots.destination}:\n` + rows.map((r: any) => `- **${r.status || 'Unknown'}**: ${r.count.toLocaleString('en-US')} comparisons`).join('\n');
+        formatAnswer: (rows, slots): Tier0StructuredResponse => {
+            if (rows.length === 0) return { answer: `No matching data found in ${slots.destination}.` };
+            return {
+                answer: `In ${slots.destination}:\n` + rows.map((r: any) => `- **${r.status || 'Unknown'}**: ${r.count.toLocaleString('en-US')} comparisons`).join('\n'),
+                table: buildTable(rows)
+            };
         }
     }
 ];
