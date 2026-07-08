@@ -66,3 +66,49 @@ export async function getDestinationDeepDive(id: string, datasetId: string): Pro
     const response = await api.get(`/deep-dives/destination/${encodeURIComponent(id)}?datasetId=${datasetId}`);
     return response.data;
 }
+
+export interface WeeklyComparisonResponse {
+    success: boolean;
+    latestWeek: {
+        date: string;
+        totalQueries: number;
+        winRate: number;
+        customWinRate: number;
+        avgPriceDiff: number;
+        avgTboPrice: number;
+        avgCompPrice: number;
+    };
+    previousWeek: {
+        date: string;
+        totalQueries: number;
+        winRate: number;
+        customWinRate: number;
+        avgPriceDiff: number;
+        avgTboPrice: number;
+        avgCompPrice: number;
+    } | null;
+    threshold: number;
+    trends: {
+        isCustomWinRatePositive: boolean;
+        customWinRateDelta: number;
+        isStandardWinRatePositive: boolean;
+        standardWinRateDelta: number;
+        isPriceDiffPositive: boolean;
+        priceDiffDelta: number;
+        suggestion: string;
+        overallTrend: "positive" | "negative" | "flat";
+    };
+    weeklyHistory: Array<{
+        week: string;
+        totalQueries: number;
+        winRate: number;
+        customWinRate: number;
+        avgPriceDiff: number;
+    }>;
+}
+
+export async function getWeeklyComparison(datasetId: string, threshold: number): Promise<WeeklyComparisonResponse> {
+    const response = await api.get(`/deep-dives/weekly-comparison?datasetId=${datasetId}&threshold=${threshold}`);
+    return response.data;
+}
+

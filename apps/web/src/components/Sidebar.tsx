@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/clerk-react";
-import { MessageSquare, Upload, Database, User, LogOut, Sparkles } from "lucide-react";
+import { MessageSquare, Upload, Database, User, LogOut, Sparkles, TrendingUp } from "lucide-react";
 
 export default function Sidebar() {
     const { signOut } = useAuth();
@@ -10,6 +10,7 @@ export default function Sidebar() {
         { to: "/chat", label: "Ask AI", icon: MessageSquare },
         { to: "/upload", label: "Upload Dataset", icon: Upload },
         { to: "/datasets", label: "Datasets", icon: Database },
+        { to: "/weekly-comparison", label: "Weekly Trends", icon: TrendingUp },
         { to: "/profile", label: "Profile", icon: User },
     ];
 

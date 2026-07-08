@@ -26,6 +26,7 @@ import DeepDivesIndexPage from "./pages/DeepDivesIndexPage";
 import DestinationDeepDivePage from "./pages/DestinationDeepDivePage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import UsageDashboard from "./pages/UsageDashboard";
+import WeeklyComparisonPage from "./pages/WeeklyComparisonPage";
 import AdminRoute from "./components/auth/AdminRoute";
 import DomainGuard from "./components/auth/DomainGuard";
 
@@ -68,6 +69,7 @@ function AppContent() {
                             <Route path="/deep-dives/chain/:id" element={<ChainDeepDivePage />} />
                             <Route path="/deep-dives/destination/:id" element={<DestinationDeepDivePage />} />
                             <Route path="/settings" element={<SettingsPage />} />
+                            <Route path="/weekly-comparison" element={<WeeklyComparisonPage />} />
                             <Route path="/usage" element={<UsageDashboard />} />
                             <Route path="/profile" element={<ProfilePage />} />
 

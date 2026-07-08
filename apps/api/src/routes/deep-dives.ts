@@ -9,6 +9,206 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
+// GET /deep-dives/weekly-comparison
+router.get("/weekly-comparison", requireAuth(), currentUser, async (req: any, res) => {
+    try {
+        const { datasetId, threshold = 0 } = req.query;
+
+        if (!datasetId) {
+            return res.status(400).json({ error: "datasetId is required" });
+        }
+
+        if (datasetId === "demo") {
+            const history = [
+                { week: "2026-06-29", totalQueries: 4120, winRate: 46.5, customWinRate: 28.2, avgPriceDiff: -3.8 },
+                { week: "2026-06-22", totalQueries: 4050, winRate: 45.1, customWinRate: 26.8, avgPriceDiff: -3.2 },
+                { week: "2026-06-15", totalQueries: 4210, winRate: 44.8, customWinRate: 25.5, avgPriceDiff: -2.9 },
+                { week: "2026-06-08", totalQueries: 3980, winRate: 43.2, customWinRate: 24.1, avgPriceDiff: -2.5 },
+                { week: "2026-06-01", totalQueries: 4010, winRate: 45.4, customWinRate: 27.0, avgPriceDiff: -3.1 }
+            ];
+            // Adjust based on threshold. If threshold is higher, customWinRate should be lower.
+            const factor = Math.max(0.1, 1 - (Number(threshold) * 0.08));
+            const adjustedHistory = history.map(h => ({
+                ...h,
+                customWinRate: Number((h.winRate * factor).toFixed(1)),
+                avgPriceDiff: Number((h.avgPriceDiff - (Number(threshold) * 0.15)).toFixed(1))
+            }));
+
+            const latest = adjustedHistory[0];
+            const prev = adjustedHistory[1];
+            
+            const customWinRateDelta = Number((latest.customWinRate - prev.customWinRate).toFixed(1));
+            const standardWinRateDelta = Number((latest.winRate - prev.winRate).toFixed(1));
+            const priceDiffDelta = Number((latest.avgPriceDiff - prev.avgPriceDiff).toFixed(1));
+
+            const isCustomWinRatePositive = customWinRateDelta >= 0;
+            const isStandardWinRatePositive = standardWinRateDelta >= 0;
+            const isPriceDiffPositive = priceDiffDelta <= 0;
+
+            const overallTrend = isCustomWinRatePositive ? "positive" : "negative";
+            const suggestion = isCustomWinRatePositive 
+                ? `TBO custom win rates improved WoW by +${customWinRateDelta}% with a ${threshold}% pricing advantage. Trend is positive, suggesting current price strategies are working.`
+                : `TBO custom win rates declined WoW by ${customWinRateDelta}% with a ${threshold}% pricing advantage. Competitors may have narrowed the price gap; review top-losing hotels.`;
+
+            return res.json({
+                success: true,
+                latestWeek: {
+                    date: latest.week,
+                    totalQueries: latest.totalQueries,
+                    winRate: latest.winRate,
+                    customWinRate: latest.customWinRate,
+                    avgPriceDiff: latest.avgPriceDiff,
+                    avgTboPrice: 95.5,
+                    avgCompPrice: 100.2
+                },
+                previousWeek: {
+                    date: prev.week,
+                    totalQueries: prev.totalQueries,
+                    winRate: prev.winRate,
+                    customWinRate: prev.customWinRate,
+                    avgPriceDiff: prev.avgPriceDiff,
+                    avgTboPrice: 96.8,
+                    avgCompPrice: 99.8
+                },
+                threshold: Number(threshold),
+                trends: {
+                    isCustomWinRatePositive,
+                    customWinRateDelta,
+                    isStandardWinRatePositive,
+                    standardWinRateDelta,
+                    isPriceDiffPositive,
+                    priceDiffDelta,
+                    suggestion,
+                    overallTrend
+                },
+                weeklyHistory: adjustedHistory.reverse()
+            });
+        }
+
+        const dataset = await getDataset(datasetId as string);
+        if (!dataset) {
+            return res.status(404).json({ error: "Dataset not found" });
+        }
+
+        if (!dataset.storagePath) {
+            return res.status(400).json({ error: "Dataset path not set" });
+        }
+
+        const localPath = await getDatasetUrl(dataset.storagePath);
+        const schema = await executeQuery<{ column_name: string }>(`DESCRIBE data_table`, localPath);
+        const dateCol = schema.find(c => ['search_date', 'scraped_date', 'date'].includes(c.column_name.toLowerCase()))?.column_name;
+        
+        if (!dateCol) {
+            return res.status(400).json({ error: "Dataset does not contain a date column (scraped_date, search_date, date)." });
+        }
+
+        const statsSql = `
+            WITH weekly_stats AS (
+                SELECT 
+                    date_trunc('week', COALESCE(
+                        TRY_CAST("${dateCol}" AS DATE), 
+                        try_strptime("${dateCol}", '%m/%d/%Y')::DATE, 
+                        try_strptime("${dateCol}", '%d/%m/%Y')::DATE, 
+                        try_strptime("${dateCol}", '%m-%d-%Y')::DATE, 
+                        try_strptime("${dateCol}", '%d-%m-%Y')::DATE
+                    )) as week,
+                    COUNT(*) as total_queries,
+                    AVG(CASE WHEN "Competitive Status" = 'Winning' THEN 1.0 ELSE 0.0 END) * 100.0 as win_rate,
+                    AVG(CASE WHEN TRY_CAST(price_diff_perc AS DOUBLE) <= -${Number(threshold)} THEN 1.0 ELSE 0.0 END) * 100.0 as custom_win_rate,
+                    AVG(CASE WHEN abs(TRY_CAST(price_diff_perc AS DOUBLE)) <= 100 THEN TRY_CAST(price_diff_perc AS DOUBLE) ELSE NULL END) as avg_price_diff,
+                    AVG(CASE WHEN abs(TRY_CAST(price_diff_perc AS DOUBLE)) <= 100 THEN TRY_CAST(tbo_price AS DOUBLE) ELSE NULL END) as avg_tbo_price,
+                    AVG(CASE WHEN abs(TRY_CAST(price_diff_perc AS DOUBLE)) <= 100 THEN TRY_CAST(thirdparty_price AS DOUBLE) ELSE NULL END) as avg_comp_price
+                FROM data_table
+                GROUP BY week
+            )
+            SELECT 
+                week,
+                total_queries,
+                win_rate,
+                custom_win_rate,
+                avg_price_diff,
+                avg_tbo_price,
+                avg_comp_price
+            FROM weekly_stats
+            WHERE week IS NOT NULL
+            ORDER BY week DESC
+        `;
+
+        const dbRows = await executeQuery<any>(statsSql, localPath);
+        if (dbRows.length === 0) {
+            return res.status(400).json({ error: "No data could be processed by week." });
+        }
+
+        const history = dbRows.map(r => ({
+            week: new Date(r.week).toISOString().split('T')[0],
+            totalQueries: Number(r.total_queries),
+            winRate: Number(Number(r.win_rate || 0).toFixed(1)),
+            customWinRate: Number(Number(r.custom_win_rate || 0).toFixed(1)),
+            avgPriceDiff: Number(Number(r.avg_price_diff || 0).toFixed(1)),
+            avgTboPrice: Number(Number(r.avg_tbo_price || 0).toFixed(1)),
+            avgCompPrice: Number(Number(r.avg_comp_price || 0).toFixed(1))
+        }));
+
+        const latest = history[0];
+        const prev = history.length > 1 ? history[1] : null;
+
+        const customWinRateDelta = prev ? Number((latest.customWinRate - prev.customWinRate).toFixed(1)) : 0;
+        const standardWinRateDelta = prev ? Number((latest.winRate - prev.winRate).toFixed(1)) : 0;
+        const priceDiffDelta = prev ? Number((latest.avgPriceDiff - prev.avgPriceDiff).toFixed(1)) : 0;
+
+        const isCustomWinRatePositive = customWinRateDelta >= 0;
+        const isStandardWinRatePositive = standardWinRateDelta >= 0;
+        const isPriceDiffPositive = priceDiffDelta <= 0;
+
+        const overallTrend = isCustomWinRatePositive ? "positive" : "negative";
+        let suggestion = "";
+        if (prev) {
+            suggestion = isCustomWinRatePositive 
+                ? `TBO custom win rates improved WoW by +${customWinRateDelta}% with a ${threshold}% pricing advantage. Trend is positive, suggesting current price strategies are working.`
+                : `TBO custom win rates declined WoW by ${customWinRateDelta}% with a ${threshold}% pricing advantage. Competitors may have narrowed the price gap; review top-losing hotels.`;
+        } else {
+            suggestion = "Single week dataset. Upload more weeks of data to view week-over-week trends.";
+        }
+
+        return res.json({
+            success: true,
+            latestWeek: {
+                date: latest.week,
+                totalQueries: latest.totalQueries,
+                winRate: latest.winRate,
+                customWinRate: latest.customWinRate,
+                avgPriceDiff: latest.avgPriceDiff,
+                avgTboPrice: latest.avgTboPrice,
+                avgCompPrice: latest.avgCompPrice
+            },
+            previousWeek: prev ? {
+                date: prev.week,
+                totalQueries: prev.totalQueries,
+                winRate: prev.winRate,
+                customWinRate: prev.customWinRate,
+                avgPriceDiff: prev.avgPriceDiff,
+                avgTboPrice: prev.avgTboPrice,
+                avgCompPrice: prev.avgCompPrice
+            } : null,
+            threshold: Number(threshold),
+            trends: {
+                isCustomWinRatePositive,
+                customWinRateDelta,
+                isStandardWinRatePositive,
+                standardWinRateDelta,
+                isPriceDiffPositive,
+                priceDiffDelta,
+                suggestion,
+                overallTrend
+            },
+            weeklyHistory: [...history].reverse()
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Failed to load weekly comparison");
+        return res.status(500).json({ error: "Failed to load weekly comparison" });
+    }
+});
+
 // GET /deep-dives/hotel/:id
 router.get("/hotel/:id", requireAuth(), currentUser, async (req: any, res) => {
     try {
