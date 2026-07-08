@@ -377,7 +377,7 @@ export default function WeeklyComparisonPage() {
                                                 }}
                                                 labelStyle={{ color: "#94a3b8", fontSize: "11px", fontWeight: 600, marginBottom: 4 }}
                                                 itemStyle={{ fontSize: "12px", color: "#e2e8f0" }}
-                                                formatter={(value: number) => [`${value.toFixed(1)}%`]}
+                                                formatter={(value: any) => [`${Number(value ?? 0).toFixed(1)}%`]}
                                             />
                                             <Legend 
                                                 verticalAlign="top" 
