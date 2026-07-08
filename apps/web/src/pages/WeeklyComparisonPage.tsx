@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { 
-    LineChart, 
+    ComposedChart,
+    Bar,
     Line, 
     XAxis, 
     YAxis, 
     CartesianGrid, 
     Tooltip, 
     ResponsiveContainer,
-    Legend
+    Legend,
+    Cell
 } from "recharts";
 import { 
     TrendingUp, 
@@ -328,55 +330,115 @@ export default function WeeklyComparisonPage() {
                         {/* Weekly Comparison Chart */}
                         <div className="xl:col-span-2 bg-white dark:bg-[#0c101b] border border-slate-200 dark:border-slate-800/80 rounded-xl p-5 shadow-sm flex flex-col transition-colors">
                             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4 uppercase tracking-wider flex items-center gap-2">
-                                <BarChart3 className="w-4.5 h-4.5 text-accent" />
+                                <BarChart3 className="w-4 h-4 text-accent" />
                                 Win Rate Trend over Weeks (%)
                             </h3>
-                            <div className="w-full h-80 flex-1">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={data.weeklyHistory} margin={{ top: 10, right: 30, left: -10, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} />
-                                        <XAxis 
-                                            dataKey="week" 
-                                            stroke="#64748b" 
-                                            fontSize={11} 
-                                            tickLine={false} 
-                                            axisLine={false} 
-                                            dy={10}
-                                        />
-                                        <YAxis 
-                                            stroke="#64748b" 
-                                            fontSize={11} 
-                                            tickLine={false} 
-                                            axisLine={false}
-                                            domain={[0, 'auto']}
-                                        />
-                                        <Tooltip 
-                                            contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155", borderRadius: "8px" }}
-                                            labelClassName="text-[12px] font-bold text-slate-300"
-                                            itemStyle={{ fontSize: "12px" }}
-                                        />
-                                        <Legend verticalAlign="top" height={36} iconType="circle" />
-                                        <Line 
-                                            type="monotone" 
-                                            dataKey="winRate" 
-                                            name="Standard Win Rate (%)" 
-                                            stroke="#3b82f6" 
-                                            strokeWidth={3}
-                                            activeDot={{ r: 6 }} 
-                                            dot={{ strokeWidth: 2 }}
-                                        />
-                                        <Line 
-                                            type="monotone" 
-                                            dataKey="customWinRate" 
-                                            name={`Custom Win Rate (${threshold}%)`} 
-                                            stroke="#f97316" 
-                                            strokeWidth={3}
-                                            activeDot={{ r: 6 }} 
-                                            dot={{ strokeWidth: 2 }}
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
+                            {data.weeklyHistory && data.weeklyHistory.length >= 2 ? (
+                                <div style={{ width: "100%", height: 320 }}>
+                                    <ResponsiveContainer width="100%" height={320}>
+                                        <ComposedChart data={data.weeklyHistory} margin={{ top: 10, right: 20, left: -10, bottom: 5 }}>
+                                            <defs>
+                                                <linearGradient id="winRateGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
+                                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
+                                                </linearGradient>
+                                                <linearGradient id="customWinGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.25} />
+                                                    <stop offset="95%" stopColor="#f97316" stopOpacity={0.02} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.12} vertical={false} />
+                                            <XAxis 
+                                                dataKey="week" 
+                                                stroke="#64748b" 
+                                                fontSize={11} 
+                                                tickLine={false} 
+                                                axisLine={false} 
+                                                dy={8}
+                                                tick={{ fill: "#94a3b8" }}
+                                            />
+                                            <YAxis 
+                                                stroke="#64748b" 
+                                                fontSize={11} 
+                                                tickLine={false} 
+                                                axisLine={false}
+                                                domain={[0, 100]}
+                                                tickFormatter={(v) => `${v}%`}
+                                                tick={{ fill: "#94a3b8" }}
+                                                width={45}
+                                            />
+                                            <Tooltip 
+                                                contentStyle={{ 
+                                                    backgroundColor: "#0f172a", 
+                                                    border: "1px solid #1e293b", 
+                                                    borderRadius: "10px",
+                                                    boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+                                                    padding: "10px 14px"
+                                                }}
+                                                labelStyle={{ color: "#94a3b8", fontSize: "11px", fontWeight: 600, marginBottom: 4 }}
+                                                itemStyle={{ fontSize: "12px", color: "#e2e8f0" }}
+                                                formatter={(value: number) => [`${value.toFixed(1)}%`]}
+                                            />
+                                            <Legend 
+                                                verticalAlign="top" 
+                                                height={36} 
+                                                iconType="circle"
+                                                wrapperStyle={{ fontSize: "12px", color: "#94a3b8" }}
+                                            />
+                                            <Bar 
+                                                dataKey="winRate" 
+                                                name="Standard Win Rate" 
+                                                fill="#3b82f6" 
+                                                opacity={0.18}
+                                                radius={[4, 4, 0, 0]}
+                                                barSize={28}
+                                            >
+                                                {data.weeklyHistory.map((_: any, index: number) => (
+                                                    <Cell key={`cell-wr-${index}`} fill="#3b82f6" fillOpacity={0.18} />
+                                                ))}
+                                            </Bar>
+                                            <Bar 
+                                                dataKey="customWinRate" 
+                                                name={`Custom Win Rate (${threshold}%)`} 
+                                                fill="#f97316" 
+                                                opacity={0.18}
+                                                radius={[4, 4, 0, 0]}
+                                                barSize={28}
+                                            >
+                                                {data.weeklyHistory.map((_: any, index: number) => (
+                                                    <Cell key={`cell-cwr-${index}`} fill="#f97316" fillOpacity={0.18} />
+                                                ))}
+                                            </Bar>
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="winRate" 
+                                                name="Standard Win Rate"
+                                                stroke="#3b82f6" 
+                                                strokeWidth={2.5}
+                                                dot={{ r: 4, fill: "#3b82f6", strokeWidth: 2, stroke: "#0f172a" }}
+                                                activeDot={{ r: 6, fill: "#3b82f6" }}
+                                                legendType="none"
+                                            />
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="customWinRate" 
+                                                name={`Custom Win Rate (${threshold}%)`}
+                                                stroke="#f97316" 
+                                                strokeWidth={2.5}
+                                                dot={{ r: 4, fill: "#f97316", strokeWidth: 2, stroke: "#0f172a" }}
+                                                activeDot={{ r: 6, fill: "#f97316" }}
+                                                legendType="none"
+                                            />
+                                        </ComposedChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                                    <BarChart3 className="w-10 h-10 mb-3 text-slate-600" />
+                                    <p className="text-sm font-medium">Not enough weekly data for a trend chart.</p>
+                                    <p className="text-xs text-slate-500 mt-1">Upload datasets spanning multiple weeks to see trends.</p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Detailed Table comparison */}
