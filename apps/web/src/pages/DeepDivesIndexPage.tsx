@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Building2, Building, Database, Link as LinkIcon, MapPin } from "lucide-react";
+import { Search, Building2, Building, Database, Link as LinkIcon, MapPin, TrendingUp, ArrowRight } from "lucide-react";
 import PageShell from "../components/layout/PageShell";
 import { getDatasets } from "../api/datasetApi";
 import type { Dataset } from "../types/dataset";
@@ -63,6 +63,26 @@ export default function DeepDivesIndexPage() {
                     <p className="text-slate-500 max-w-xl mx-auto">
                         Query the database to analyze specific performance, risks, and opportunities for any individual hotel or supplier.
                     </p>
+                </div>
+
+                {/* Weekly WoW Preset Banner */}
+                <div
+                    onClick={() => navigate("/weekly-comparison")}
+                    className="group cursor-pointer mb-8 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/10 border border-orange-200/60 dark:border-orange-800/30 rounded-xl p-5 flex items-center gap-4 hover:border-orange-300 dark:hover:border-orange-700/50 hover:shadow-md transition-all"
+                >
+                    <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-500/15 border border-orange-200 dark:border-orange-500/20 flex items-center justify-center flex-shrink-0">
+                        <TrendingUp className="h-6 w-6 text-orange-500" />
+                    </div>
+                    <div className="flex-1">
+                        <h2 className="text-base font-bold text-slate-900 dark:text-white mb-0.5">
+                            Weekly WoW Competitiveness Trends
+                            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded-md">New Preset</span>
+                        </h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Compare latest week vs previous week. View TBO win rates defined by a custom pricing advantage threshold and assess if trends are positive.
+                        </p>
+                    </div>
+                    <ArrowRight className="h-5 w-5 text-orange-400 group-hover:text-orange-500 group-hover:translate-x-1 transition-all flex-shrink-0" />
                 </div>
 
                 <div className="bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800/80 p-6 mb-8">
