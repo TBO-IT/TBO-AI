@@ -119,6 +119,7 @@ router.get("/weekly-comparison", requireAuth(), currentUser, async (req: any, re
                     AVG(CASE WHEN abs(TRY_CAST(price_diff_perc AS DOUBLE)) <= 100 THEN TRY_CAST(tbo_price AS DOUBLE) ELSE NULL END) as avg_tbo_price,
                     AVG(CASE WHEN abs(TRY_CAST(price_diff_perc AS DOUBLE)) <= 100 THEN TRY_CAST(thirdparty_price AS DOUBLE) ELSE NULL END) as avg_comp_price
                 FROM data_table
+                WHERE TRY_CAST(price_diff_perc AS DOUBLE) IS NOT NULL
                 GROUP BY week
             )
             SELECT 
