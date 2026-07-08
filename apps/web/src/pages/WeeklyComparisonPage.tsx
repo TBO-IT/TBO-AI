@@ -11,7 +11,6 @@ import {
 } from "recharts";
 import { 
     TrendingUp, 
-    TrendingDown, 
     Percent, 
     Activity, 
     AlertCircle, 
